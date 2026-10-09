@@ -27,6 +27,7 @@ import type { TWorkItemProperty, TWorkItemPropertyPayload, TWorkItemPropertyType
 import { getWorkItemPropertyTypeKey } from "@plane/utils";
 // hooks
 import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 // local imports
 import { WORK_ITEM_PROPERTY_TYPE_ICONS } from "../property-icon";
 import { ChoiceSelect } from "./choice-select";
@@ -168,16 +169,17 @@ export const WorkItemPropertyFormModal = observer(function WorkItemPropertyFormM
     }
   };
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   if (createdProperty)
     return (
       <Dialog
         open
-        disablePointerDismissal
-        onOpenChange={(open) => {
-          if (!open) onClose();
+        onOpenChange={(open, eventDetails) => {
+          if (!open && !shouldIgnoreOutsidePress(eventDetails)) onClose();
         }}
       >
-        <DialogContent size="lg">
+        <DialogContent size="lg" ref={popupRef}>
           <div className="space-y-5 p-5">
             <h3 className="text-18 font-medium text-secondary">
               {t(`${i18nPrefix}.attributes.cascading.add_options`)}
@@ -206,12 +208,11 @@ export const WorkItemPropertyFormModal = observer(function WorkItemPropertyFormM
   return (
     <Dialog
       open
-      disablePointerDismissal
-      onOpenChange={(open) => {
-        if (!open) onClose();
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) onClose();
       }}
     >
-      <DialogContent size="lg">
+      <DialogContent size="lg" ref={popupRef}>
         <FormProvider {...methods}>
           <form onSubmit={handleSubmit(handleFormSubmit)}>
             <div className="space-y-5 p-5">

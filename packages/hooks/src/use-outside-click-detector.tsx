@@ -4,7 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useEffectEvent } from "react";
+import { useEffect } from "react";
+import { useLatestCallback } from "./use-latest-callback";
 
 export const useOutsideClickDetector = (
   ref: { readonly current: Element | null },
@@ -13,7 +14,7 @@ export const useOutsideClickDetector = (
   enabled = true
 ) => {
   // Reads the latest callback without re-attaching the document listener on every render.
-  const onOutsideClick = useEffectEvent(callback);
+  const onOutsideClick = useLatestCallback(callback);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -49,5 +50,5 @@ export const useOutsideClickDetector = (
     return () => {
       document.removeEventListener("mousedown", handleClick, useCapture);
     };
-  }, [ref, enabled, useCapture]);
+  }, [ref, enabled, useCapture, onOutsideClick]);
 };

@@ -24,6 +24,7 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
+import { isPressOnDialogBackdrop } from "@/hooks/use-untouched-dialog";
 // services
 import { FileService } from "@/services/file.service";
 const fileService = new FileService();
@@ -60,6 +61,8 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   }
   // ref
   const issueTitleRef = useRef<HTMLInputElement>(null);
+  const dialogPopupRef = useRef<HTMLDivElement>(null);
+  const requestCloseRef = useRef<() => void>(null);
   // states
   const [changesMade, setChangesMade] = useState<Partial<TIssue> | null>(null);
   const [createMore, setCreateMore] = useState(false);
@@ -422,12 +425,26 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     isProjectSelectionDisabled: isProjectSelectionDisabled,
   };
 
+  // Escape and a press on the dimmed area do what the form's Discard button does: the dialog
+  // closes at once when nothing was entered, and asks about the unsaved work item otherwise.
+  const handleOpenChange: React.ComponentProps<typeof Dialog>["onOpenChange"] = (open, eventDetails) => {
+    if (open) return;
+    if (eventDetails.reason === "outside-press") {
+      if (!isPressOnDialogBackdrop(eventDetails, dialogPopupRef.current)) return;
+    } else if (eventDetails.reason !== "escape-key") return;
+    (requestCloseRef.current ?? handleClose)();
+  };
+
   return (
-    /* The modal it replaces passed no `handleClose`, so only its own form dismisses it. */
-    <Dialog open={isOpen} disablePointerDismissal onOpenChange={() => {}}>
-      <DialogContent size="lg">
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent size="lg" ref={dialogPopupRef}>
         {withDraftIssueWrapper ? (
-          <DraftIssueLayout {...commonIssueModalProps} changesMade={changesMade} onChange={handleFormChange} />
+          <DraftIssueLayout
+            {...commonIssueModalProps}
+            changesMade={changesMade}
+            onChange={handleFormChange}
+            requestCloseRef={requestCloseRef}
+          />
         ) : (
           <IssueFormRoot {...commonIssueModalProps} />
         )}

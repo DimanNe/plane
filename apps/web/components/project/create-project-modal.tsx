@@ -15,6 +15,7 @@ import { CreateProjectForm } from "@/components/projects/create/root";
 import type { TProject } from "@plane/types";
 // services
 import { FileService } from "@/services/file.service";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 const fileService = new FileService();
 import { ProjectFeatureUpdate } from "./project-feature-update";
 
@@ -59,15 +60,16 @@ export function CreateProjectModal(props: Props) {
     }
   };
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      disablePointerDismissal
-      onOpenChange={(open) => {
-        if (!open) onClose();
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) onClose();
       }}
     >
-      <DialogContent size="lg">
+      <DialogContent size="lg" ref={popupRef}>
         {currentStep === EProjectCreationSteps.CREATE_PROJECT && (
           // CreateProjectForm has no DialogBody scroller of its own yet, so this wrapper keeps the
           // whole form (including the submit footer) reachable on short viewports.

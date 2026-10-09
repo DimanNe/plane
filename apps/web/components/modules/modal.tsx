@@ -18,6 +18,7 @@ import { ModuleForm } from "@/components/modules";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 
 type Props = {
   isOpen: boolean;
@@ -131,17 +132,19 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
       setActiveProject(projectId ?? workspaceProjectIds?.[0] ?? null);
   }, [activeProject, data, projectId, workspaceProjectIds, isOpen]);
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) handleClose();
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) handleClose();
       }}
-      disablePointerDismissal
     >
       {/* ModuleForm renders its own visible heading; the dialog carries the same text as its name. */}
       <DialogContent
         size="md"
+        ref={popupRef}
         aria-label={`${data ? t("common.update") : t("common.create")} ${t("common.module").toLowerCase()}`}
       >
         <ModuleForm

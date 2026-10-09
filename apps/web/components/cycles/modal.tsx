@@ -19,6 +19,7 @@ import useLocalStorage from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // services
 import { CycleService } from "@/services/cycle.service";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 // local imports
 import { CycleForm } from "./form";
 
@@ -177,17 +178,18 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
       setActiveProject(projectId ?? workspaceProjectIds?.[0] ?? null);
   }, [activeProject, data, projectId, workspaceProjectIds, isOpen]);
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      // The legacy modal shell had no `handleClose`, so an outside press never dismissed it and
-      // Escape came from `useKeypress`; Base UI's own Escape now reaches the same handler.
-      disablePointerDismissal
-      onOpenChange={(open) => {
-        if (!open) handleClose();
+      // Escape came from `useKeypress` in the legacy modal; Base UI's own Escape now reaches the
+      // same handler. An outside press dismisses it while nothing was changed in it.
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) handleClose();
       }}
     >
-      <DialogContent size="md">
+      <DialogContent size="md" ref={popupRef}>
         <CycleForm
           handleFormSubmit={handleFormSubmit}
           handleClose={handleClose}

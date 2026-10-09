@@ -25,6 +25,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserProfile } from "@/hooks/store/user";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 
 type Props = {
   isOpen: boolean;
@@ -187,15 +188,16 @@ const MilestoneForm = observer(function MilestoneForm(props: Omit<Props, "isOpen
 export function MilestoneCreateUpdateModal(props: Props) {
   const { isOpen, handleClose, ...formProps } = props;
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      disablePointerDismissal
-      onOpenChange={(open) => {
-        if (!open) handleClose();
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) handleClose();
       }}
     >
-      <DialogContent size="md">
+      <DialogContent size="md" ref={popupRef}>
         <MilestoneForm handleClose={handleClose} {...formProps} />
       </DialogContent>
     </Dialog>

@@ -20,6 +20,7 @@ import type { TWorkItemType } from "@plane/types";
 import { generateIconColors } from "@plane/utils";
 // hooks
 import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 // local imports
 import { WorkItemTypeLogo } from "../type-logo";
 
@@ -90,15 +91,16 @@ export function WorkItemTypeFormModal(props: Props) {
     }
   };
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open
-      disablePointerDismissal
-      onOpenChange={(open) => {
-        if (!open) onClose();
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) onClose();
       }}
     >
-      <DialogContent size="md">
+      <DialogContent size="md" ref={popupRef}>
         <form onSubmit={handleSubmit(handleFormSubmit)}>
           <div className="space-y-5 p-5">
             <h3 className="text-18 font-medium text-secondary">{t(`${i18nPrefix}.title`)}</h3>

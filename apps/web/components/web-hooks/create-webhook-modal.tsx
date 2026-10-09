@@ -17,6 +17,7 @@ import { WebhookForm } from "./form";
 import { GeneratedHookDetails } from "./generated-hook-details";
 // utils
 import { getCurrentHookAsCSV } from "./utils";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 
 interface ICreateWebhookModal {
   currentWorkspace: IWorkspace | null;
@@ -96,20 +97,23 @@ export function CreateWebhookModal(props: ICreateWebhookModal) {
     }, 350);
   };
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      disablePointerDismissal
-      onOpenChange={(open) => {
+      onOpenChange={(open, eventDetails) => {
         if (open) return;
         // Escape closed the create form but not the generated-key view, so the secret key cannot be
-        // dismissed by accident; outside presses never closed either view.
-        if (generatedWebhook) return;
+        // dismissed by accident. An outside press closes only the create form, and only while
+        // nothing was changed in it.
+        if (generatedWebhook || shouldIgnoreOutsidePress(eventDetails)) return;
         handleClose();
       }}
     >
       <DialogContent
         size="md"
+        ref={popupRef}
         aria-label={
           generatedWebhook ? t("workspace_settings.key_created") : t("workspace_settings.settings.webhooks.modal.title")
         }

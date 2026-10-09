@@ -17,6 +17,7 @@ import { InvitationFields } from "@/components/workspace/invite-modal/fields";
 import { InvitationForm } from "@/components/workspace/invite-modal/form";
 // hooks
 import { useWorkspaceInvitationActions } from "@/hooks/use-workspace-invitation";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 
 export type TSendWorkspaceInvitationModalProps = {
   isOpen: boolean;
@@ -38,18 +39,19 @@ export const SendWorkspaceInvitationModal = observer(function SendWorkspaceInvit
     onClose,
   });
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      // The legacy modal was passed no `handleClose`, so neither an outside press nor Escape dismissed
-      // it — only its own Cancel button does.
-      disablePointerDismissal
+      // The legacy modal was passed no `handleClose`, so Escape does not dismiss it. An outside
+      // press does while nothing was changed in it.
       onOpenChange={(open, eventDetails) => {
-        if (open || eventDetails.reason === "escape-key") return;
+        if (open || eventDetails.reason === "escape-key" || shouldIgnoreOutsidePress(eventDetails)) return;
         handleClose();
       }}
     >
-      <DialogContent size="md">
+      <DialogContent size="md" ref={popupRef}>
         <InvitationForm
           title={t("workspace_settings.settings.members.modal.title")}
           description={t("workspace_settings.settings.members.modal.description")}

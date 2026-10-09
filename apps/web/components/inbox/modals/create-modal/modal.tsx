@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Dialog, DialogContent } from "@makeplane/propel/components/dialog";
 // local imports
 import { InboxIssueCreateRoot } from "./create-root";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 
 type TInboxIssueCreateModalRoot = {
   workspaceSlug: string;
@@ -24,20 +25,21 @@ export function InboxIssueCreateModalRoot(props: TInboxIssueCreateModalRoot) {
   // handlers
   const handleDuplicateIssueModal = (value: boolean) => setIsDuplicateModalOpen(value);
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={modalState}
-      // The legacy modal passed no `handleClose`, so an outside press never dismissed it, but a
-      // window-level Escape listener closed it. Base UI's Escape is now that single Escape path.
-      disablePointerDismissal
-      onOpenChange={(open) => {
-        if (!open) {
+      // A window-level Escape listener closed the legacy modal; Base UI's Escape is now that single
+      // Escape path. An outside press dismisses it while nothing was changed in it.
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) {
           handleModalClose();
           setIsDuplicateModalOpen(false);
         }
       }}
     >
-      <DialogContent size="lg">
+      <DialogContent size="lg" ref={popupRef}>
         <InboxIssueCreateRoot
           workspaceSlug={workspaceSlug}
           projectId={projectId}

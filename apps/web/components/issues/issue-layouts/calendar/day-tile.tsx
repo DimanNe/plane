@@ -4,12 +4,13 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { observer } from "mobx-react";
 import { setToast } from "@plane/blocks/toast";
+import { useLatestCallback } from "@plane/hooks";
 import type { TGroupedIssues, TIssue, TIssueMap, TPaginationData, ICalendarDate } from "@plane/types";
 // types
 // ui
@@ -84,7 +85,7 @@ export const CalendarDayTile = observer(function CalendarDayTile(props: Props) {
   const dayTileRef = useRef<HTMLDivElement | null>(null);
 
   // Reads the latest issues map and drop handler without re-registering the drop target
-  const handleDrop = useEffectEvent((sourceData: { id: string; date: string }, destinationDate: string) => {
+  const handleDrop = useLatestCallback((sourceData: { id: string; date: string }, destinationDate: string) => {
     const issueDetails = issues?.[sourceData?.id];
     if (issueDetails?.start_date) {
       const issueStartDate = new Date(issueDetails.start_date);
@@ -130,7 +131,7 @@ export const CalendarDayTile = observer(function CalendarDayTile(props: Props) {
         },
       })
     );
-  }, [formattedDatePayload]);
+  }, [formattedDatePayload, handleDrop]);
 
   if (!formattedDatePayload) return null;
   const issueIds = groupedIssueIds?.[formattedDatePayload];

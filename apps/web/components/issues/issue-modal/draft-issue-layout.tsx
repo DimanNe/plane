@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useImperativeHandle, useState } from "react";
 import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -24,10 +24,12 @@ import type { IssueFormProps } from "./form";
 export interface DraftIssueProps extends IssueFormProps {
   changesMade: Partial<TIssue> | null;
   onChange: (formData: Partial<TIssue> | null) => void;
+  /** Receives this layout's own close, which asks about unsaved changes before it closes. */
+  requestCloseRef?: React.Ref<() => void>;
 }
 
 export const DraftIssueLayout = observer(function DraftIssueLayout(props: DraftIssueProps) {
-  const { changesMade, data, onChange, onClose, projectId } = props;
+  const { changesMade, data, onChange, onClose, projectId, requestCloseRef } = props;
   // states
   const [issueDiscardModal, setIssueDiscardModal] = useState(false);
   // router params
@@ -74,6 +76,8 @@ export const DraftIssueLayout = observer(function DraftIssueLayout(props: DraftI
       }
     }
   };
+
+  useImperativeHandle(requestCloseRef, () => handleClose);
 
   const handleCreateDraftIssue = async () => {
     if (!changesMade || !workspaceSlug || !projectId) return;

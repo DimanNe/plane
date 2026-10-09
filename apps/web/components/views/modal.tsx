@@ -16,6 +16,7 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 // local imports
 import { ProjectViewForm } from "./form";
 
@@ -82,15 +83,16 @@ export const CreateUpdateProjectViewModal = observer(function CreateUpdateProjec
     else await handleUpdateView(formData);
   };
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) handleClose();
+      onOpenChange={(open, eventDetails) => {
+        if (!open && !shouldIgnoreOutsidePress(eventDetails)) handleClose();
       }}
-      disablePointerDismissal
     >
-      <DialogContent size="md">
+      <DialogContent size="md" ref={popupRef}>
         <ProjectViewForm
           data={data}
           handleClose={handleClose}

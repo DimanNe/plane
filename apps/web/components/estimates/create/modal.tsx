@@ -27,6 +27,7 @@ import {
 } from "@makeplane/propel/components/dialog";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
+import { useUntouchedDialog } from "@/hooks/use-untouched-dialog";
 // local imports
 import { EstimatePointCreateRoot } from "../points";
 import { EstimateCreateStageOne } from "./stage-one";
@@ -152,18 +153,20 @@ export const CreateEstimateModal = observer(function CreateEstimateModal(props: 
   //   return Object.keys(estimatePointError).length > 0;
   // }, [estimatePointError]);
 
+  const { popupRef, shouldIgnoreOutsidePress } = useUntouchedDialog();
+
   return (
     <Dialog
       open={isOpen}
-      disablePointerDismissal
       onOpenChange={(open, eventDetails) => {
         if (open) return;
-        // The legacy modal took no `handleClose`, so Escape was swallowed: only Cancel closed it.
-        if (eventDetails.reason === "escape-key") return;
+        // The legacy modal took no `handleClose`, so Escape was swallowed. An outside press
+        // dismisses it while nothing was changed in it.
+        if (eventDetails.reason === "escape-key" || shouldIgnoreOutsidePress(eventDetails)) return;
         handleClose();
       }}
     >
-      <DialogContent size="md">
+      <DialogContent size="md" ref={popupRef}>
         <DialogMain>
           {/* heading */}
           <DialogHeader>
