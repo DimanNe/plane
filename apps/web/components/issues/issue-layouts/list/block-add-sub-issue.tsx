@@ -28,7 +28,7 @@ export function IssueBlockAddSubIssue(props: Props) {
   return (
     // In a right-to-left box, content that does not fit hangs out at the left: where a title fills the row and
     // leaves the chip no room, the chip shows whole over the end of the title.
-    <span className="invisible block text-left leading-none whitespace-nowrap [direction:rtl] group-hover/list-block:visible">
+    <span className="invisible relative z-1 block text-left leading-none whitespace-nowrap [direction:rtl] group-hover/list-block:visible">
       <span className="inline-flex align-middle [direction:ltr]">
         <Pill
           size="xs"

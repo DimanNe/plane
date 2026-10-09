@@ -35,7 +35,7 @@ import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { calculateIdentifierWidth } from "../utils";
 import { IssueBlockAddSubIssue } from "./block-add-sub-issue";
-import { IssueBlockTitle } from "./block-title";
+import { IssueBlockTitle, TITLE_TEXT_SIZES } from "./block-title";
 import type { TRenderQuickActions } from "./list-view-types";
 
 interface IssueBlockProps {
@@ -145,6 +145,9 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const canSelectIssues = canEditIssueProperties && !selectionHelpers.isSelectionDisabled;
 
   const marginLeft = `${spacingLeft}px`;
+  // The state circle, the priority and the properties are as large as the text of the title: its size at this
+  // nesting level over its size at the top level, both read from the theme.
+  const zoom = `calc(var(--${TITLE_TEXT_SIZES[Math.min(nestingLevel, 2)]}) / var(--${TITLE_TEXT_SIZES[0]}))`;
 
   const handleToggleExpand = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -276,10 +279,12 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               )}
             </div>
 
-            <IssuePropertyState issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
-            {displayProperties?.priority && (
-              <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
-            )}
+            <div className="flex flex-shrink-0 items-center gap-0.5" style={{ zoom }}>
+              <IssuePropertyState issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
+              {displayProperties?.priority && (
+                <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
+              )}
+            </div>
             <IssueBlockTitle
               issue={issue}
               groupId={groupId}
@@ -289,18 +294,25 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               updateIssue={updateIssue}
             />
             {!isTitleEdited && (
-              // What follows the title takes the room the title leaves. The chip keeps its room while it is not
-              // shown, so it never lies over the description; the description goes when too little is left for it.
-              <div className="ml-1.5 flex min-w-0 flex-1 items-center gap-2 *:min-w-0">
+              // What follows the title takes the room the title leaves. The description starts under the chip, which
+              // keeps no room for itself; the description goes when the cell is too narrow for it.
+              <div className="@container relative ml-1.5 flex min-w-0 flex-1 items-center self-stretch *:min-w-0">
                 {canEditIssueProperties && <IssueBlockAddSubIssue issueId={issue.id} />}
                 {displayProperties?.description && issue.description_prefix && (
-                  <div className="@container flex-1">
+                  // The part of the cell after the chip. While the chip shows, the description is drawn only here,
+                  // fading in, so no letters stand under or against the chip.
+                  <div
+                    className={cn("flex-1 self-stretch", {
+                      "group-hover/list-block:mask-[linear-gradient(to_right,transparent_0.25rem,black_1.25rem)]":
+                        canEditIssueProperties,
+                    })}
+                  >
                     <p
                       className={cn(
-                        "hidden overflow-hidden pr-8 whitespace-nowrap text-secondary @min-[7rem]:block",
+                        "absolute inset-0 my-auto hidden h-fit overflow-hidden pr-12 pl-2 whitespace-nowrap text-secondary @min-[7rem]:block",
                         // It fades out over its right padding, which only a description that does not fit reaches. One
                         // gradient: mask-r-from-* lays six masks over each other and doubles the raster work of a row.
-                        "mask-[linear-gradient(to_right,black_calc(100%-2rem),transparent)]",
+                        "mask-[linear-gradient(to_right,black_calc(100%-3rem),transparent)]",
                         ["text-body-xs-regular", "text-caption-md-regular", "text-caption-sm-regular"][
                           Math.min(nestingLevel, 2)
                         ]
@@ -314,7 +326,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
             )}
           </div>
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-2" style={{ zoom }}>
           {!issue?.tempId ? (
             <>
               <IssueProperties

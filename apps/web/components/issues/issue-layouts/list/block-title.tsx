@@ -25,6 +25,10 @@ type Props = {
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
 };
 
+// The text size of the title by nesting level; deeper levels take the last. Each is also the name of the theme
+// variable that holds the size, by which the list row scales what stands beside the title.
+export const TITLE_TEXT_SIZES = ["text-body-sm-medium", "text-body-xs-medium", "text-caption-md-medium"];
+
 /**
  * The title of a list row. A click turns it into an input in place; the name is saved when the focus leaves the input.
  */
@@ -38,10 +42,7 @@ export const IssueBlockTitle = observer(function IssueBlockTitle(props: Props) {
   const { getIsRowTitleEdited, setSelectedRow } = useListView();
   // derived values
   const isEdited = getIsRowTitleEdited(issue.id, groupId);
-  const className = cn(
-    "truncate text-primary",
-    ["text-body-sm-medium", "text-body-xs-medium", "text-caption-md-medium"][Math.min(nestingLevel, 2)]
-  );
+  const className = cn("truncate text-primary", TITLE_TEXT_SIZES[Math.min(nestingLevel, 2)]);
 
   useEffect(() => {
     if (!isEdited) return;
