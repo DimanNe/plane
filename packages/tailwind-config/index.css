@@ -16,6 +16,18 @@
 @import "@makeplane/propel/styles";
 @source "../**/*.{ts,tsx}";
 
+/*
+ * propel animates its pop-ups with Tailwind's `scale-*` and `translate-*`, which set the CSS `scale` and `translate`
+ * properties, but names only `transform` as the property to transition. A pop-up then jumps to its end size in one
+ * frame and only afterwards fades. These rules add the properties Tailwind's own `transition-transform` lists.
+ */
+.transition-\[opacity\,transform\] {
+  transition-property: opacity, transform, translate, scale, rotate;
+}
+.transition-\[transform\,opacity\] {
+  transition-property: transform, translate, scale, rotate, opacity;
+}
+
 * {
   -webkit-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;

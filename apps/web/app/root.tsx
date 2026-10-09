@@ -76,6 +76,10 @@ export function Layout({ children }: { children: ReactNode }) {
         <ThemeProvider themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]} defaultTheme="system">
           {children}
         </ThemeProvider>
+        {/* Pop-ups, menus and tooltips are appended to <body>. If the app were the last element here, each of
+            them would change `:last-child` on the app, and a table rule of the component library
+            (`group-last/body-row`) makes the browser answer that by restyling every element of the app. */}
+        <div hidden />
         <Scripts />
       </body>
     </html>

@@ -118,9 +118,11 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     removeRoutePeekId();
   };
 
+  // No rounded corners here: a rounded box that clips its content makes the browser blend the whole panel through
+  // extra off-screen buffers on every frame, and without a GPU that makes typing in the description stutter.
   const peekOverviewIssueClassName = cn(
     !embedIssue
-      ? "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1 transition-all duration-300"
+      ? "absolute z-[25] flex flex-col overflow-hidden border border-subtle bg-surface-1 transition-all duration-300"
       : `h-full w-full`,
     !embedIssue && {
       "top-0 right-0 bottom-0 w-full border-0 border-l md:w-[50%]": peekMode === "side-peek",
