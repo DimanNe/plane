@@ -6,7 +6,7 @@
 
 import * as React from "react";
 import { cn } from "@plane/utils";
-import { PriorityUrgent, PriorityNone, PriorityHigh, PriorityLow, PriorityMedium } from "@makeplane/propel/icons";
+import { PriorityUrgent, PriorityHigh, PriorityLow, PriorityMedium } from "@makeplane/propel/icons";
 
 export type IssuePriority = "urgent" | "high" | "medium" | "low" | "none";
 
@@ -30,7 +30,8 @@ export function PriorityIcon(props: PriorityIconProps) {
     high: PriorityHigh,
     medium: PriorityMedium,
     low: PriorityLow,
-    none: PriorityNone,
+    // the bars of low with none of them lit
+    none: PriorityLow,
   };
   const Icon = icons[priority ?? "none"];
 
@@ -45,7 +46,7 @@ export function PriorityIcon(props: PriorityIconProps) {
           "text-priority-high": priority === "high",
           "text-priority-medium": priority === "medium",
           "text-priority-low": priority === "low",
-          "text-priority-none": priority === "none",
+          "text-priority-unlit": !priority || priority === "none",
         },
         className
       )}

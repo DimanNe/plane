@@ -23,6 +23,7 @@ import { cn, generateWorkItemLink, getTextFromHTML } from "@plane/utils";
 // components
 import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import { IssueProperties } from "@/components/issues/issue-layouts/properties";
+import { IssuePropertyPriority } from "@/components/issues/issue-layouts/properties/priority";
 import { IssuePropertyState } from "@/components/issues/issue-layouts/properties/state";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 // hooks
@@ -276,6 +277,9 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
             </div>
 
             <IssuePropertyState issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
+            {displayProperties?.priority && (
+              <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
+            )}
             <IssueBlockTitle
               issue={issue}
               groupId={groupId}
@@ -285,14 +289,18 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               updateIssue={updateIssue}
             />
             {!isTitleEdited && (
-              // What follows the title shares one cell, so the chip lies over the start of the description. The
-              // cell takes the room the title leaves; the description goes when that is too little for it.
-              <div className="ml-1.5 grid min-w-0 flex-1 items-center *:col-start-1 *:row-start-1 *:min-w-0">
+              // What follows the title takes the room the title leaves. The chip keeps its room while it is not
+              // shown, so it never lies over the description; the description goes when too little is left for it.
+              <div className="ml-1.5 flex min-w-0 flex-1 items-center gap-2 *:min-w-0">
+                {canEditIssueProperties && <IssueBlockAddSubIssue issueId={issue.id} />}
                 {displayProperties?.description && issue.description_prefix && (
-                  <div className="@container">
+                  <div className="@container flex-1">
                     <p
                       className={cn(
-                        "hidden truncate text-secondary @min-[7rem]:block",
+                        "hidden overflow-hidden pr-8 whitespace-nowrap text-secondary @min-[7rem]:block",
+                        // It fades out over its right padding, which only a description that does not fit reaches. One
+                        // gradient: mask-r-from-* lays six masks over each other and doubles the raster work of a row.
+                        "mask-[linear-gradient(to_right,black_calc(100%-2rem),transparent)]",
                         ["text-body-xs-regular", "text-caption-md-regular", "text-caption-sm-regular"][
                           Math.min(nestingLevel, 2)
                         ]
@@ -302,7 +310,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                     </p>
                   </div>
                 )}
-                {canEditIssueProperties && <IssueBlockAddSubIssue issueId={issue.id} />}
               </div>
             )}
           </div>
