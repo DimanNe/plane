@@ -5,8 +5,8 @@
 # Django imports
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
-from django.db.models import Q, UUIDField, Value, QuerySet, OuterRef, Subquery
-from django.db.models.functions import Coalesce
+from django.db.models import F, Func, Q, TextField, UUIDField, Value, QuerySet, OuterRef, Subquery
+from django.db.models.functions import Coalesce, Left, Trim
 
 # Module imports
 from plane.db.models import (
@@ -25,6 +25,30 @@ from plane.db.models import (
 )
 from plane.utils.custom_properties import add_formula_payload
 from typing import Optional, Dict, Tuple, Any, Union, List
+
+# A list row shows the start of the description on one line; this many characters fill a wide screen.
+DESCRIPTION_PREFIX_LENGTH = 300
+
+
+def replace_in_text(text, pattern: str, replacement: str) -> Func:
+    return Func(
+        text, Value(pattern), Value(replacement), Value("g"), function="REGEXP_REPLACE", output_field=TextField()
+    )
+
+
+def get_description_prefix() -> Left:
+    """
+    The start of a work item's description as one line of text, for the lists of work items.
+
+    The stored plain text (description_stripped) joins the last word of a paragraph or list item to the
+    first word of the next, so the text is taken from the HTML here: the end of a block becomes a space.
+    Character references stay as they are stored; the reader decodes them.
+    """
+    blocks_apart = replace_in_text(
+        F("description_html"), r"</(p|div|li|h[1-6]|blockquote|pre|tr|td|th)>|<br\s*/?>", " "
+    )
+    text = replace_in_text(replace_in_text(blocks_apart, "<[^>]+>", ""), r"\s+", " ")
+    return Left(Trim(text), DESCRIPTION_PREFIX_LENGTH)
 
 
 def issue_queryset_grouper(
@@ -143,7 +167,7 @@ def issue_on_results(
         original_list.append(sub_group_by)
 
     required_fields.extend(original_list)
-    return add_formula_payload(issues.values(*required_fields))
+    return add_formula_payload(issues.values(*required_fields, description_prefix=get_description_prefix()))
 
 
 def issue_group_values(

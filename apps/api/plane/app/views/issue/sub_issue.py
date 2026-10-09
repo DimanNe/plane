@@ -26,6 +26,7 @@ from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, IssueLabel,
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.custom_properties import add_formula_payload
+from plane.utils.grouper import get_description_prefix
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
@@ -175,6 +176,7 @@ class SubIssuesEndpoint(BaseAPIView):
                 "is_draft",
                 "archived_at",
                 "state_group",
+                description_prefix=get_description_prefix(),
             )
         )
 
