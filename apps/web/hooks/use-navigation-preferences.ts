@@ -12,7 +12,6 @@ import type {
   TProjectNavigationPreferences,
   TProjectNavigationMode,
   TWorkspaceNavigationPreferences,
-  TWorkspaceNavigationItemState,
   TAppRailPreferences,
   TAppRailDisplayMode,
 } from "@plane/types";
@@ -201,23 +200,6 @@ export const useWorkspaceNavigationPreferences = () => {
     };
   }, [storePreferences]);
 
-  const toggleWorkspaceItem = useCallback(
-    async (key: string, isPinned: boolean) => {
-      if (!workspaceSlug) return;
-
-      const currentItem = preferences.items[key] || { is_pinned: false, sort_order: 0 };
-
-      await updateBulkSidebarPreferences(workspaceSlug.toString(), [
-        {
-          key,
-          is_pinned: isPinned,
-          sort_order: currentItem.sort_order,
-        },
-      ]);
-    },
-    [workspaceSlug, preferences, updateBulkSidebarPreferences]
-  );
-
   const updateWorkspaceItemOrder = useCallback(
     async (items: Array<{ key: string; sortOrder: number }>) => {
       if (!workspaceSlug) return;
@@ -236,43 +218,9 @@ export const useWorkspaceNavigationPreferences = () => {
     [workspaceSlug, preferences, updateBulkSidebarPreferences]
   );
 
-  const getWorkspaceItemState = useCallback(
-    (key: string): TWorkspaceNavigationItemState => preferences.items[key] || { is_pinned: false, sort_order: 0 },
-    [preferences]
-  );
-
-  const isWorkspaceItemPinned = useCallback(
-    (key: string): boolean => {
-      const state = getWorkspaceItemState(key);
-      return state.is_pinned;
-    },
-    [getWorkspaceItemState]
-  );
-
-  const updateWorkspaceItemSortOrder = useCallback(
-    async (key: string, sortOrder: number) => {
-      if (!workspaceSlug) return;
-
-      const currentItem = preferences.items[key] || { is_pinned: false, sort_order: 0 };
-
-      await updateBulkSidebarPreferences(workspaceSlug.toString(), [
-        {
-          key,
-          is_pinned: currentItem.is_pinned,
-          sort_order: sortOrder,
-        },
-      ]);
-    },
-    [workspaceSlug, preferences, updateBulkSidebarPreferences]
-  );
-
   return {
     preferences,
-    toggleWorkspaceItem,
     updateWorkspaceItemOrder,
-    updateWorkspaceItemSortOrder,
-    getWorkspaceItemState,
-    isWorkspaceItemPinned,
   };
 };
 

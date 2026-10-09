@@ -26,8 +26,6 @@ interface ResizableSidebarProps {
   onCollapsedChange?: (collapsed: boolean) => void;
   className?: string;
   children?: ReactElement;
-  extendedSidebar?: ReactElement;
-  isAnyExtendedSidebarExpanded?: boolean;
   isAnySidebarDropdownOpen?: boolean;
 }
 
@@ -45,8 +43,6 @@ export function ResizableSidebar({
   maxWidth = 350,
   className = "",
   children,
-  extendedSidebar,
-  isAnyExtendedSidebarExpanded = false,
   isAnySidebarDropdownOpen = false,
 }: ResizableSidebarProps) {
   // states
@@ -108,12 +104,12 @@ export function ResizableSidebar({
   }, [isCollapsed, showPeek]);
 
   const handlePeekLeave = useCallback(() => {
-    if (isCollapsed && !isAnyExtendedSidebarExpanded && !isAnySidebarDropdownOpen) {
+    if (isCollapsed && !isAnySidebarDropdownOpen) {
       peekTimeoutRef.current = setTimeout(() => {
         setShowPeek(false);
       }, peekDuration);
     }
-  }, [isCollapsed, peekDuration, setShowPeek, isAnyExtendedSidebarExpanded, isAnySidebarDropdownOpen]);
+  }, [isCollapsed, peekDuration, setShowPeek, isAnySidebarDropdownOpen]);
 
   // Set up event listeners for resizing
   useEffect(() => {
@@ -147,12 +143,6 @@ export function ResizableSidebar({
       handlePeekLeave();
     }
   }, [isAnySidebarDropdownOpen]);
-
-  useEffect(() => {
-    if (!isAnyExtendedSidebarExpanded && isCollapsed && isHoveringTrigger) {
-      handlePeekLeave();
-    }
-  }, [isAnyExtendedSidebarExpanded]);
 
   // Reset peek when sidebar is expanded
   useEffect(() => {
@@ -195,12 +185,7 @@ export function ResizableSidebar({
         aria-label="Main sidebar"
         data-prevent-outside-click={isMobile || undefined}
       >
-        <aside
-          className={cn(
-            "group/sidebar relative flex h-full w-full flex-col overflow-hidden bg-surface-1 pt-3",
-            isAnyExtendedSidebarExpanded && "rounded-none"
-          )}
-        >
+        <aside className="group/sidebar relative flex h-full w-full flex-col overflow-hidden bg-surface-1 pt-3">
           {children}
 
           {/* Resize Handle */}
@@ -240,8 +225,7 @@ export function ResizableSidebar({
         <aside
           className={cn(
             "group/sidebar relative z-20 flex h-full w-full flex-col overflow-hidden bg-surface-1 pt-4",
-            "self-center rounded-md rounded-tl-none rounded-bl-none border-r border-subtle",
-            isAnyExtendedSidebarExpanded && "rounded-none"
+            "self-center rounded-md rounded-tl-none rounded-bl-none border-r border-subtle"
           )}
         >
           {children}
@@ -261,9 +245,6 @@ export function ResizableSidebar({
           />
         </aside>
       </div>
-
-      {/* Extended Sidebar */}
-      {extendedSidebar && extendedSidebar}
     </>
   );
 }

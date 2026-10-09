@@ -48,7 +48,6 @@ type TCustomizeNavigationDialogProps = {
 type TWorkspaceNavigationItem = {
   key: string;
   labelTranslationKey: string;
-  isPinned: boolean;
   sortOrder: number;
 };
 
@@ -80,11 +79,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
     updateShowLimitedProjects,
     updateLimitedProjectsCount,
   } = useProjectNavigationPreferences();
-  const {
-    preferences: workspacePreferences,
-    toggleWorkspaceItem,
-    updateWorkspaceItemOrder,
-  } = useWorkspaceNavigationPreferences();
+  const { preferences: workspacePreferences, updateWorkspaceItemOrder } = useWorkspaceNavigationPreferences();
 
   // local state for limited projects count input
   const [projectCountInput, setProjectCountInput] = useState(projectPreferences.limitedProjectsCount.toString());
@@ -92,7 +87,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
   // Filter personal items by feature flags
   const filteredPersonalItems = PERSONAL_ITEMS;
 
-  // Filter workspace items by permissions and feature flags, then get pinned/unpinned items
+  // Filter workspace items by permissions and feature flags
   const workspaceItems = useMemo(() => {
     const items = WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS.filter((item) => {
       // Permission check
@@ -103,15 +98,13 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
       );
       return hasPermission;
     }).map((item) => {
-      // Get pinned status and sort order from localStorage
+      // Get sort order from localStorage
       const preference = workspacePreferences.items[item.key];
-      const isPinned = preference?.is_pinned ?? false;
       const sortOrder = preference?.sort_order ?? 0;
 
       return {
         key: item.key,
         labelTranslationKey: item.labelTranslationKey,
-        isPinned,
         sortOrder,
       };
     });
@@ -120,15 +113,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
     return items.sort((a, b) => a.sortOrder - b.sortOrder);
   }, [workspaceSlug, allowPermissions, workspacePreferences]);
 
-  // Handle checkbox toggle
-  const handleWorkspaceItemToggle = useCallback(
-    (itemKey: string, checked: boolean) => {
-      toggleWorkspaceItem(itemKey, checked);
-    },
-    [toggleWorkspaceItem]
-  );
-
-  // Handle reorder of pinned workspace items
+  // Handle reorder of workspace items
   const handleReorder = useCallback(
     (newData: TWorkspaceNavigationItem[]) => {
       const itemsWithOrder = newData.map((item, index) => ({
@@ -219,8 +204,8 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
             <DialogHeading>
               <DialogTitle>{t("customize_navigation")}</DialogTitle>
               <DialogDescription>
-                Selected items will always stay visible in your sidebar. You can still find the others anytime from the
-                More menu. These changes are personal to you and won&apos;t affect anyone else on your workspace.
+                Selected items will always stay visible in your sidebar. These changes are personal to you and
+                won&apos;t affect anyone else on your workspace.
               </DialogDescription>
             </DialogHeading>
           </DialogHeader>
@@ -261,7 +246,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
               <div className="flex flex-col gap-2">
                 <h3 className="text-13 font-semibold text-placeholder">{t("common.workspace")}</h3>
                 <div className="rounded-md border border-subtle bg-surface-2 py-2">
-                  {/* Pinned Items - Draggable */}
+                  {/* Workspace Items - Draggable */}
                   <Sortable
                     data={workspaceItems}
                     onChange={handleReorder}
@@ -272,11 +257,6 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
                       return (
                         <div className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition-all duration-200 hover:bg-surface-2">
                           <DragDropOutline className="size-4 cursor-grab text-placeholder transition-colors active:cursor-grabbing" />
-                          <Checkbox
-                            checked={!!workspacePreferences.items[item.key]?.is_pinned}
-                            onCheckedChange={(checked) => handleWorkspaceItemToggle(item.key, checked)}
-                            aria-label={t(item.labelTranslationKey)}
-                          />
                           <div className="flex flex-1 items-center gap-2">
                             {icon}
                             <span className="text-13 text-primary">{t(item.labelTranslationKey)}</span>

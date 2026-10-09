@@ -7,7 +7,6 @@
 import React, { useMemo } from "react";
 import { observer } from "mobx-react";
 import { Collapsible } from "@makeplane/propel/components/collapsible";
-import { MoreHorizontalOutline } from "@makeplane/propel/icons";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
@@ -16,10 +15,7 @@ import {
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-// components
-import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // store hooks
-import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import useLocalStorage from "@/hooks/use-local-storage";
 import {
@@ -36,7 +32,6 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   );
 
   // store hooks
-  const { isExtendedSidebarOpened, toggleExtendedSidebar } = useAppTheme();
   const { currentWorkspace } = useWorkspace();
   // hooks
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
@@ -115,28 +110,12 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             (item) => item.key !== "wiki" || currentWorkspace?.is_wiki_enabled
           ).map((item, _index) => (
             // oxlint-disable-next-line react/no-array-index-key
-            <SidebarItemBase key={`static_${_index}`} item={item} additionalStaticItems={["wiki"]} />
+            <SidebarItemBase key={`static_${_index}`} item={item} />
           ))}
           {sortedNavigationItems.map((item, _index) => (
             // oxlint-disable-next-line react/no-array-index-key
             <SidebarItemBase key={`dynamic_${_index}`} item={item} />
           ))}
-          <SidebarNavItem>
-            <button
-              type="button"
-              onClick={() => toggleExtendedSidebar()}
-              className="flex flex-grow items-center gap-1.5 text-13 font-medium text-tertiary"
-              id="extended-sidebar-toggle"
-              aria-label={t(
-                isExtendedSidebarOpened
-                  ? "aria_labels.app_sidebar.close_extended_sidebar"
-                  : "aria_labels.app_sidebar.open_extended_sidebar"
-              )}
-            >
-              <MoreHorizontalOutline className="size-4 flex-shrink-0" />
-              <span>{isExtendedSidebarOpened ? "Hide" : "More"}</span>
-            </button>
-          </SidebarNavItem>
         </div>
       </Collapsible>
     </>
