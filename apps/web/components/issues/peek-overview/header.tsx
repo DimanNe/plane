@@ -8,7 +8,7 @@ import { useRef } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import {
-  ArrowNarrowRightOutline,
+  CloseOutline,
   DragDropOutline,
   FullScreenPeekOutline,
   LinkOutline,
@@ -168,12 +168,6 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
       }`}
     >
       <div className="flex items-center gap-4">
-        <Tooltip label={t("common.close_peek_view")} disabled={isMobile}>
-          <button onClick={removeRoutePeekId}>
-            <ArrowNarrowRightOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
-          </button>
-        </Tooltip>
-
         <Tooltip label={t("issue.open_in_full_screen")} disabled={isMobile}>
           <Link href={workItemLink} onClick={() => removeRoutePeekId()}>
             <DragDropOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
@@ -230,6 +224,15 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
               isPeekMode
             />
           )}
+          <Tooltip label={t("common.close_peek_view")} disabled={isMobile}>
+            <IconButton
+              variant="secondary"
+              size="md"
+              onClick={removeRoutePeekId}
+              icon={<Icon icon={CloseOutline} />}
+              aria-label={t("common.close_peek_view")}
+            />
+          </Tooltip>
         </div>
       </div>
     </div>

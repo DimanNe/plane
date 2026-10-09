@@ -7,6 +7,8 @@
 import { useTranslation } from "@plane/i18n";
 import { LabelPropertyIcon } from "../../icons/properties/label-icon";
 import type { TPaginatedResponse } from "@plane/types";
+import { cn } from "@plane/utils";
+import { getPillButtonClassName } from "../../pill-button/helper";
 import { Select } from "../../select/select";
 import type { SelectPaginationParams, SelectTooltip, SelectVariant } from "../../select/types";
 import { splitSelectVariant } from "../../select/utils";
@@ -49,6 +51,8 @@ export type LabelSelectProps = {
   tooltip?: SelectTooltip;
   /** Tab order of the trigger, for forms that sequence focus explicitly (e.g. the work item create modal). */
   tabIndex?: number;
+  /** The most labels a `pill` trigger shows by name, each as its own pill; more than that are shown as a count. */
+  maxRender?: number;
 };
 
 function LabelDot({ color }: { color: string }) {
@@ -75,11 +79,21 @@ export function LabelSelect(props: LabelSelectProps) {
     tooltip,
     testId,
     tabIndex,
+    maxRender = 1,
   } = props;
 
   const { variant } = props;
   const { t } = useTranslation();
   const isSelectKind = ["select", "select-ghost"].includes(splitSelectVariant(variant).variant);
+  const split = splitSelectVariant(variant);
+  // Several labels shown by name are pills side by side, so the pill look moves from the trigger to each label.
+  const labelPillClassName =
+    split.variant === "pill" && value.length > 1 && value.length <= maxRender
+      ? cn(
+          getPillButtonClassName(split.size),
+          "max-w-40 group-disabled:bg-layer-transparent group-disabled:text-disabled"
+        )
+      : undefined;
 
   const handleLabelCreated = (id: string) => {
     onChange([...value.map((label) => label.id), id]);
@@ -123,7 +137,11 @@ export function LabelSelect(props: LabelSelectProps) {
         disabled={disabled}
         variant={variant}
         tabIndex={tabIndex}
-        className={className}
+        className={cn(
+          labelPillClassName &&
+            "max-w-none gap-2 border-0 bg-transparent p-0 hover:bg-transparent active:bg-transparent",
+          className
+        )}
         data-testid={testId}
         prependIcon={(labels) => (labels.length === 0 ? <LabelPropertyIcon /> : undefined)}
         label={(labels) =>
@@ -157,6 +175,14 @@ export function LabelSelect(props: LabelSelectProps) {
                 ))}
               </div>
             );
+          }
+          if (labelPillClassName) {
+            return labels.map((label) => (
+              <span key={label.id} className={labelPillClassName}>
+                <LabelDot color={label.color} />
+                <span className="truncate">{label.name}</span>
+              </span>
+            ));
           }
           // inline / table-cell: single dot + name for 1, first dot + the pluralised count for multiple
           if (labels.length === 1) {

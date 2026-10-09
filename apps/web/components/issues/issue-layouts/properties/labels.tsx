@@ -28,7 +28,7 @@ export interface IIssuePropertyLabels {
   optionsClassName?: string;
   /** @deprecated The Select popup positions itself below the trigger and flips on collision. */
   placement?: TPopoverMenuPlacement;
-  /** @deprecated The trigger shows the name of a single label and a count for several. */
+  /** The most labels shown by name, each as its own pill; more than that are shown as a count. */
   maxRender?: number;
   noLabelBorder?: boolean;
   placeholderText?: string;
@@ -61,6 +61,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
     onClose,
     disabled,
     className,
+    maxRender,
     noLabelBorder = false,
     placeholderText,
     fullWidth = false,
@@ -86,6 +87,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
         // `.clickable` is what the spreadsheet's keyboard navigation clicks on Enter / Space in a focused cell.
         className={isTableCell ? "clickable" : undefined}
         tooltip
+        maxRender={maxRender}
       />
     </div>
   );

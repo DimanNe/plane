@@ -36,6 +36,8 @@ type LabelSelectWebProps = {
   tooltip?: SelectTooltip;
   /** Tab order of the trigger, for forms that sequence focus explicitly (`ETabIndices`). */
   tabIndex?: number;
+  /** The most labels a `pill` trigger shows by name, each as its own pill; more than that are shown as a count. */
+  maxRender?: number;
 };
 
 const toOption = (label: IIssueLabel): LabelOption => ({ id: label.id, name: label.name, color: label.color });
@@ -118,6 +120,8 @@ export const LabelSelect = observer(function LabelSelect(props: LabelSelectWebPr
       className={className}
       tooltip={resolvedTooltip}
       tabIndex={tabIndex}
+      // A label that is not loaded has no name to show, so such labels stay a count.
+      maxRender={value.every((id) => getLabelById(id)) ? props.maxRender : undefined}
     />
   );
 });

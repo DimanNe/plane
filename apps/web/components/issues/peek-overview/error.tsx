@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { ArrowNarrowRightOutline } from "@makeplane/propel/icons";
+import { CloseOutline } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 // assets
 import emptyIssue from "@/app/assets/empty-state/issue.svg?url";
@@ -24,10 +24,10 @@ export function IssuePeekOverviewError(props: TIssuePeekOverviewError) {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
-      <div className="flex flex-shrink-0 justify-start">
+      <div className="flex flex-shrink-0 justify-end">
         <Tooltip label="Close the peek view" disabled={isMobile}>
           <button onClick={removeRoutePeekId} className="m-5 h-5 w-5">
-            <ArrowNarrowRightOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
+            <CloseOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
           </button>
         </Tooltip>
       </div>

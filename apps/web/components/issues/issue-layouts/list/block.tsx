@@ -306,19 +306,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               </div>
             )}
           </div>
-          {!issue?.tempId && (
-            <div
-              className={cn("block rounded-sm border border-strong", {
-                "md:hidden": isSidebarCollapsed,
-                "lg:hidden": !isSidebarCollapsed,
-              })}
-            >
-              {quickActions({
-                issue,
-                parentRef: issueRef,
-              })}
-            </div>
-          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
           {!issue?.tempId ? (
@@ -332,12 +319,10 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                 activeLayout="List"
                 isEpic={isEpic}
               />
+              {/* Not shown: the row needs only the right-click menu of the quick actions and the dialogs it opens. */}
               {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
               <div
-                className={cn("hidden", {
-                  "md:flex": isSidebarCollapsed,
-                  "lg:flex": !isSidebarCollapsed,
-                })}
+                className="hidden"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

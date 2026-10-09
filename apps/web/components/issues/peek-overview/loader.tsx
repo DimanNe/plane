@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { ArrowNarrowRightOutline } from "@makeplane/propel/icons";
+import { CloseOutline } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { Loader } from "@plane/blocks/skeleton";
 // hooks
@@ -23,18 +23,17 @@ export function IssuePeekOverviewLoader(props: TIssuePeekOverviewLoader) {
     <Loader className="h-screen w-full space-y-6 overflow-hidden p-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Tooltip label="Close the peek view" disabled={isMobile}>
-            <button onClick={removeRoutePeekId}>
-              <ArrowNarrowRightOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
-            </button>
-          </Tooltip>
           <Loader.Item width="30px" height="30px" />
         </div>
         <div className="flex items-center gap-2">
           <Loader.Item width="80px" height="30px" />
           <Loader.Item width="30px" height="30px" />
           <Loader.Item width="30px" height="30px" />
-          <Loader.Item width="30px" height="30px" />
+          <Tooltip label="Close the peek view" disabled={isMobile}>
+            <button onClick={removeRoutePeekId}>
+              <CloseOutline className="h-4 w-4 text-tertiary hover:text-secondary" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
