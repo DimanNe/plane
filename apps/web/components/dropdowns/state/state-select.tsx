@@ -14,6 +14,8 @@ import type { StateOption } from "@plane/blocks/property-select";
 import type { SelectPaginationParams, SelectTooltip, SelectTooltipOverride, SelectVariant } from "@plane/blocks/select";
 import { useTranslation } from "@plane/i18n";
 import type { IState, TPaginatedResponse } from "@plane/types";
+// components
+import { StateCircle } from "@/components/project-states/state-circle";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
 
@@ -119,6 +121,7 @@ export const StateSelect = observer(function StateSelect(props: StateSelectWebPr
       className={className}
       tooltip={resolvedTooltip}
       appendElement={appendElement}
+      icon={StateCircle}
       testId={testId}
       tabIndex={tabIndex}
     />

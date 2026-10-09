@@ -14,6 +14,7 @@ import {
   LinkOutline,
   NewTabOutline,
   RestoreOutline,
+  ViewsOutline,
 } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -104,6 +105,7 @@ export interface MenuItemFactoryProps {
   setDeleteIssueModal: (open: boolean) => void;
   setArchiveIssueModal?: (open: boolean) => void;
   setDuplicateWorkItemModal?: (open: boolean) => void;
+  setCreateSubIssueModal?: (open: boolean) => void;
   handleRemoveFromView?: () => void;
   handleRestore?: () => Promise<void>;
   // External handlers
@@ -192,6 +194,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     setDeleteIssueModal,
     setArchiveIssueModal,
     setDuplicateWorkItemModal,
+    setCreateSubIssueModal,
     handleRemoveFromView,
   } = props;
 
@@ -227,6 +230,14 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
       workspaceSlug,
     });
   };
+
+  const createAddSubIssueMenuItem = (): TContextMenuItem => ({
+    key: "add-sub-issue",
+    title: t("issue.add.sub_issue"),
+    icon: ViewsOutline,
+    action: () => setCreateSubIssueModal?.(true),
+    shouldRender: isEditingAllowed,
+  });
 
   const createOpenInNewTabMenuItem = (): TContextMenuItem => ({
     key: "open-in-new-tab",
@@ -290,6 +301,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     ...actionHandlers,
     createEditMenuItem,
     createCopyMenuItem,
+    createAddSubIssueMenuItem,
     createOpenInNewTabMenuItem,
     createCopyLinkMenuItem,
     createRemoveFromCycleMenuItem,
@@ -308,6 +320,7 @@ export const useProjectIssueMenuItems = (props: MenuItemFactoryProps): TContextM
     () => [
       factory.createEditMenuItem(),
       factory.createCopyMenuItem(),
+      factory.createAddSubIssueMenuItem(),
       factory.createOpenInNewTabMenuItem(),
       factory.createCopyLinkMenuItem(),
       factory.createArchiveMenuItem(),
@@ -364,6 +377,7 @@ export const useCycleIssueMenuItems = (props: MenuItemFactoryProps): TContextMen
     () => [
       factory.createEditMenuItem(customEditAction),
       factory.createCopyMenuItem(),
+      factory.createAddSubIssueMenuItem(),
       factory.createOpenInNewTabMenuItem(),
       factory.createCopyLinkMenuItem(),
       factory.createRemoveFromCycleMenuItem(),
@@ -390,6 +404,7 @@ export const useModuleIssueMenuItems = (props: MenuItemFactoryProps): TContextMe
     () => [
       factory.createEditMenuItem(customEditAction),
       factory.createCopyMenuItem(),
+      factory.createAddSubIssueMenuItem(),
       factory.createOpenInNewTabMenuItem(),
       factory.createCopyLinkMenuItem(),
       factory.createRemoveFromModuleMenuItem(),

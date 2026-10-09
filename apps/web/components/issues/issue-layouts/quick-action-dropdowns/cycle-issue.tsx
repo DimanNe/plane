@@ -62,6 +62,7 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
   const [issueToEdit, setIssueToEdit] = useState<TIssue | undefined>(undefined);
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
+  const [createSubIssueModal, setCreateSubIssueModal] = useState(false);
   const [_, setDuplicateWorkItemModal] = useState(false);
   // router
   const { workspaceSlug, cycleId } = useParams();
@@ -106,6 +107,7 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
     setDeleteIssueModal,
     setArchiveIssueModal,
     setDuplicateWorkItemModal,
+    setCreateSubIssueModal,
     handleRemoveFromView,
     cycleId: cycleId?.toString(),
     handleDelete,
@@ -151,6 +153,13 @@ export const CycleIssueQuickActions = observer(function CycleIssueQuickActions(p
         onSubmit={async (data) => {
           if (issueToEdit && handleUpdate) await handleUpdate(data);
         }}
+        storeType={EIssuesStoreType.CYCLE}
+      />
+      <CreateUpdateIssueModal
+        isOpen={createSubIssueModal}
+        onClose={() => setCreateSubIssueModal(false)}
+        data={{ parent_id: issue.id, project_id: issue.project_id }}
+        isProjectSelectionDisabled
         storeType={EIssuesStoreType.CYCLE}
       />
 

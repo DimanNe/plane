@@ -25,6 +25,8 @@ import type { ICalendarStore } from "./issue_calendar_view.store";
 import { CalendarStore } from "./issue_calendar_view.store";
 import type { IIssueKanBanViewStore } from "./issue_kanban_view.store";
 import { IssueKanBanViewStore } from "./issue_kanban_view.store";
+import type { IIssueListViewStore } from "./issue_list_view.store";
+import { IssueListViewStore } from "./issue_list_view.store";
 import type { IModuleIssuesFilter, IModuleIssues } from "./module";
 import { ModuleIssuesFilter, ModuleIssues } from "./module";
 import type { IProfileIssuesFilter, IProfileIssues } from "./profile";
@@ -102,6 +104,7 @@ export interface IIssueRootStore {
   archivedIssues: IArchivedIssues;
 
   issueKanBanView: IIssueKanBanViewStore;
+  issueListView: IIssueListViewStore;
   issueCalendarView: ICalendarStore;
 
   projectEpicsFilter: IProjectIssuesFilter;
@@ -170,6 +173,7 @@ export class IssueRootStore implements IIssueRootStore {
   archivedIssues: IArchivedIssues;
 
   issueKanBanView: IIssueKanBanViewStore;
+  issueListView: IIssueListViewStore;
   issueCalendarView: ICalendarStore;
 
   projectEpicsFilter: IProjectIssuesFilter;
@@ -261,6 +265,7 @@ export class IssueRootStore implements IIssueRootStore {
     this.archivedIssues = new ArchivedIssues(this, this.archivedIssuesFilter);
 
     this.issueKanBanView = new IssueKanBanViewStore(this);
+    this.issueListView = new IssueListViewStore();
     this.issueCalendarView = new CalendarStore(this);
 
     this.projectEpicsFilter = new ProjectIssuesFilter(this);

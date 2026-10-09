@@ -437,7 +437,8 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent size="lg" ref={dialogPopupRef}>
+      {/* A row that renders this dialog cancels the clicks it gets; a click on Save must not reach it. */}
+      <DialogContent size="lg" ref={dialogPopupRef} onClick={(e) => e.stopPropagation()}>
         {withDraftIssueWrapper ? (
           <DraftIssueLayout
             {...commonIssueModalProps}

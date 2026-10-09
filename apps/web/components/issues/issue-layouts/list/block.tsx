@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { Dispatch, MouseEvent, SetStateAction } from "react";
+import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -23,10 +23,12 @@ import { cn, generateWorkItemLink } from "@plane/utils";
 // components
 import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import { IssueProperties } from "@/components/issues/issue-layouts/properties";
+import { IssuePropertyState } from "@/components/issues/issue-layouts/properties/state";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useListView } from "@/hooks/store/use-list-view";
 import { useProject } from "@/hooks/store/use-project";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -43,8 +45,8 @@ interface IssueBlockProps {
   canEditProperties: (projectId: string | undefined) => boolean;
   nestingLevel: number;
   spacingLeft?: number;
+  hasSubIssues: boolean;
   isExpanded: boolean;
-  setExpanded: Dispatch<SetStateAction<boolean>>;
   selectionHelpers: TSelectionHelper;
   isCurrentBlockDragging: boolean;
   setIsCurrentBlockDragging: React.Dispatch<React.SetStateAction<boolean>>;
@@ -63,8 +65,8 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
     canEditProperties,
     nestingLevel,
     spacingLeft = 14,
+    hasSubIssues,
     isExpanded,
-    setExpanded,
     selectionHelpers,
     isCurrentBlockDragging,
     setIsCurrentBlockDragging,
@@ -80,12 +82,10 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   // hooks
   const { sidebarCollapsed: isSidebarCollapsed } = useAppTheme();
   const { getProjectIdentifierById, currentProjectNextSequenceId } = useProject();
-  const {
-    getIsIssuePeeked,
-    peekIssue,
-    setPeekIssue,
-    subIssues: subIssuesStore,
-  } = useIssueDetail(isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES);
+  const { getIsIssuePeeked, peekIssue, setPeekIssue } = useIssueDetail(
+    isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
+  );
+  const { toggleIssueCollapse } = useListView();
 
   const handleIssuePeekOverview = (issue: TIssue) =>
     workspaceSlug &&
@@ -103,7 +103,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
   // derived values
   const issue = issuesMap[issueId];
-  const subIssuesCount = issue?.sub_issues_count ?? 0;
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
 
@@ -142,15 +141,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const handleToggleExpand = (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (nestingLevel >= 3) {
-      handleIssuePeekOverview(issue);
-    } else {
-      setExpanded((prevState) => {
-        if (!prevState && workspaceSlug && issue && issue.project_id)
-          subIssuesStore.fetchSubIssues(workspaceSlug.toString(), issue.project_id, issue.id);
-        return !prevState;
-      });
-    }
+    toggleIssueCollapse(issue.id);
   };
 
   // Calculate width for: projectIdentifier + "-" + dynamic sequence number digits
@@ -245,7 +236,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
               {/* sub-issues chevron */}
               <div className="grid size-4 flex-shrink-0 place-items-center">
-                {subIssuesCount > 0 && !isEpic && (
+                {hasSubIssues && !isEpic && (
                   <button
                     type="button"
                     className="grid size-4 place-items-center rounded-xs text-placeholder hover:text-tertiary"
@@ -265,8 +256,16 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               )}
             </div>
 
+            <IssuePropertyState issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
             <Tooltip label={issue.name} layout="stacked" align="start" disabled={isCurrentBlockDragging || isMobile}>
-              <p className="cursor-pointer truncate text-body-xs-medium text-primary">{issue.name}</p>
+              <p
+                className={cn(
+                  "cursor-pointer truncate text-primary",
+                  ["text-body-sm-medium", "text-body-xs-medium", "text-caption-md-medium"][Math.min(nestingLevel, 2)]
+                )}
+              >
+                {issue.name}
+              </p>
             </Tooltip>
           </div>
           {!issue?.tempId && (

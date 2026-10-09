@@ -64,6 +64,7 @@ import {
   isLoaderReady,
 } from "@plane/utils";
 // components
+import { StateCircle } from "@/components/project-states/state-circle";
 import { WORK_ITEM_PROPERTY_TYPE_ICONS } from "@/components/work-item-types/property-icon";
 // store hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -186,7 +187,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       getStateFilterConfig<TWorkItemFilterProperty>("state_id")({
         isEnabled: isFilterEnabled("state_id") && workItemStates !== undefined,
         filterIcon: StateOutline,
-        getOptionIcon: (state) => <StateGroupIcon stateGroup={state.group} color={state.color} />,
+        getOptionIcon: (state) => <StateCircle stateId={state.id} className="size-3 shrink-0" />,
         states: workItemStates ?? [],
         ...operatorConfigs,
       }),

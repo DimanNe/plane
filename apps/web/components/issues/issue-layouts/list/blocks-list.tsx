@@ -5,13 +5,16 @@
  */
 
 import type { MutableRefObject } from "react";
+import { observer } from "mobx-react";
 // components
 import type { TIssue, IIssueDisplayProperties, TIssueMap, TGroupedIssues } from "@plane/types";
 // hooks
+import { useListView } from "@/hooks/store/use-list-view";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 // types
 import { IssueBlockRoot } from "./block-root";
 import type { TRenderQuickActions } from "./list-view-types";
+import { LIST_ROW_INDENT, LIST_ROW_SPACING, getListRows } from "./utils";
 
 interface Props {
   issueIds: TGroupedIssues | any;
@@ -28,7 +31,7 @@ interface Props {
   isEpic?: boolean;
 }
 
-export function IssueBlocksList(props: Props) {
+export const IssueBlocksList = observer(function IssueBlocksList(props: Props) {
   const {
     issueIds,
     issuesMap,
@@ -43,26 +46,30 @@ export function IssueBlocksList(props: Props) {
     canDropOverIssue,
     isEpic = false,
   } = props;
+  // store hooks
+  const { collapsedIssueIds } = useListView();
 
   return (
     <div className="relative h-full w-full">
       {issueIds &&
-        issueIds.length > 0 &&
-        issueIds.map((issueId: string, index: number) => (
+        getListRows(issueIds, issuesMap, collapsedIssueIds).map((row, index, rows) => (
           <IssueBlockRoot
-            key={issueId}
-            issueId={issueId}
+            key={row.issueId}
+            issueId={row.issueId}
             issuesMap={issuesMap}
             updateIssue={updateIssue}
             quickActions={quickActions}
             canEditProperties={canEditProperties}
             displayProperties={displayProperties}
-            nestingLevel={0}
-            spacingLeft={0}
+            nestingLevel={row.nestingLevel}
+            spacingLeft={row.nestingLevel * LIST_ROW_INDENT}
+            spacingTop={row.spacingLevel * LIST_ROW_SPACING}
+            hasSubIssues={row.hasSubIssues}
+            isExpanded={row.isExpanded}
             containerRef={containerRef}
             selectionHelpers={selectionHelpers}
             groupId={groupId}
-            isLastChild={index === issueIds.length - 1}
+            isLastChild={index === rows.length - 1}
             isDragAllowed={isDragAllowed}
             canDropOverIssue={canDropOverIssue}
             isEpic={isEpic}
@@ -70,4 +77,4 @@ export function IssueBlocksList(props: Props) {
         ))}
     </div>
   );
-}
+});

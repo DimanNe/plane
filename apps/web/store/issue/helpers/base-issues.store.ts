@@ -539,6 +539,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
     // add Issue to Store
     this.addIssue(response, shouldUpdateList);
+    this.updateSubIssuesCount(undefined, response.parent_id);
 
     // If shouldUpdateList is true, call fetchParentStats
     // oxlint-disable-next-line no-unused-expressions
@@ -569,6 +570,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       // Update the Respective Stores
       this.rootIssueStore.issues.updateIssue(issueId, getOptimisticWorkItemUpdate(issueBeforeUpdate, data));
       this.updateIssueList({ ...issueBeforeUpdate, ...data } as TIssue, issueBeforeUpdate);
+      this.updateSubIssuesCount(issueBeforeUpdate?.parent_id, { ...issueBeforeUpdate, ...data }.parent_id);
 
       // Check if should Sync
       if (!shouldSync) return;
@@ -588,6 +590,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       // If errored out update store again to revert the change
       this.rootIssueStore.issues.updateIssue(issueId, issueBeforeUpdate ?? {});
       this.updateIssueList(issueBeforeUpdate, { ...issueBeforeUpdate, ...data } as TIssue);
+      this.updateSubIssuesCount({ ...issueBeforeUpdate, ...data }.parent_id, issueBeforeUpdate?.parent_id);
       throw error;
     }
   }
@@ -610,10 +613,25 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     runInAction(() => {
       this.removeIssueFromList(issueId);
     });
+    this.updateSubIssuesCount(issueBeforeRemoval?.parent_id, undefined);
     // call fetch Parent stats
     this.fetchParentStats(workspaceSlug, projectId);
     // Remove issue from main issue Map store
     this.rootIssueStore.issues.removeIssue(issueId);
+    this.removeSubIssues(issueId);
+  }
+
+  /**
+   * The API deletes the sub-work items of a deleted work item with it, so they leave the store too
+   * @param parentId
+   */
+  removeSubIssues(parentId: string) {
+    for (const issue of Object.values(this.rootIssueStore.issues.issuesMap)) {
+      if (issue.parent_id !== parentId) continue;
+      this.removeIssueFromList(issue.id);
+      this.rootIssueStore.issues.removeIssue(issue.id);
+      this.removeSubIssues(issue.id);
+    }
   }
 
   /**
@@ -638,6 +656,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       // Since Archived remove the issue Id from the current store
       this.removeIssueFromList(issueId);
     });
+    this.updateSubIssuesCount(issueBeforeArchive?.parent_id, undefined);
   }
 
   /**
@@ -1165,6 +1184,21 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
   }
 
   /**
+   * Keeps the sub-work item count of the parents right when a work item gets, changes or loses its parent
+   * @param prevParentId
+   * @param parentId
+   */
+  updateSubIssuesCount(prevParentId: string | null | undefined, parentId: string | null | undefined) {
+    if (prevParentId === parentId) return;
+    const issuesMap = this.rootIssueStore.issues.issuesMap;
+    runInAction(() => {
+      if (prevParentId && issuesMap[prevParentId])
+        update(issuesMap, [prevParentId, "sub_issues_count"], (count = 0) => count - 1);
+      if (parentId && issuesMap[parentId]) update(issuesMap, [parentId, "sub_issues_count"], (count = 0) => count + 1);
+    });
+  }
+
+  /**
    * Method called to clear out the current store
    */
   clear(shouldClearPaginationOptions = true) {
@@ -1223,7 +1257,10 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     if (!issueId) return;
 
     // Get display filters to check if 'Show sub Work items' is enabled - Do not add Work item to main list if disabled.
-    const isShowWorkItemsEnabled = this.issueFilterStore.issueFilters?.displayFilters?.sub_issue ?? false;
+    const displayFilters = this.issueFilterStore.issueFilters?.displayFilters;
+    // the list layout always holds sub-work items: it nests them under their parent
+    const isShowWorkItemsEnabled =
+      displayFilters?.layout === EIssueLayoutTypes.LIST || (displayFilters?.sub_issue ?? false);
 
     // get issueUpdates from another method by passing down the three arguments
     // issueUpdates is nothing but an array of objects that contain the path of the issueId list that need updating and also the action that needs to be performed at the path

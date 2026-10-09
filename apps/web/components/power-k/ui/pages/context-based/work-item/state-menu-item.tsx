@@ -5,10 +5,10 @@
  */
 
 import { observer } from "mobx-react";
-import { StateGroupIcon } from "@plane/blocks/icons";
 import type { IState } from "@plane/types";
 // components
 import { PowerKModalCommandItem } from "@/components/power-k/ui/modal/command-item";
+import { StateCircle } from "@/components/project-states/state-circle";
 
 export type TPowerKProjectStatesMenuItemsProps = {
   handleSelect: (stateId: string) => void;
@@ -28,7 +28,7 @@ export const PowerKProjectStatesMenuItems = observer(function PowerKProjectState
       {states.map((state) => (
         <PowerKModalCommandItem
           key={state.id}
-          iconNode={<StateGroupIcon stateGroup={state.group} color={state.color} className="size-3.5 shrink-0" />}
+          iconNode={<StateCircle stateId={state.id} className="size-3.5 shrink-0" />}
           label={state.name}
           isSelected={state.id === selectedStateId}
           onSelect={() => handleSelect(state.id)}

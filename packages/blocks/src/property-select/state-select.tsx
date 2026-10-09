@@ -5,10 +5,11 @@
  */
 
 import { StateGroupIcon } from "../icons/state/state-group-icon";
+import type { StateGroupIconProps } from "../icons/state/state-group-icon";
 import type { TPaginatedResponse, TStateGroups } from "@plane/types";
 import { Select } from "../select/select";
 import type { SelectPaginationParams, SelectTooltip, SelectVariant } from "../select/types";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { ProjectIdentifierElement } from "./shared/project-identifier-element";
 
 /** Minimal state shape the dropdown needs — the client maps its richer record down to this. */
@@ -45,6 +46,8 @@ export type StateSelectProps = {
   showIdentifier?: boolean;
   tooltip?: SelectTooltip;
   appendElement?: ReactNode;
+  /** Draws a state in the menu's options and in the trigger; it is also given the state's id. */
+  icon?: ComponentType<StateGroupIconProps & { stateId: string | undefined }>;
   /** Forwarded to `Select.Trigger`'s `testId` — see its doc comment (value-agnostic e2e selector). */
   testId?: string;
   /** Tab order of the trigger, for forms that sequence focus explicitly (e.g. the work item create modal). */
@@ -70,6 +73,7 @@ export function StateSelect(props: StateSelectProps) {
     showIdentifier = false,
     tooltip,
     appendElement,
+    icon: StateIcon = StateGroupIcon,
     testId,
     tabIndex,
   } = props;
@@ -92,7 +96,8 @@ export function StateSelect(props: StateSelectProps) {
       getOptionLabel={(state) => state.name}
       filterOption={shouldFilterStates ? (state) => allowedStateIds.has(state.id) : undefined}
       getOptionIcon={(state) => (
-        <StateGroupIcon
+        <StateIcon
+          stateId={state.id}
           stateGroup={state.group}
           color={state.color}
           className="size-4 shrink-0"
@@ -112,7 +117,8 @@ export function StateSelect(props: StateSelectProps) {
         className={className}
         data-testid={testId}
         prependIcon={(states) => (
-          <StateGroupIcon
+          <StateIcon
+            stateId={states[0]?.id}
             stateGroup={states[0]?.group ?? "backlog"}
             color={states[0]?.color ?? "currentColor"}
             percentage={states[0]?.order}

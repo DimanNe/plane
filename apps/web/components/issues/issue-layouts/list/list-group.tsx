@@ -37,15 +37,11 @@ import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { GroupDragOverlay } from "../group-drag-overlay";
 import { ListQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
 import type { GroupDropLocation } from "../utils";
-import {
-  getDestinationFromDropPayload,
-  getIssueBlockId,
-  getSourceFromDropPayload,
-  highlightIssueOnDrop,
-} from "../utils";
+import { getIssueBlockId, getSourceFromDropPayload, highlightIssueOnDrop } from "../utils";
 import { IssueBlocksList } from "./blocks-list";
 import { HeaderGroupByCard } from "./headers/group-by-card";
 import type { TRenderQuickActions } from "./list-view-types";
+import { getListDropLocation } from "./utils";
 
 interface Props {
   groupIssueIds: string[] | undefined;
@@ -108,7 +104,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
   const projectState = useProjectState();
 
   const {
-    issues: { getGroupIssueCount, getPaginationData, getIssueLoader },
+    issues: { getGroupIssueCount, getPaginationData, getIssueLoader, getIssueIds },
   } = useIssuesStore();
 
   const [intersectionElement, setIntersectionElement] = useState<HTMLDivElement | null>(null);
@@ -215,7 +211,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
         onDrop: (payload) => {
           setIsDraggingOverColumn(false);
           const source = getSourceFromDropPayload(payload);
-          const destination = getDestinationFromDropPayload(payload);
+          const destination = getListDropLocation(payload, getIssueIds(group.id) ?? [], issuesMap);
 
           if (!source || !destination) return;
 
@@ -251,7 +247,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
   ]);
 
   const isDragAllowed = group_by ? DRAG_ALLOWED_GROUPS.includes(group_by) : true;
-  const canOverlayBeVisible = isWorkflowDropDisabled || orderBy !== "sort_order" || !!group.isDropDisabled;
+  const canOverlayBeVisible = isWorkflowDropDisabled || !!group.isDropDisabled;
   const isDropDisabled = isWorkflowDropDisabled || !!group.isDropDisabled;
 
   const isGroupByCreatedBy = group_by === "created_by";

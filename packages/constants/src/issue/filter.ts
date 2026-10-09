@@ -123,7 +123,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
         },
         extra_options: {
           access: true,
-          values: ["show_empty_groups", "sub_issue"],
+          values: ["show_empty_groups"],
         },
       },
       kanban: {
@@ -230,7 +230,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
         },
         extra_options: {
           access: true,
-          values: ["show_empty_groups", "sub_issue"],
+          values: ["show_empty_groups"],
         },
       },
       kanban: {

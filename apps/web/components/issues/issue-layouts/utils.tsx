@@ -75,6 +75,7 @@ import {
   SpreadsheetSubIssueColumn,
   SpreadsheetUpdatedOnColumn,
 } from "@/components/issues/issue-layouts/spreadsheet/columns";
+import { StateCircle } from "@/components/project-states/state-circle";
 
 export const HIGHLIGHT_CLASS = "highlight";
 export const HIGHLIGHT_WITH_LINE = "highlight-with-line";
@@ -85,6 +86,7 @@ export type GroupDropLocation = {
   subGroupId?: string;
   id: string | undefined;
   canAddIssueBelow?: boolean;
+  parentId?: string | null;
 };
 
 export type IssueUpdates = {
@@ -277,7 +279,7 @@ const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefin
     name: state.name,
     icon: (
       <div className="size-4 rounded-full">
-        <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} percentage={state.order} />
+        <StateCircle stateId={state.id} />
       </div>
     ),
     payload: { state_id: state.id },
@@ -614,6 +616,9 @@ export const handleGroupDragDrop = async (
       !!destination.canAddIssueBelow
     ),
   };
+
+  // the list layout nests the work item under the row it is dropped on, or next to that row
+  if (destination.parentId !== undefined) updatedIssue = { ...updatedIssue, parent_id: destination.parentId };
 
   // update updatedIssue values based on the source and destination groupIds
   if (source.groupId && destination.groupId && source.groupId !== destination.groupId && groupBy) {

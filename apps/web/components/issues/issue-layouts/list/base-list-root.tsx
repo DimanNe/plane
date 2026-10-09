@@ -87,7 +87,9 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
     issuesFilter?.issueFilters?.kanbanFilters || ({ group_by: [], sub_group_by: [] } as TIssueKanbanFilters);
 
   useEffect(() => {
-    fetchIssues("init-loader", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
+    // the tree is built from the loaded work items: a parent on a later page would leave its sub-work items
+    // at the top level, so a page is as long as the API allows
+    fetchIssues("init-loader", { canGroup: true, perPageCount: 1000 }, viewId);
   }, [fetchIssues, storeType, group_by, viewId]);
 
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
