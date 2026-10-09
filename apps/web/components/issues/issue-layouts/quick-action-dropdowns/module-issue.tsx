@@ -62,7 +62,6 @@ export const ModuleIssueQuickActions = observer(function ModuleIssueQuickActions
   const [issueToEdit, setIssueToEdit] = useState<TIssue | undefined>(undefined);
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
-  const [createSubIssueModal, setCreateSubIssueModal] = useState(false);
   const [_, setDuplicateWorkItemModal] = useState(false);
   // router
   const { workspaceSlug, moduleId } = useParams();
@@ -108,7 +107,6 @@ export const ModuleIssueQuickActions = observer(function ModuleIssueQuickActions
     setDeleteIssueModal,
     setArchiveIssueModal,
     setDuplicateWorkItemModal,
-    setCreateSubIssueModal,
     handleRemoveFromView,
     moduleId: moduleId?.toString(),
     handleDelete,
@@ -153,13 +151,6 @@ export const ModuleIssueQuickActions = observer(function ModuleIssueQuickActions
         onSubmit={async (data) => {
           if (issueToEdit && handleUpdate) await handleUpdate(data);
         }}
-        storeType={EIssuesStoreType.MODULE}
-      />
-      <CreateUpdateIssueModal
-        isOpen={createSubIssueModal}
-        onClose={() => setCreateSubIssueModal(false)}
-        data={{ parent_id: issue.id, project_id: issue.project_id }}
-        isProjectSelectionDisabled
         storeType={EIssuesStoreType.MODULE}
       />
 

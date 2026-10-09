@@ -164,6 +164,7 @@ export interface IIssueDisplayFilterOptions {
   sub_issue?: boolean;
 }
 export interface IIssueDisplayProperties {
+  description?: boolean;
   assignee?: boolean;
   start_date?: boolean;
   due_date?: boolean;

@@ -28,6 +28,7 @@ export interface IBaseCommandPaletteStore {
   isBulkDeleteIssueModalOpen: boolean;
   createIssueStoreType: TCreateModalStoreTypes;
   createWorkItemAllowedProjectIds: string[] | undefined;
+  createIssueParentId: string | undefined;
   profileSettingsModal: {
     activeTab: TProfileSettingsTabs | null;
     isOpen: boolean;
@@ -40,7 +41,12 @@ export interface IBaseCommandPaletteStore {
   toggleCreateCycleModal: (value?: boolean) => void;
   toggleCreateViewModal: (value?: boolean) => void;
   toggleCreatePageModal: (value?: TCreatePageModal) => void;
-  toggleCreateIssueModal: (value?: boolean, storeType?: TCreateModalStoreTypes, allowedProjectIds?: string[]) => void;
+  toggleCreateIssueModal: (
+    value?: boolean,
+    storeType?: TCreateModalStoreTypes,
+    allowedProjectIds?: string[],
+    parentId?: string
+  ) => void;
   toggleCreateModuleModal: (value?: boolean) => void;
   toggleDeleteIssueModal: (value?: boolean) => void;
   toggleBulkDeleteIssueModal: (value?: boolean) => void;
@@ -61,6 +67,7 @@ export class BaseCommandPaletteStore implements IBaseCommandPaletteStore {
   createPageModal: TCreatePageModal = DEFAULT_CREATE_PAGE_MODAL_DATA;
   createIssueStoreType: TCreateModalStoreTypes = EIssuesStoreType.PROJECT;
   createWorkItemAllowedProjectIds: IBaseCommandPaletteStore["createWorkItemAllowedProjectIds"] = undefined;
+  createIssueParentId: IBaseCommandPaletteStore["createIssueParentId"] = undefined;
   profileSettingsModal: IBaseCommandPaletteStore["profileSettingsModal"] = {
     activeTab: "general",
     isOpen: false,
@@ -81,6 +88,7 @@ export class BaseCommandPaletteStore implements IBaseCommandPaletteStore {
       createPageModal: observable,
       createIssueStoreType: observable,
       createWorkItemAllowedProjectIds: observable,
+      createIssueParentId: observable.ref,
       profileSettingsModal: observable,
       allStickiesModal: observable,
       projectListOpenMap: observable,
@@ -197,17 +205,25 @@ export class BaseCommandPaletteStore implements IBaseCommandPaletteStore {
    * Toggles the create issue modal
    * @param value
    * @param storeType
+   * @param parentId the work item whose sub-work item is created
    * @returns
    */
-  toggleCreateIssueModal = (value?: boolean, storeType?: TCreateModalStoreTypes, allowedProjectIds?: string[]) => {
+  toggleCreateIssueModal = (
+    value?: boolean,
+    storeType?: TCreateModalStoreTypes,
+    allowedProjectIds?: string[],
+    parentId?: string
+  ) => {
     if (value !== undefined) {
       this.isCreateIssueModalOpen = value;
       this.createIssueStoreType = storeType || EIssuesStoreType.PROJECT;
       this.createWorkItemAllowedProjectIds = allowedProjectIds ?? undefined;
+      this.createIssueParentId = parentId;
     } else {
       this.isCreateIssueModalOpen = !this.isCreateIssueModalOpen;
       this.createIssueStoreType = EIssuesStoreType.PROJECT;
       this.createWorkItemAllowedProjectIds = undefined;
+      this.createIssueParentId = undefined;
     }
   };
 

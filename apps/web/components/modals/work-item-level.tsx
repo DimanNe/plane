@@ -33,6 +33,7 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
   const { data: currentUser } = useUser();
   const {
     issue: { getIssueById, getIssueIdByIdentifier },
+    peekIssue,
   } = useIssueDetail();
   // derived values
   const workItemId = workItemIdentifier ? getIssueIdByIdentifier(workItemIdentifier) : undefined;
@@ -49,6 +50,7 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
     isBulkDeleteIssueModalOpen,
     toggleBulkDeleteIssueModal,
     createWorkItemAllowedProjectIds,
+    createIssueParentId,
   } = useCommandPalette();
   // derived values
   const { fetchSubIssues: fetchSubWorkItems } = useIssueDetail();
@@ -69,13 +71,16 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
   };
 
   const handleCreateIssueSubmit = async (newIssue: TIssue) => {
-    if (!workspaceSlug || !newIssue.project_id || !newIssue.id || newIssue.parent_id !== workItemDetails?.id) return;
+    const openWorkItemId = workItemDetails?.id ?? peekIssue?.issueId;
+    if (!workspaceSlug || !newIssue.project_id || !newIssue.id || newIssue.parent_id !== openWorkItemId) return;
 
     const fetchAction = workItemDetails?.is_epic ? fetchEpicSubWorkItems : fetchSubWorkItems;
-    await fetchAction(workspaceSlug?.toString(), newIssue.project_id, workItemDetails.id);
+    await fetchAction(workspaceSlug?.toString(), newIssue.project_id, newIssue.parent_id);
   };
 
   const getCreateIssueModalData = () => {
+    if (createIssueParentId)
+      return { parent_id: createIssueParentId, project_id: getIssueById(createIssueParentId)?.project_id };
     if (cycleId) return { cycle_id: cycleId.toString() };
     if (moduleId) return { module_ids: [moduleId.toString()] };
     return undefined;
@@ -89,6 +94,7 @@ export const WorkItemLevelModals = observer(function WorkItemLevelModals(props: 
         data={getCreateIssueModalData()}
         onSubmit={handleCreateIssueSubmit}
         allowedProjectIds={createWorkItemAllowedProjectIds}
+        isProjectSelectionDisabled={!!createIssueParentId}
       />
       {workspaceSlug && workItemId && workItemDetails && workItemDetails.project_id && (
         <DeleteIssueModal

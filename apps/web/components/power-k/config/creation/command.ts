@@ -10,6 +10,7 @@ import {
   CyclesOutline,
   DocumentationOutline,
   ModuleOutline,
+  ViewsOutline,
   WorkItemsOutline,
 } from "@makeplane/propel/icons";
 // plane imports
@@ -19,12 +20,15 @@ import { EUserProjectRoles } from "@plane/types";
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useListView } from "@/hooks/store/use-list-view";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
 import { useInstance } from "@/hooks/store/use-instance";
 
 export type TPowerKCreationCommandKeys =
   | "create_work_item"
+  | "create_sub_work_item"
   | "create_page"
   | "create_view"
   | "create_cycle"
@@ -43,6 +47,8 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
     permission: { allowPermissions },
   } = useUser();
   const { workspaceProjectIds, getPartialProjectById } = useProject();
+  const issueDetail = useIssueDetail();
+  const listView = useListView();
   const {
     toggleCreateIssueModal,
     toggleCreateProjectModal,
@@ -69,6 +75,14 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
   const getProjectDetails = (ctx: TPowerKContext) =>
     ctx.params.projectId ? getPartialProjectById(ctx.params.projectId.toString()) : undefined;
 
+  // The work item of the peek view or of the work item page, else the selected row of the list. The stores are
+  // read when a key is pressed, so moving the selection does not build the commands again.
+  const getParentWorkItemId = (ctx: TPowerKContext) =>
+    issueDetail.peekIssue?.issueId ??
+    (ctx.params.workItem
+      ? issueDetail.issue.getIssueIdByIdentifier(ctx.params.workItem.toString())
+      : listView.selectedRow?.issueId);
+
   return {
     create_work_item: {
       id: "create_work_item",
@@ -80,6 +94,18 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       action: () => toggleCreateIssueModal(true),
       isEnabled: () => Boolean(canCreateWorkItem),
       isVisible: () => Boolean(canCreateWorkItem),
+      closeOnSelect: true,
+    },
+    create_sub_work_item: {
+      id: "create_sub_work_item",
+      type: "action",
+      group: "create",
+      i18n_title: "issue.add.sub_issue",
+      icon: ViewsOutline,
+      keySequence: "nc",
+      action: (ctx) => toggleCreateIssueModal(true, undefined, undefined, getParentWorkItemId(ctx)),
+      isEnabled: (ctx) => Boolean(canCreateWorkItem && getParentWorkItemId(ctx)),
+      isVisible: (ctx) => Boolean(canCreateWorkItem && getParentWorkItemId(ctx)),
       closeOnSelect: true,
     },
     create_page: {
@@ -116,7 +142,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
       group: "create",
       i18n_title: "power_k.creation_actions.create_cycle",
       icon: CyclesOutline,
-      keySequence: "nc",
+      keySequence: "nq",
       action: () => toggleCreateCycleModal(true),
       isEnabled: (ctx) => Boolean(getProjectDetails(ctx)?.cycle_view && hasProjectMemberLevelPermissions(ctx)),
       isVisible: (ctx) =>

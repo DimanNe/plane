@@ -47,6 +47,8 @@ export type TBaseIssue = {
   id: string;
   sequence_id: number;
   name: string;
+  // the start of the plain text of the description, in list responses
+  description_prefix?: string | null;
   sort_order: number;
 
   state_id: string | null;

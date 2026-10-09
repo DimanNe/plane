@@ -121,9 +121,13 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
 
   if (!issueId || !issuesMap[issueId]?.created_at) return null;
 
+  // a nested row is lower when neither it nor its siblings show sub-work items, the rows that get no space above
+  const isCompact = nestingLevel > 0 && spacingTop === 0;
+
   return (
     <div
-      className={cn("relative", {
+      // the scroll margin keeps a row that is scrolled to clear of the group header and the quick add row
+      className={cn("relative scroll-my-12", {
         "z-[1] bg-accent-primary/10 outline-2 -outline-offset-2 outline-accent-strong": instruction === "make-child",
       })}
       ref={issueBlockRef}
@@ -158,6 +162,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
           spacingLeft={spacingLeft}
           selectionHelpers={selectionHelpers}
           canDrag={isDragAllowed}
+          isCompact={isCompact}
           isCurrentBlockDragging={isCurrentBlockDragging}
           setIsCurrentBlockDragging={setIsCurrentBlockDragging}
           isEpic={isEpic}

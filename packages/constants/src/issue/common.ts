@@ -162,6 +162,15 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "issue_type",
 ];
 
+// the List layout also shows the start of the description
+export const LIST_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = [
+  ...ISSUE_DISPLAY_PROPERTIES_KEYS,
+  "description",
+];
+
+// the API cuts the description of a list row to this many characters
+export const DESCRIPTION_PREFIX_LENGTH = 300;
+
 export const SUB_ISSUES_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = [
   "key",
   "assignee",
@@ -179,6 +188,7 @@ export const ISSUE_DISPLAY_PROPERTIES: {
     key: "key",
     titleTranslationKey: "issue.display.properties.id",
   },
+  { key: "description", titleTranslationKey: "common.description" },
   {
     key: "assignee",
     titleTranslationKey: "common.assignee",

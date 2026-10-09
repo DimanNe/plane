@@ -64,7 +64,6 @@ export const ProjectIssueQuickActions = observer(function ProjectIssueQuickActio
   const [issueToEdit, setIssueToEdit] = useState<TIssue | undefined>(undefined);
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
-  const [createSubIssueModal, setCreateSubIssueModal] = useState(false);
   const [_, setDuplicateWorkItemModal] = useState(false);
   // store hooks
   const { allowPermissions } = useUserPermissions();
@@ -111,7 +110,6 @@ export const ProjectIssueQuickActions = observer(function ProjectIssueQuickActio
     setDeleteIssueModal,
     setArchiveIssueModal,
     setDuplicateWorkItemModal,
-    setCreateSubIssueModal,
     handleDelete,
     handleUpdate,
     handleArchive,
@@ -155,13 +153,6 @@ export const ProjectIssueQuickActions = observer(function ProjectIssueQuickActio
         onSubmit={async (data) => {
           if (issueToEdit && handleUpdate) await handleUpdate(data);
         }}
-        storeType={EIssuesStoreType.PROJECT}
-      />
-      <CreateUpdateIssueModal
-        isOpen={createSubIssueModal}
-        onClose={() => setCreateSubIssueModal(false)}
-        data={{ parent_id: issue.id, project_id: issue.project_id }}
-        isProjectSelectionDisabled
         storeType={EIssuesStoreType.PROJECT}
       />
 

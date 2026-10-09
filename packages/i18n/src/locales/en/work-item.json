@@ -19,7 +19,7 @@
       "start_date": "Add start date",
       "due_date": "Add due date",
       "parent": "Add parent work item",
-      "sub_issue": "Add sub-work item",
+      "sub_issue": "Add child",
       "dependency": "Add dependency",
       "relation": "Add relation",
       "link": "Add link",

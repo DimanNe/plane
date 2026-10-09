@@ -6,7 +6,7 @@
 
 import { isEqual, pickBy } from "lodash-es";
 // plane imports
-import { WORK_ITEM_PROPERTY_KEY_PREFIX } from "@plane/constants";
+import { DESCRIPTION_PREFIX_LENGTH, WORK_ITEM_PROPERTY_KEY_PREFIX } from "@plane/constants";
 import { EWorkItemPropertyRelationType, EWorkItemPropertyType } from "@plane/types";
 import type { TIssue, TWorkItemProperty, TWorkItemPropertyTypeKey, TWorkItemPropertyValue } from "@plane/types";
 
@@ -85,12 +85,26 @@ export const getWorkItemPropertyDefaultValues = (properties: TWorkItemProperty[]
 };
 
 /**
+ * @description The start of a description as the list responses carry it: the text without its tags
+ */
+export const getDescriptionPrefix = (descriptionHtml: string | undefined) =>
+  (descriptionHtml ?? "")
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr|td|th)>|<br\s*\/?>/g, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, DESCRIPTION_PREFIX_LENGTH);
+
+/**
  * @description The part of a work item update a store applies before the server answers. Property values go
  * over the stored ones, as the server merges them. A new type is left out: it takes effect together with what
  * the server makes of it, the default values of the type and a description that keeps the old type's values.
+ * A new description changes its start, which the list shows.
  */
 export const getOptimisticWorkItemUpdate = (workItem: TIssue | undefined, data: Partial<TIssue>): Partial<TIssue> => {
   const { type_id: _typeId, custom_properties: customProperties, ...optimisticData } = data;
+  if (data.description_html !== undefined)
+    optimisticData.description_prefix = getDescriptionPrefix(data.description_html);
   if (!customProperties) return optimisticData;
   return { ...optimisticData, custom_properties: { ...workItem?.custom_properties, ...customProperties } };
 };

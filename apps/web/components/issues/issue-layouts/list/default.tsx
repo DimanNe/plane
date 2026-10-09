@@ -30,6 +30,7 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // plane web hooks
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
+import { useListRowSelection } from "@/hooks/use-list-row-selection";
 // utils
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
@@ -93,6 +94,8 @@ export const List = observer(function List(props: IList) {
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
   });
+
+  useListRowSelection({ containerRef, groups, groupedIssueIds, issuesMap, group_by, collapsedGroups });
 
   // Enable Auto Scroll for Main Kanban
   useEffect(() => {

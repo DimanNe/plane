@@ -19,7 +19,7 @@ import { EIssueServiceType } from "@plane/types";
 // ui
 import { ControlLink, Row } from "@plane/blocks/layout";
 import { Spinner } from "@plane/blocks/spinner";
-import { cn, generateWorkItemLink } from "@plane/utils";
+import { cn, generateWorkItemLink, getTextFromHTML } from "@plane/utils";
 // components
 import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import { IssueProperties } from "@/components/issues/issue-layouts/properties";
@@ -33,6 +33,8 @@ import { useProject } from "@/hooks/store/use-project";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { calculateIdentifierWidth } from "../utils";
+import { IssueBlockAddSubIssue } from "./block-add-sub-issue";
+import { IssueBlockTitle } from "./block-title";
 import type { TRenderQuickActions } from "./list-view-types";
 
 interface IssueBlockProps {
@@ -51,6 +53,7 @@ interface IssueBlockProps {
   isCurrentBlockDragging: boolean;
   setIsCurrentBlockDragging: React.Dispatch<React.SetStateAction<boolean>>;
   canDrag: boolean;
+  isCompact: boolean;
   isEpic?: boolean;
 }
 
@@ -71,10 +74,12 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
     isCurrentBlockDragging,
     setIsCurrentBlockDragging,
     canDrag,
+    isCompact,
     isEpic = false,
   } = props;
   // ref
   const issueRef = useRef<HTMLDivElement | null>(null);
+  const isPeekOpenOnPressRef = useRef(false);
   // router
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
   const workspaceSlug = routerWorkspaceSlug?.toString();
@@ -85,7 +90,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const { getIsIssuePeeked, peekIssue, setPeekIssue } = useIssueDetail(
     isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
   );
-  const { toggleIssueCollapse } = useListView();
+  const { getIsRowSelected, getIsRowTitleEdited, setSelectedRow, toggleIssueCollapse } = useListView();
 
   const handleIssuePeekOverview = (issue: TIssue) =>
     workspaceSlug &&
@@ -105,6 +110,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const issue = issuesMap[issueId];
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
+  const isTitleEdited = getIsRowTitleEdited(issueId, groupId);
 
   const { isMobile } = usePlatformOS();
 
@@ -116,7 +122,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
     return combine(
       draggable({
         element,
-        canDrag: () => isDraggingAllowed,
+        canDrag: () => isDraggingAllowed && !isTitleEdited,
         getInitialData: () => ({ id: issueId, type: "ISSUE", groupId }),
         onDragStart: () => {
           setIsCurrentBlockDragging(true);
@@ -126,13 +132,14 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
         },
       })
     );
-  }, [isDraggingAllowed, issueId, groupId, setIsCurrentBlockDragging]);
+  }, [isDraggingAllowed, isTitleEdited, issueId, groupId, setIsCurrentBlockDragging]);
 
   if (!issue) return null;
 
   const projectIdentifier = getProjectIdentifierById(issue.project_id);
   const isIssueSelected = selectionHelpers.getIsEntitySelected(issue.id);
   const isIssueActive = selectionHelpers.getIsEntityActive(issue.id);
+  const isRowSelected = getIsRowSelected(issue.id, groupId);
   const isSubIssue = nestingLevel !== 0;
   const canSelectIssues = canEditIssueProperties && !selectionHelpers.isSelectionDisabled;
 
@@ -164,8 +171,18 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
     <ControlLink
       id={`issue-${issue.id}`}
       href={workItemLink}
-      onClick={() => handleIssuePeekOverview(issue)}
-      className="w-full cursor-pointer"
+      // the work item view beside the list closes on a press outside it, before the click arrives
+      onMouseDown={() => {
+        isPeekOpenOnPressRef.current = !!peekIssue;
+      }}
+      onClick={(e) => {
+        // a click selects the row; a double click, or Enter on the row, opens it and ends the editing of its title
+        const isOpening = e.detail !== 1;
+        if (isOpening || !getIsRowSelected(issue.id, groupId)) setSelectedRow({ issueId: issue.id, groupId });
+        // the work item view beside the list follows the selection while it is open
+        if (isOpening || isPeekOpenOnPressRef.current) handleIssuePeekOverview(issue);
+      }}
+      className={cn("w-full cursor-pointer", { "outline-none": isRowSelected })}
       disabled={!!issue?.tempId || issue?.is_draft}
     >
       <Row
@@ -173,6 +190,8 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
         className={cn(
           "group/list-block relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 transition-colors hover:bg-layer-transparent-hover",
           {
+            "min-h-9 py-2": isCompact,
+            "bg-layer-transparent-selected hover:bg-layer-transparent-selected": isRowSelected,
             "border-accent-strong": getIsIssuePeeked(issue.id) && peekIssue?.nestingLevel === nestingLevel,
             "border-strong-1": isIssueActive,
             "last:border-b-transparent": !getIsIssuePeeked(issue.id) && !isIssueActive,
@@ -257,16 +276,35 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
             </div>
 
             <IssuePropertyState issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
-            <Tooltip label={issue.name} layout="stacked" align="start" disabled={isCurrentBlockDragging || isMobile}>
-              <p
-                className={cn(
-                  "cursor-pointer truncate text-primary",
-                  ["text-body-sm-medium", "text-body-xs-medium", "text-caption-md-medium"][Math.min(nestingLevel, 2)]
+            <IssueBlockTitle
+              issue={issue}
+              groupId={groupId}
+              nestingLevel={nestingLevel}
+              isEditingAllowed={canEditIssueProperties}
+              isTooltipDisabled={isCurrentBlockDragging || isMobile}
+              updateIssue={updateIssue}
+            />
+            {!isTitleEdited && (
+              // What follows the title shares one cell, so the chip lies over the start of the description. The
+              // cell takes the room the title leaves; the description goes when that is too little for it.
+              <div className="ml-1.5 grid min-w-0 flex-1 items-center *:col-start-1 *:row-start-1 *:min-w-0">
+                {displayProperties?.description && issue.description_prefix && (
+                  <div className="@container">
+                    <p
+                      className={cn(
+                        "hidden truncate text-secondary @min-[7rem]:block",
+                        ["text-body-xs-regular", "text-caption-md-regular", "text-caption-sm-regular"][
+                          Math.min(nestingLevel, 2)
+                        ]
+                      )}
+                    >
+                      {getTextFromHTML(issue.description_prefix)}
+                    </p>
+                  </div>
                 )}
-              >
-                {issue.name}
-              </p>
-            </Tooltip>
+                {canEditIssueProperties && <IssueBlockAddSubIssue issueId={issue.id} />}
+              </div>
+            )}
           </div>
           {!issue?.tempId && (
             <div

@@ -297,6 +297,7 @@ export const getComputedDisplayProperties = (
 ): IIssueDisplayProperties => ({
   // custom properties have a key each, which the fixed keys below would drop
   ...pickBy(displayProperties, (_value, key) => isWorkItemPropertyKey(key)),
+  description: displayProperties?.description ?? true,
   assignee: displayProperties?.assignee ?? true,
   start_date: displayProperties?.start_date ?? true,
   due_date: displayProperties?.due_date ?? true,

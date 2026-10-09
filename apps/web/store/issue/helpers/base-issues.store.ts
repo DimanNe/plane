@@ -28,7 +28,7 @@ import type {
 } from "@plane/types";
 import { EIssueServiceType, EIssueLayoutTypes } from "@plane/types";
 // helpers
-import { convertToISODateString, getOptimisticWorkItemUpdate } from "@plane/utils";
+import { convertToISODateString, getDescriptionPrefix, getOptimisticWorkItemUpdate } from "@plane/utils";
 // plane web imports
 // services
 import { CycleService } from "@/services/cycle.service";
@@ -537,8 +537,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     // perform an API call
     const response = await this.issueService.createIssue(workspaceSlug, projectId, data);
 
-    // add Issue to Store
-    this.addIssue(response, shouldUpdateList);
+    // add Issue to Store; the answer has no description, the list shows the start of the one that was sent
+    this.addIssue({ ...response, description_prefix: getDescriptionPrefix(data.description_html) }, shouldUpdateList);
     this.updateSubIssuesCount(undefined, response.parent_id);
 
     // If shouldUpdateList is true, call fetchParentStats

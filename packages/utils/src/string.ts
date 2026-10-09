@@ -150,6 +150,15 @@ export const sanitizeHTML = (htmlString: string) => {
 };
 
 /**
+ * @description The text an HTML string shows: tags are dropped, character references are decoded
+ * @param {string} html
+ * @returns {string}
+ * @example getTextFromHTML("<p>Q&amp;A</p>") // "Q&A"
+ */
+export const getTextFromHTML = (html: string): string =>
+  new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+
+/**
  * @description: This function will remove all the HTML tags from the string and truncate the string to the specified length
  * @param {string} html
  * @param {number} length

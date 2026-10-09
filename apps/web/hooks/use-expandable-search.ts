@@ -45,10 +45,10 @@ export const useExpandableSearch = (options?: UseExpandableSearchOptions) => {
   // Outside click detection
   useOutsideClickDetector(containerRef, handleOutsideClick);
 
-  // Track keyboard shortcuts that trigger focus (Cmd+F / Ctrl+F)
+  // Track keyboard shortcuts that trigger focus (Cmd+F / Ctrl+F, Alt+/)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+      if (((e.metaKey || e.ctrlKey) && e.key === "f") || (e.altKey && e.code === "Slash")) {
         // Mark as keyboard triggered so handleFocus knows to open
         wasKeyboardTriggeredRef.current = true;
       }

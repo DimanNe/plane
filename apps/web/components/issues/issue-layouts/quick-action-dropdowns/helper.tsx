@@ -22,6 +22,7 @@ import { setToast } from "@plane/blocks/toast";
 import type { EIssuesStoreType, TIssue } from "@plane/types";
 import type { TContextMenuItem } from "@plane/blocks/context-menu";
 import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { createCopyMenuWithDuplication } from "./copy-menu-helper";
 
 /**
@@ -105,7 +106,6 @@ export interface MenuItemFactoryProps {
   setDeleteIssueModal: (open: boolean) => void;
   setArchiveIssueModal?: (open: boolean) => void;
   setDuplicateWorkItemModal?: (open: boolean) => void;
-  setCreateSubIssueModal?: (open: boolean) => void;
   handleRemoveFromView?: () => void;
   handleRestore?: () => Promise<void>;
   // External handlers
@@ -179,6 +179,7 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
 export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
   const { t } = useTranslation();
   const actionHandlers = useIssueActionHandlers(props);
+  const { toggleCreateIssueModal } = useCommandPalette();
 
   const {
     issue,
@@ -194,7 +195,6 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     setDeleteIssueModal,
     setArchiveIssueModal,
     setDuplicateWorkItemModal,
-    setCreateSubIssueModal,
     handleRemoveFromView,
   } = props;
 
@@ -235,7 +235,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     key: "add-sub-issue",
     title: t("issue.add.sub_issue"),
     icon: ViewsOutline,
-    action: () => setCreateSubIssueModal?.(true),
+    action: () => toggleCreateIssueModal(true, undefined, undefined, issue.id),
     shouldRender: isEditingAllowed,
   });
 
