@@ -89,6 +89,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from .base import BaseAPIView
 from plane.utils.host import base_host
 from plane.utils.issue_relation_mapper import get_actual_relation
+from plane.utils.timeline_dependencies import create_issue_relations
 from plane.bgtasks.webhook_task import model_activity
 from plane.app.permissions import ROLE
 from plane.utils.openapi import (
@@ -2533,31 +2534,7 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
         actual_relation = get_actual_relation(relation_type)
         is_reverse = relation_type in ["blocking", "start_after", "finish_after"]
 
-        # Scope to workspace to prevent cross-tenant IDOR
-        # Relations can cross projects so only workspace scope is enforced
-        issues = list(
-            Issue.issue_objects.filter(
-                workspace__slug=slug,
-                pk__in=issues,
-            ).values_list("id", flat=True)
-        )
-
-        IssueRelation.objects.bulk_create(
-            [
-                IssueRelation(
-                    issue_id=(issue if is_reverse else issue_id),
-                    related_issue_id=(issue_id if is_reverse else issue),
-                    relation_type=actual_relation,
-                    project_id=project_id,
-                    workspace_id=project.workspace_id,
-                    created_by=request.user,
-                    updated_by=request.user,
-                )
-                for issue in issues
-            ],
-            batch_size=10,
-            ignore_conflicts=True,
-        )
+        create_issue_relations(project, issue_id, issues, relation_type, request.user)
 
         issue_activity.delay(
             type="issue_relation.activity.created",

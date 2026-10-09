@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from .asset import urlpatterns as asset_patterns
+from .custom_property import urlpatterns as custom_property_patterns
 from .cycle import urlpatterns as cycle_patterns
 from .intake import urlpatterns as intake_patterns
 from .label import urlpatterns as label_patterns
@@ -14,9 +15,14 @@ from .user import urlpatterns as user_patterns
 from .work_item import urlpatterns as work_item_patterns
 from .invite import urlpatterns as invite_patterns
 from .sticky import urlpatterns as sticky_patterns
+from .milestone import urlpatterns as milestone_patterns
+from .work_item_relation import urlpatterns as work_item_relation_patterns
+from .page import urlpatterns as page_patterns
+from .feature import urlpatterns as feature_patterns
 
 urlpatterns = [
     *asset_patterns,
+    *custom_property_patterns,
     *cycle_patterns,
     *intake_patterns,
     *label_patterns,
@@ -28,4 +34,8 @@ urlpatterns = [
     *work_item_patterns,
     *invite_patterns,
     *sticky_patterns,
+    *milestone_patterns,
+    *work_item_relation_patterns,
+    *page_patterns,
+    *feature_patterns,
 ]

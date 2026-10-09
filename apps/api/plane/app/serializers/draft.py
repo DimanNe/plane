@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
+from django.db import transaction
 from django.utils import timezone
 
 # Third Party imports
@@ -22,11 +23,13 @@ from plane.db.models import (
     DraftIssueModule,
     ProjectMember,
     EstimatePoint,
+    IssueType,
 )
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
+from plane.utils.custom_properties import get_changes_for_update, get_type_and_values_for_create
 from plane.app.permissions import ROLE
 
 
@@ -37,6 +40,9 @@ class DraftIssueCreateSerializer(BaseSerializer):
     )
     parent_id = serializers.PrimaryKeyRelatedField(
         source="parent", queryset=Issue.objects.all(), required=False, allow_null=True
+    )
+    type_id = serializers.PrimaryKeyRelatedField(
+        source="type", queryset=IssueType.objects.all(), required=False, allow_null=True
     )
     label_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.all()),
@@ -149,6 +155,10 @@ class DraftIssueCreateSerializer(BaseSerializer):
         workspace_id = self.context["workspace_id"]
         project_id = self.context["project_id"]
 
+        validated_data["type"], validated_data["custom_properties"] = get_type_and_values_for_create(
+            project_id, validated_data.get("type"), validated_data.get("custom_properties", {}), check_required=False
+        )
+
         # Create Issue
         issue = DraftIssue.objects.create(**validated_data, workspace_id=workspace_id, project_id=project_id)
 
@@ -216,11 +226,21 @@ class DraftIssueCreateSerializer(BaseSerializer):
 
         return issue
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
         cycle_id = self.context.get("cycle_id", None)
         modules = self.initial_data.get("module_ids", None)
+        validated_data.update(
+            get_changes_for_update(
+                instance,
+                validated_data.pop("type", None),
+                validated_data.pop("custom_properties", {}),
+                validated_data.get("description_html"),
+                check_required=False,
+            )
+        )
 
         # Related models
         workspace_id = instance.workspace_id
@@ -329,6 +349,7 @@ class DraftIssueSerializer(BaseSerializer):
             "created_by",
             "updated_by",
             "type_id",
+            "custom_properties",
             "description_html",
         ]
         read_only_fields = fields

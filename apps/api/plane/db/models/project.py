@@ -92,6 +92,7 @@ class Project(BaseModel):
     icon_prop = models.JSONField(null=True)
     module_view = models.BooleanField(default=False)
     cycle_view = models.BooleanField(default=False)
+    milestone_view = models.BooleanField(default=False)
     issue_views_view = models.BooleanField(default=False)
     page_view = models.BooleanField(default=True)
     intake_view = models.BooleanField(default=False)

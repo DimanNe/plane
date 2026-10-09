@@ -48,7 +48,7 @@ from .issue import (
 )
 from .module import Module, ModuleIssue, ModuleLink, ModuleMember, ModuleUserProperties
 from .notification import EmailNotificationLog, Notification, UserNotificationPreference
-from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion
+from .page import Page, PageLabel, PageLog, ProjectPage, PageVersion, Collection
 from .project import (
     Project,
     ProjectBaseModel,
@@ -79,7 +79,7 @@ from .workspace import (
 
 from .favorite import UserFavorite
 
-from .issue_type import IssueType
+from .issue_type import IssueType, ProjectIssueType
 
 from .recent_visit import UserRecentVisit
 
@@ -90,3 +90,7 @@ from .device import Device, DeviceSession
 from .sticky import Sticky
 
 from .description import Description, DescriptionVersion
+
+from .milestone import Milestone
+
+from .issue_property import IssueProperty, IssuePropertyOption

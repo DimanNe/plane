@@ -61,6 +61,7 @@ from plane.db.models import (
     ProjectMember,
     UserRecentVisit,
 )
+from plane.utils.custom_properties import add_formula_payload
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
 from plane.utils.grouper import (
@@ -72,6 +73,7 @@ from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
+from plane.utils.timeline_dependencies import schedule_issue_dates
 from plane.utils.timezone_converter import user_timezone_converter
 
 from .. import BaseAPIView, BaseViewSet
@@ -182,6 +184,9 @@ class IssueListEndpoint(BaseAPIView):
                 "priority",
                 "start_date",
                 "target_date",
+                "milestone_id",
+                "type_id",
+                "custom_properties",
                 "sequence_id",
                 "project_id",
                 "parent_id",
@@ -202,6 +207,7 @@ class IssueListEndpoint(BaseAPIView):
             )
             datetime_fields = ["created_at", "updated_at"]
             issues = user_timezone_converter(issues, datetime_fields, request.user.user_timezone)
+            issues = add_formula_payload(issues)
         return Response(issues, status=status.HTTP_200_OK)
 
 
@@ -447,6 +453,9 @@ class IssueViewSet(BaseViewSet):
                     "priority",
                     "start_date",
                     "target_date",
+                    "milestone_id",
+                    "type_id",
+                    "custom_properties",
                     "sequence_id",
                     "project_id",
                     "parent_id",
@@ -469,6 +478,7 @@ class IssueViewSet(BaseViewSet):
             )
             datetime_fields = ["created_at", "updated_at"]
             issue = user_timezone_converter(issue, datetime_fields, request.user.user_timezone)
+            issue = add_formula_payload([issue])[0]
             # Send the model activity
             model_activity.delay(
                 model_name="issue",
@@ -879,6 +889,7 @@ class IssuePaginatedViewSet(BaseViewSet):
             "priority",
             "start_date",
             "target_date",
+            "milestone_id",
             "sequence_id",
             "project_id",
             "parent_id",
@@ -1104,83 +1115,38 @@ class IssueDetailEndpoint(BaseAPIView):
 
 
 class IssueBulkUpdateDateEndpoint(BaseAPIView):
-    def validate_dates(self, current_start, current_target, new_start, new_target):
-        """
-        Validate that start date is before target date.
-        """
-        from datetime import datetime
-
-        start = new_start or current_start
-        target = new_target or current_target
-
-        # Convert string dates to datetime objects if they're strings
-        if isinstance(start, str):
-            start = datetime.strptime(start, "%Y-%m-%d").date()
-        if isinstance(target, str):
-            target = datetime.strptime(target, "%Y-%m-%d").date()
-
-        if start and target and start > target:
-            return False
-        return True
-
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def post(self, request, slug, project_id):
         updates = request.data.get("updates", [])
 
-        issue_ids = [update["id"] for update in updates]
         epoch = int(timezone.now().timestamp())
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
 
-        # Fetch all relevant issues in a single query
-        issues = list(Issue.objects.filter(id__in=issue_ids, workspace__slug=slug, project_id=project_id))
-        issues_dict = {str(issue.id): issue for issue in issues}
-        issues_to_update = []
+        # Dependent issues move together with the requested ones
+        updated_issues = schedule_issue_dates(project, updates)
 
-        for update in updates:
-            issue_id = update["id"]
-            issue = issues_dict.get(issue_id)
+        for issue, previous_dates in updated_issues:
+            issue_activity.delay(
+                type="issue.activity.updated",
+                requested_data=json.dumps(
+                    {"start_date": issue.start_date, "target_date": issue.target_date}, cls=DjangoJSONEncoder
+                ),
+                current_instance=json.dumps(previous_dates, cls=DjangoJSONEncoder),
+                issue_id=str(issue.id),
+                actor_id=str(request.user.id),
+                project_id=str(issue.project_id),
+                epoch=epoch,
+            )
 
-            if not issue:
-                continue
-
-            start_date = update.get("start_date")
-            target_date = update.get("target_date")
-            validate_dates = self.validate_dates(issue.start_date, issue.target_date, start_date, target_date)
-            if not validate_dates:
-                return Response(
-                    {"message": "Start date cannot exceed target date"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if start_date:
-                issue_activity.delay(
-                    type="issue.activity.updated",
-                    requested_data=json.dumps({"start_date": update.get("start_date")}),
-                    current_instance=json.dumps({"start_date": str(issue.start_date)}),
-                    issue_id=str(issue_id),
-                    actor_id=str(request.user.id),
-                    project_id=str(project_id),
-                    epoch=epoch,
-                )
-                issue.start_date = start_date
-                issues_to_update.append(issue)
-
-            if target_date:
-                issue_activity.delay(
-                    type="issue.activity.updated",
-                    requested_data=json.dumps({"target_date": update.get("target_date")}),
-                    current_instance=json.dumps({"target_date": str(issue.target_date)}),
-                    issue_id=str(issue_id),
-                    actor_id=str(request.user.id),
-                    project_id=str(project_id),
-                    epoch=epoch,
-                )
-                issue.target_date = target_date
-                issues_to_update.append(issue)
-
-        # Bulk update issues
-        Issue.objects.bulk_update(issues_to_update, ["start_date", "target_date"])
-
-        return Response({"message": "Issues updated successfully"}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "updates": [
+                    {"id": issue.id, "start_date": issue.start_date, "target_date": issue.target_date}
+                    for issue, _ in updated_issues
+                ]
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class IssueMetaEndpoint(BaseAPIView):

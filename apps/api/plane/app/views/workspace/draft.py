@@ -145,6 +145,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                     "created_by",
                     "updated_by",
                     "type_id",
+                    "custom_properties",
                     "description_html",
                 )
                 .first()
@@ -227,6 +228,7 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                 "project_id": draft_issue.project_id,
                 "workspace_id": draft_issue.project.workspace_id,
                 "default_assignee_id": draft_issue.project.default_assignee_id,
+                "is_created_from_draft": True,
             },
         )
 

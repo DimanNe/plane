@@ -75,6 +75,8 @@ CUSTOM_TAGS = {
     "label",
     "input",
     "image-component",
+    "nested-page",
+    "link-pages",
 }
 ALLOWED_TAGS = nh3.ALLOWED_TAGS | CUSTOM_TAGS
 
@@ -134,6 +136,8 @@ ATTRIBUTES = {
         "title",
     },
     "mention-component": {"id", "entity_identifier", "entity_name"},
+    "nested-page": {"pageid"},
+    "link-pages": {"source", "parent_id", "creator_ids", "depth"},
     "th": {
         "colspan",
         "rowspan",

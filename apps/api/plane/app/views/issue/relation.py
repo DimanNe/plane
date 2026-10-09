@@ -30,8 +30,9 @@ from plane.db.models import (
     CycleIssue,
 )
 from plane.bgtasks.issue_activities_task import issue_activity
-from plane.utils.issue_relation_mapper import get_actual_relation
+from plane.utils.timeline_dependencies import create_issue_relations
 from plane.utils.host import base_host
+from plane.utils.issue_relation_mapper import get_actual_relation
 
 
 class IssueRelationViewSet(BaseViewSet):
@@ -217,33 +218,7 @@ class IssueRelationViewSet(BaseViewSet):
         issues = request.data.get("issues", [])
         project = Project.objects.get(pk=project_id)
 
-        # Scope to workspace to prevent cross-tenant IDOR
-        # Relations can cross projects so only workspace scope is enforced
-        issues = list(
-            Issue.issue_objects.filter(
-                workspace__slug=slug,
-                pk__in=issues,
-            ).values_list("id", flat=True)
-        )
-
-        issue_relation = IssueRelation.objects.bulk_create(
-            [
-                IssueRelation(
-                    issue_id=(issue if relation_type in ["blocking", "start_after", "finish_after"] else issue_id),
-                    related_issue_id=(
-                        issue_id if relation_type in ["blocking", "start_after", "finish_after"] else issue
-                    ),
-                    relation_type=(get_actual_relation(relation_type)),
-                    project_id=project_id,
-                    workspace_id=project.workspace_id,
-                    created_by=request.user,
-                    updated_by=request.user,
-                )
-                for issue in issues
-            ],
-            batch_size=10,
-            ignore_conflicts=True,
-        )
+        issue_relation = create_issue_relations(project, issue_id, issues, relation_type, request.user)
 
         issue_activity.delay(
             type="issue_relation.activity.created",
@@ -276,7 +251,11 @@ class IssueRelationViewSet(BaseViewSet):
         ).filter(
             Q(issue_id=related_issue, related_issue_id=issue_id) | Q(issue_id=issue_id, related_issue_id=related_issue)
         )
+        if request.data.get("relation_type"):
+            issue_relations = issue_relations.filter(relation_type=get_actual_relation(request.data["relation_type"]))
         issue_relations = issue_relations.first()
+        if not issue_relations:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         current_instance = json.dumps(IssueRelationSerializer(issue_relations).data, cls=DjangoJSONEncoder)
         issue_relations.delete()
         issue_activity.delay(

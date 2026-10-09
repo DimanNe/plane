@@ -27,6 +27,7 @@ class TestIssueGroupByAllowlist:
             "assignees__id",
             "issue_module__module_id",
             "cycle_id",
+            "milestone_id",
             "project_id",
             "created_by",
             "target_date",

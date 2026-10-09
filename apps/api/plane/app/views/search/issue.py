@@ -89,6 +89,13 @@ class IssueSearchEndpoint(BaseAPIView):
         issues = issues.exclude(Q(issue_module__module=module) & Q(issue_module__deleted_at__isnull=True))
         return issues
 
+    def exclude_issues_in_milestones(self, issues: QuerySet) -> QuerySet:
+        """
+        Exclude issues in milestones
+        """
+        issues = issues.filter(milestone__isnull=True)
+        return issues
+
     def filter_issues_without_target_date(self, issues: QuerySet) -> QuerySet:
         """
         Filter issues without a target date
@@ -103,6 +110,7 @@ class IssueSearchEndpoint(BaseAPIView):
         issue_relation = request.query_params.get("issue_relation", "false")
         cycle = request.query_params.get("cycle", "false")
         module = request.query_params.get("module", False)
+        milestone = request.query_params.get("milestone", "false")
         sub_issue = request.query_params.get("sub_issue", "false")
         target_date = request.query_params.get("target_date", True)
         issue_id = request.query_params.get("issue_id", False)
@@ -134,6 +142,9 @@ class IssueSearchEndpoint(BaseAPIView):
 
         if module:
             issues = self.exclude_issues_in_module(issues, module)
+
+        if milestone == "true":
+            issues = self.exclude_issues_in_milestones(issues)
 
         if target_date == "none":
             issues = self.filter_issues_without_target_date(issues)

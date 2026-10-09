@@ -47,6 +47,7 @@ from plane.db.models import (
 )
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.order_queryset import PAGE_ORDER_BY_ALLOWLIST, sanitize_order_by
+from plane.utils.page_tree import get_nested_page_ids, place_page
 
 # Local imports
 from ..base import BaseAPIView, BaseViewSet
@@ -95,7 +96,6 @@ class PageViewSet(BaseViewSet):
                 projects__project_projectmember__is_active=True,
                 projects__archived_at__isnull=True,
             )
-            .filter(parent__isnull=True)
             .filter(Q(owned_by=self.request.user) | Q(access=0))
             .prefetch_related("projects")
             .select_related("workspace")
@@ -154,7 +154,24 @@ class PageViewSet(BaseViewSet):
         )
 
         if serializer.is_valid():
-            serializer.save()
+            # "parent" and "parent_id" name the same page
+            parent = serializer.validated_data.get("parent")
+            if parent:
+                _ = Page.objects.get(
+                    pk=parent.id,
+                    workspace__slug=slug,
+                    projects__id=project_id,
+                    project_pages__deleted_at__isnull=True,
+                )
+                if parent.archived_at:
+                    return Response(
+                        {"error": "A page cannot be nested under an archived page"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            page = serializer.save()
+            # a nested page takes the access of its parent
+            if page.parent_id:
+                place_page(page, page.parent, None)
             # capture the page transaction
             page_transaction.delay(
                 new_description_html=request.data.get("description_html", "<p></p>"),
@@ -197,7 +214,24 @@ class PageViewSet(BaseViewSet):
             serializer = PageDetailSerializer(page, data=request.data, partial=True)
             page_description = page.description_html
             if serializer.is_valid():
+                # "parent" and "parent_id" name the same page
+                parent = serializer.validated_data.get("parent")
+                if parent:
+                    _ = Page.objects.get(
+                        pk=parent.id,
+                        workspace__slug=slug,
+                        projects__id=project_id,
+                        project_pages__deleted_at__isnull=True,
+                    )
+                    if parent.archived_at or parent.id == page.id or parent.id in get_nested_page_ids(page.id):
+                        return Response(
+                            {"error": "A page cannot be nested under an archived page, itself or its nested pages"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
                 serializer.save()
+                # a nested page takes the access of its parent, and its nested pages follow
+                if "parent" in serializer.validated_data or "access" in serializer.validated_data:
+                    place_page(page, page.parent, None)
                 # capture the page transaction
                 if request.data.get("description_html"):
                     page_transaction.delay(
@@ -268,6 +302,8 @@ class PageViewSet(BaseViewSet):
 
         page.is_locked = True
         page.save()
+        if request.data.get("recursive"):
+            Page.objects.filter(id__in=get_nested_page_ids(page.id)).update(is_locked=True)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def unlock(self, request, slug, project_id, page_id):
@@ -280,6 +316,8 @@ class PageViewSet(BaseViewSet):
 
         page.is_locked = False
         page.save()
+        if request.data.get("recursive"):
+            Page.objects.filter(id__in=get_nested_page_ids(page.id)).update(is_locked=False)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -300,7 +338,8 @@ class PageViewSet(BaseViewSet):
             )
 
         page.access = access
-        page.save()
+        # a nested page takes the access of its parent, and its nested pages follow
+        place_page(page, page.parent, None)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def list(self, request, slug, project_id):
@@ -342,7 +381,7 @@ class PageViewSet(BaseViewSet):
 
         UserFavorite.objects.filter(
             entity_type="page",
-            entity_identifier=page_id,
+            entity_identifier__in=[page_id, *get_nested_page_ids(page_id)],
             project_id=project_id,
             workspace__slug=slug,
         ).delete()
@@ -371,10 +410,11 @@ class PageViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # if parent archived then page will be un archived breaking hierarchy
         if page.parent_id and page.parent.archived_at:
-            page.parent = None
-            page.save(update_fields=["parent"])
+            return Response(
+                {"error": "Restore the parent page first"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         unarchive_archive_page_and_descendants(page_id, None)
 

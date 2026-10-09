@@ -13,6 +13,7 @@ from plane.db.models import (
     Cycle,
     Issue,
     Label,
+    Milestone,
     Module,
     Project,
     ProjectMember,
@@ -22,6 +23,7 @@ from plane.db.models import (
     ModuleIssue,
     IssueLabel,
 )
+from plane.utils.custom_properties import add_formula_payload
 from typing import Optional, Dict, Tuple, Any, Union, List
 
 
@@ -113,6 +115,9 @@ def issue_on_results(
         "priority",
         "start_date",
         "target_date",
+        "milestone_id",
+        "type_id",
+        "custom_properties",
         "sequence_id",
         "project_id",
         "parent_id",
@@ -138,7 +143,7 @@ def issue_on_results(
         original_list.append(sub_group_by)
 
     required_fields.extend(original_list)
-    return list(issues.values(*required_fields))
+    return add_formula_payload(issues.values(*required_fields))
 
 
 def issue_group_values(
@@ -173,6 +178,12 @@ def issue_group_values(
 
     if field == "issue_module__module_id":
         queryset = Module.objects.filter(workspace__slug=slug).values_list("id", flat=True)
+        if project_id:
+            return list(queryset.filter(project_id=project_id)) + ["None"]
+        return list(queryset) + ["None"]
+
+    if field == "milestone_id":
+        queryset = Milestone.objects.filter(workspace__slug=slug).values_list("id", flat=True)
         if project_id:
             return list(queryset.filter(project_id=project_id)) + ["None"]
         return list(queryset) + ["None"]

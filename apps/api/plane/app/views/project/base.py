@@ -183,6 +183,7 @@ class ProjectViewSet(BaseViewSet):
             "archived_at",
             "workspace",
             "cycle_view",
+            "milestone_view",
             "issue_views_view",
             "module_view",
             "page_view",

@@ -72,3 +72,21 @@ from .user import UserEndpoint
 from .invite import WorkspaceInvitationsViewset
 
 from .sticky import StickyViewSet
+
+from .milestone import MilestoneAPIViewSet
+
+from .feature import ProjectFeatureAPIEndpoint, WorkspaceFeatureAPIEndpoint
+
+from .work_item_relation import (
+    WorkItemDependencyListCreateAPIEndpoint,
+    WorkItemDependencyDetailAPIEndpoint,
+    WorkItemRelationListAPIEndpoint,
+    WorkItemRelationDefinitionListAPIEndpoint,
+)
+from .page import PageAPIViewSet, CollectionAPIViewSet
+from .custom_property import (
+    IssueTypeAPIEndpoint,
+    IssuePropertyAPIEndpoint,
+    IssuePropertyOptionAPIEndpoint,
+    IssuePropertyValueAPIEndpoint,
+)

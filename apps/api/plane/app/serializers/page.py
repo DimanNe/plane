@@ -32,6 +32,10 @@ class PageSerializer(BaseSerializer):
     # Many to many
     label_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
     project_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    # the name the workspace page routes give the parent
+    parent_id = serializers.PrimaryKeyRelatedField(
+        source="parent", queryset=Page.objects.all(), required=False, allow_null=True
+    )
 
     class Meta:
         model = Page
@@ -43,6 +47,7 @@ class PageSerializer(BaseSerializer):
             "color",
             "labels",
             "parent",
+            "parent_id",
             "is_favorite",
             "is_locked",
             "archived_at",
@@ -176,6 +181,8 @@ class PageBinaryUpdateSerializer(serializers.Serializer):
     description_binary = serializers.CharField(required=False, allow_blank=True)
     description_html = serializers.CharField(required=False, allow_blank=True)
     description_json = serializers.JSONField(required=False, allow_null=True)
+    # the title of the stored document
+    name = serializers.CharField(required=False, allow_blank=True)
 
     def validate_description_binary(self, value):
         """Validate the base64-encoded binary data"""
@@ -221,5 +228,12 @@ class PageBinaryUpdateSerializer(serializers.Serializer):
         if "description_json" in validated_data:
             instance.description_json = validated_data.get("description_json")
 
-        instance.save()
+        if "name" in validated_data:
+            instance.name = validated_data.get("name")
+
+        # Only the written columns: the page was read before other writes of it (a move, the title)
+        update_fields = [*validated_data, "updated_at", "updated_by"]
+        if "description_html" in validated_data:
+            update_fields.append("description_stripped")
+        instance.save(update_fields=update_fields)
         return instance

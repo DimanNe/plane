@@ -25,9 +25,10 @@ from plane.db.models import (
 from plane.utils.content_validator import (
     validate_html_content,
 )
+from plane.utils.custom_properties import ProjectTypesSerializerMixin
 
 
-class ProjectSerializer(BaseSerializer):
+class ProjectSerializer(ProjectTypesSerializerMixin, BaseSerializer):
     workspace_detail = WorkspaceLiteSerializer(source="workspace", read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
 

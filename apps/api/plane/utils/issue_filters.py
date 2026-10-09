@@ -347,6 +347,20 @@ def filter_module(params, issue_filter, method, prefix=""):
     return issue_filter
 
 
+def filter_milestone(params, issue_filter, method, prefix=""):
+    if method == "GET":
+        milestones = [item for item in params.get("milestone").split(",") if item != "null"]
+        if "None" in milestones:
+            issue_filter[f"{prefix}milestone_id__isnull"] = True
+        milestones = filter_valid_uuids(milestones)
+        if len(milestones) and "" not in milestones:
+            issue_filter[f"{prefix}milestone_id__in"] = milestones
+    else:
+        if params.get("milestone", None) and len(params.get("milestone")) and params.get("milestone") != "null":
+            issue_filter[f"{prefix}milestone_id__in"] = params.get("milestone")
+    return issue_filter
+
+
 def filter_intake_status(params, issue_filter, method, prefix=""):
     if method == "GET":
         status = [item for item in params.get("intake_status").split(",") if item != "null"]
@@ -449,6 +463,7 @@ def issue_filters(query_params, method, prefix=""):
         "project": filter_project,
         "cycle": filter_cycle,
         "module": filter_module,
+        "milestone": filter_milestone,
         "intake_status": filter_intake_status,
         "inbox_status": filter_inbox_status,
         "sub_issue": filter_sub_issue_toggle,

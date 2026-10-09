@@ -18,6 +18,8 @@ from plane.app.views import (
     UserProjectRolesEndpoint,
     ProjectArchiveUnarchiveEndpoint,
     ProjectMemberPreferenceEndpoint,
+    MilestoneViewSet,
+    TimelineDependenciesEndpoint,
 )
 
 
@@ -128,5 +130,25 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/preferences/member/<uuid:member_id>/",
         ProjectMemberPreferenceEndpoint.as_view(),
         name="project-member-preference",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/milestones/",
+        MilestoneViewSet.as_view({"get": "list", "post": "create"}),
+        name="project-milestones",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/milestones/<uuid:pk>/",
+        MilestoneViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
+        name="project-milestones",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/milestones/<uuid:milestone_id>/work-items/",
+        MilestoneViewSet.as_view({"get": "list_work_items", "post": "add_work_items", "delete": "remove_work_items"}),
+        name="project-milestone-work-items",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/timeline-dependencies/",
+        TimelineDependenciesEndpoint.as_view(),
+        name="project-timeline-dependencies",
     ),
 ]

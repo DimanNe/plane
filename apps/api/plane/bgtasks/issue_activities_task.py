@@ -26,6 +26,7 @@ from plane.db.models import (
     IssueReaction,
     IssueSubscriber,
     Label,
+    Milestone,
     Module,
     Project,
     State,
@@ -33,6 +34,7 @@ from plane.db.models import (
     EstimatePoint,
 )
 from plane.settings.redis import redis_instance
+from plane.utils.custom_properties import track_custom_properties, track_type
 from plane.utils.exception_logger import log_exception
 from plane.utils.issue_relation_mapper import get_inverse_relation
 from plane.utils.uuid import is_valid_uuid
@@ -281,6 +283,40 @@ def track_start_date(
                 project_id=project_id,
                 workspace_id=workspace_id,
                 comment="updated the start date to ",
+                epoch=epoch,
+            )
+        )
+
+
+# Track changes in issue milestone
+def track_milestone(
+    requested_data,
+    current_instance,
+    issue_id,
+    project_id,
+    workspace_id,
+    actor_id,
+    issue_activities,
+    epoch,
+):
+    if current_instance.get("milestone_id") != requested_data.get("milestone_id"):
+        # Deleting a milestone unlinks its work items, so the old milestone can be deleted by now
+        old_milestone = Milestone.all_objects.filter(pk=current_instance.get("milestone_id")).first()
+        new_milestone = Milestone.objects.filter(pk=requested_data.get("milestone_id")).first()
+
+        issue_activities.append(
+            IssueActivity(
+                issue_id=issue_id,
+                actor_id=actor_id,
+                verb="updated",
+                old_value=old_milestone.title if old_milestone else None,
+                new_value=new_milestone.title if new_milestone else None,
+                field="milestone",
+                project_id=project_id,
+                workspace_id=workspace_id,
+                comment="updated the milestone to",
+                old_identifier=old_milestone.id if old_milestone else None,
+                new_identifier=new_milestone.id if new_milestone else None,
                 epoch=epoch,
             )
         )
@@ -609,11 +645,14 @@ def update_issue_activity(
         "description_html": track_description,
         "target_date": track_target_date,
         "start_date": track_start_date,
+        "milestone_id": track_milestone,
         "label_ids": track_labels,
         "assignee_ids": track_assignees,
         "estimate_point": track_estimate_points,
         "archived_at": track_archive_at,
         "closed_to": track_closed_to,
+        "custom_properties": track_custom_properties,
+        "type_id": track_type,
         # External endpoint keys
         "parent": track_parent,
         "state": track_state,

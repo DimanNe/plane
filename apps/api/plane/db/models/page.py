@@ -53,6 +53,13 @@ class Page(BaseModel):
     moved_to_page = models.UUIDField(null=True, blank=True)
     moved_to_project = models.UUIDField(null=True, blank=True)
     sort_order = models.FloatField(default=DEFAULT_SORT_ORDER)
+    collection = models.ForeignKey(
+        "db.Collection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pages",
+    )
 
     external_id = models.CharField(max_length=255, null=True, blank=True)
     external_source = models.CharField(max_length=255, null=True, blank=True)
@@ -180,3 +187,31 @@ class PageVersion(BaseModel):
             else strip_tags(self.description_html)
         )
         super(PageVersion, self).save(*args, **kwargs)
+
+
+class Collection(BaseModel):
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="collections")
+    name = models.CharField(max_length=255)
+    owned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="collections")
+    access = models.PositiveSmallIntegerField(choices=Page.ACCESS_CHOICES, default=Page.PUBLIC_ACCESS)
+    logo_props = models.JSONField(default=dict)
+    sort_order = models.FloatField(default=Page.DEFAULT_SORT_ORDER)
+    # The collection that holds public pages created without one ("General")
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Collection"
+        verbose_name_plural = "Collections"
+        db_table = "collections"
+        ordering = ("sort_order", "created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace"],
+                condition=models.Q(is_default=True, deleted_at__isnull=True),
+                name="collection_unique_default_per_workspace",
+            )
+        ]
+
+    def __str__(self):
+        """Return name of the collection"""
+        return f"{self.name} <{self.workspace.name}>"

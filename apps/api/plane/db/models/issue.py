@@ -138,11 +138,15 @@ class Issue(ChangeTrackerMixin, ProjectBaseModel):
     description_html = models.TextField(blank=True, default="<p></p>")
     description_stripped = models.TextField(blank=True, null=True)
     description_binary = models.BinaryField(null=True)
+    custom_properties = models.JSONField(default=dict, blank=True)
     priority = models.CharField(
         max_length=30,
         choices=PRIORITY_CHOICES,
         verbose_name="Issue Priority",
         default="none",
+    )
+    milestone = models.ForeignKey(
+        "db.Milestone", on_delete=models.SET_NULL, null=True, blank=True, related_name="issues"
     )
     start_date = models.DateField(null=True, blank=True)
     target_date = models.DateField(null=True, blank=True)
@@ -693,6 +697,7 @@ class IssueVersion(ProjectBaseModel):
         verbose_name="Issue Priority",
         default="none",
     )
+    milestone = models.UUIDField(null=True, blank=True)
     start_date = models.DateField(null=True, blank=True)
     target_date = models.DateField(null=True, blank=True)
     assignees = ArrayField(models.UUIDField(), blank=True, default=list)
@@ -754,6 +759,7 @@ class IssueVersion(ProjectBaseModel):
                 estimate_point=issue.estimate_point_id,
                 name=issue.name,
                 priority=issue.priority,
+                milestone=issue.milestone_id,
                 start_date=issue.start_date,
                 target_date=issue.target_date,
                 assignees=list(IssueAssignee.objects.filter(issue=issue).values_list("assignee_id", flat=True)),

@@ -15,6 +15,7 @@ from rest_framework import filters
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from plane.utils.exception_logger import log_exception
+from .custom_property import get_custom_property_filter_conditions, get_custom_property_filter_name
 
 
 class ComplexFilterBackend(filters.BaseFilterBackend):
@@ -137,7 +138,7 @@ class ComplexFilterBackend(filters.BaseFilterBackend):
         Returns:
             The transformed field name to validate against the FilterSet
         """
-        return field_name
+        return get_custom_property_filter_name(field_name)
 
     def _extract_field_names(self, filter_data):
         """Extract all field names from a nested filter structure"""
@@ -230,7 +231,7 @@ class ComplexFilterBackend(filters.BaseFilterBackend):
         Returns:
             Dict of transformed field filters
         """
-        return leaf_conditions
+        return get_custom_property_filter_conditions(leaf_conditions)
 
     def _build_leaf_q(self, leaf_conditions, view, queryset):
         """Build a Q object from leaf filter conditions using the view's FilterSet.

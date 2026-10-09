@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
+from django.db import transaction
 
 # Third Party imports
 from rest_framework import serializers
@@ -42,10 +43,19 @@ from plane.db.models import (
     IssueDescriptionVersion,
     ProjectMember,
     EstimatePoint,
+    IssueType,
+    Milestone,
 )
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
+)
+from plane.utils.custom_properties import (
+    FormulaPayloadSerializerMixin,
+    get_changes_for_update,
+    get_type_and_values_for_create,
+    get_type_properties,
+    subscribe_selected_members,
 )
 
 
@@ -62,6 +72,7 @@ class IssueFlatSerializer(BaseSerializer):
             "priority",
             "start_date",
             "target_date",
+            "milestone_id",
             "sequence_id",
             "sort_order",
             "is_draft",
@@ -86,6 +97,12 @@ class IssueCreateSerializer(BaseSerializer):
     )
     parent_id = serializers.PrimaryKeyRelatedField(
         source="parent", queryset=Issue.objects.all(), required=False, allow_null=True
+    )
+    type_id = serializers.PrimaryKeyRelatedField(
+        source="type", queryset=IssueType.objects.all(), required=False, allow_null=True
+    )
+    milestone_id = serializers.PrimaryKeyRelatedField(
+        source="milestone", queryset=Milestone.objects.all(), required=False, allow_null=True
     )
     label_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=Label.objects.all()),
@@ -194,6 +211,10 @@ class IssueCreateSerializer(BaseSerializer):
         ):
             raise serializers.ValidationError("Estimate point is not valid please pass a valid estimate_point_id")
 
+        # Check milestone is from the project only else raise validation error
+        if attrs.get("milestone") and str(attrs["milestone"].project_id) != str(self.context.get("project_id")):
+            raise serializers.ValidationError("Milestone is not valid please pass a valid milestone_id")
+
         return attrs
 
     def create(self, validated_data):
@@ -204,8 +225,19 @@ class IssueCreateSerializer(BaseSerializer):
         workspace_id = self.context["workspace_id"]
         default_assignee_id = self.context["default_assignee_id"]
 
+        validated_data["type"], validated_data["custom_properties"] = get_type_and_values_for_create(
+            project_id,
+            validated_data.get("type"),
+            validated_data.get("custom_properties", {}),
+            # Intake, which sets this key, creates work items from a form without property inputs
+            check_required=not self.context.get("allow_triage_state", False),
+            # The draft form, which sets this key, has no cascading properties
+            check_required_levels=not self.context.get("is_created_from_draft", False),
+        )
+
         # Create Issue
         issue = Issue.objects.create(**validated_data, project_id=project_id)
+        subscribe_selected_members(issue, get_type_properties(issue.type_id), issue.custom_properties, {})
 
         # Issue Audit Users
         created_by_id = issue.created_by_id
@@ -273,9 +305,19 @@ class IssueCreateSerializer(BaseSerializer):
 
         return issue
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
+        validated_data.update(
+            get_changes_for_update(
+                instance,
+                validated_data.pop("type", None),
+                validated_data.pop("custom_properties", {}),
+                validated_data.get("description_html"),
+                check_required=True,
+            )
+        )
 
         # Related models
         project_id = instance.project_id
@@ -767,9 +809,10 @@ class IssueIntakeSerializer(DynamicBaseSerializer):
         read_only_fields = fields
 
 
-class IssueSerializer(DynamicBaseSerializer):
+class IssueSerializer(FormulaPayloadSerializerMixin, DynamicBaseSerializer):
     # ids
     cycle_id = serializers.PrimaryKeyRelatedField(read_only=True)
+    milestone_id = serializers.UUIDField(read_only=True, allow_null=True)
     module_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
 
     # Many to many
@@ -793,6 +836,9 @@ class IssueSerializer(DynamicBaseSerializer):
             "priority",
             "start_date",
             "target_date",
+            "milestone_id",
+            "type_id",
+            "custom_properties",
             "sequence_id",
             "project_id",
             "parent_id",

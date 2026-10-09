@@ -6,6 +6,7 @@
 from django.utils import timezone
 from lxml import html
 from django.db import IntegrityError
+from django.db import transaction
 
 #  Third party imports
 from rest_framework import serializers
@@ -26,10 +27,18 @@ from plane.db.models import (
     State,
     User,
     EstimatePoint,
+    Milestone,
 )
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
+)
+from plane.utils.custom_properties import (
+    FormulaPayloadSerializerMixin,
+    get_changes_for_update,
+    get_type_and_values_for_create,
+    get_type_properties,
+    subscribe_selected_members,
 )
 
 from .base import BaseSerializer
@@ -43,7 +52,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 
 
-class IssueSerializer(BaseSerializer):
+class IssueSerializer(FormulaPayloadSerializerMixin, BaseSerializer):
     """
     Comprehensive work item serializer with full relationship management.
 
@@ -65,6 +74,9 @@ class IssueSerializer(BaseSerializer):
     )
     type_id = serializers.PrimaryKeyRelatedField(
         source="type", queryset=IssueType.objects.all(), required=False, allow_null=True
+    )
+    milestone_id = serializers.PrimaryKeyRelatedField(
+        source="milestone", queryset=Milestone.objects.all(), required=False, allow_null=True
     )
 
     class Meta:
@@ -160,6 +172,10 @@ class IssueSerializer(BaseSerializer):
         ):
             raise serializers.ValidationError("Estimate point is not valid please pass a valid estimate_point_id")
 
+        # Check milestone is from the project only else raise validation error
+        if data.get("milestone") and str(data["milestone"].project_id) != str(self.context.get("project_id")):
+            raise serializers.ValidationError("Milestone is not valid please pass a valid milestone_id")
+
         return data
 
     def create(self, validated_data):
@@ -170,6 +186,10 @@ class IssueSerializer(BaseSerializer):
         workspace_id = self.context["workspace_id"]
         default_assignee_id = self.context["default_assignee_id"]
 
+        validated_data["type"], validated_data["custom_properties"] = get_type_and_values_for_create(
+            project_id, validated_data.get("type"), validated_data.get("custom_properties", {}), check_required=False
+        )
+
         issue_type = validated_data.pop("type", None)
 
         if not issue_type:
@@ -178,6 +198,7 @@ class IssueSerializer(BaseSerializer):
             issue_type = issue_type
 
         issue = Issue.objects.create(**validated_data, project_id=project_id, type=issue_type)
+        subscribe_selected_members(issue, get_type_properties(issue.type_id), issue.custom_properties, {})
 
         # Issue Audit Users
         created_by_id = issue.created_by_id
@@ -245,9 +266,19 @@ class IssueSerializer(BaseSerializer):
 
         return issue
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         assignees = validated_data.pop("assignees", None)
         labels = validated_data.pop("labels", None)
+        validated_data.update(
+            get_changes_for_update(
+                instance,
+                validated_data.pop("type", None),
+                validated_data.pop("custom_properties", {}),
+                validated_data.get("description_html"),
+                check_required=False,
+            )
+        )
 
         # Related models
         project_id = instance.project_id

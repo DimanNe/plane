@@ -47,6 +47,7 @@ class DraftIssue(WorkspaceBaseModel):
     description_html = models.TextField(blank=True, default="<p></p>")
     description_stripped = models.TextField(blank=True, null=True)
     description_binary = models.BinaryField(null=True)
+    custom_properties = models.JSONField(default=dict, blank=True)
     priority = models.CharField(
         max_length=30,
         choices=PRIORITY_CHOICES,

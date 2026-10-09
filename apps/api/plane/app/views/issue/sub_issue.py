@@ -25,6 +25,7 @@ from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, IssueLabel, IssueAssignee, ModuleIssue
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.timezone_converter import user_timezone_converter
+from plane.utils.custom_properties import add_formula_payload
 from collections import defaultdict
 from plane.utils.host import base_host
 from plane.utils.order_queryset import order_issue_queryset
@@ -154,6 +155,9 @@ class SubIssuesEndpoint(BaseAPIView):
                 "priority",
                 "start_date",
                 "target_date",
+                "milestone_id",
+                "type_id",
+                "custom_properties",
                 "sequence_id",
                 "project_id",
                 "parent_id",
@@ -181,6 +185,7 @@ class SubIssuesEndpoint(BaseAPIView):
 
         datetime_fields = ["created_at", "updated_at"]
         sub_issues = user_timezone_converter(sub_issues, datetime_fields, request.user.user_timezone)
+        sub_issues = add_formula_payload(sub_issues)
         # Grouping
         if group_by:
             result_dict = defaultdict(list)

@@ -9,6 +9,7 @@ from django.db.models import Q
 from django_filters import FilterSet, filters
 
 from plane.db.models import Issue
+from .custom_property import get_custom_property_q
 
 
 class UUIDInFilter(filters.BaseInFilter, filters.UUIDFilter):
@@ -162,11 +163,20 @@ class IssueFilterSet(BaseFilterSet):
     state_id = filters.UUIDFilter(field_name="state_id")
     state_id__in = UUIDInFilter(field_name="state_id", lookup_expr="in")
 
+    milestone_id = filters.UUIDFilter(field_name="milestone_id")
+    milestone_id__in = UUIDInFilter(field_name="milestone_id", lookup_expr="in")
+    milestone_id__isnull = filters.BooleanFilter(field_name="milestone_id", lookup_expr="isnull")
+
     project_id = filters.UUIDFilter(field_name="project_id")
     project_id__in = UUIDInFilter(field_name="project_id", lookup_expr="in")
 
     subscriber_id = filters.UUIDFilter(method="filter_subscriber_id")
     subscriber_id__in = UUIDInFilter(method="filter_subscriber_id_in", lookup_expr="in")
+
+    # Custom property filters: the value is the property ID followed by the filter values
+    customproperty_value__exact = CharInFilter(method="filter_customproperty_value")
+    customproperty_value__in = CharInFilter(method="filter_customproperty_value")
+    customproperty_value__range = CharInFilter(method="filter_customproperty_value")
 
     # created_at / updated_at are DateTimeFields, but the UI sends a bare calendar
     # date (yyyy-MM-dd, e.g. {"created_at__exact": "2026-07-30"}). An `exact` lookup
@@ -295,3 +305,7 @@ class IssueFilterSet(BaseFilterSet):
             issue_subscribers__subscriber_id__in=value,
             issue_subscribers__deleted_at__isnull=True,
         )
+
+    def filter_customproperty_value(self, queryset, name, value):
+        """Filter by the value of a custom property"""
+        return get_custom_property_q(name, value)

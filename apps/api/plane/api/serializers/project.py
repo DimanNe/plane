@@ -16,10 +16,11 @@ from plane.db.models import Project, ProjectIdentifier, WorkspaceMember, State, 
 from plane.utils.content_validator import (
     validate_html_content,
 )
+from plane.utils.custom_properties import ProjectTypesSerializerMixin
 from .base import BaseSerializer
 
 
-class ProjectCreateSerializer(BaseSerializer):
+class ProjectCreateSerializer(ProjectTypesSerializerMixin, BaseSerializer):
     """
     Serializer for creating projects with workspace validation.
 
@@ -81,6 +82,7 @@ class ProjectCreateSerializer(BaseSerializer):
             "cover_image",
             "module_view",
             "cycle_view",
+            "milestone_view",
             "issue_views_view",
             "page_view",
             "intake_view",
