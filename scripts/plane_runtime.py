@@ -46,7 +46,7 @@ STOP_TIMEOUT: int = 180
 EXTERNAL_DEPS: t.Dict[plane_config.Service, str] = {
     plane_config.Service.POSTGRES: "postgres:18.0-bookworm",
     plane_config.Service.REDIS: "redis:8.2.2-alpine",
-    plane_config.Service.MINIO: "pgsty/minio:RELEASE.2026-08-04T00-00-00Z",
+    plane_config.Service.MINIO: "pgsty/silo:RELEASE.2026-09-16T00-00-00Z",
 }
 ALL_IMAGES: t.Dict[plane_config.Service, str] = {
     plane_config.Service.API: "plane-local-api:current",
@@ -1146,7 +1146,7 @@ def start_minio(
         image_id,
         make_infrastructure_command_arguments(
             [
-                "minio",
+                "silo",
                 "server",
                 "--config",
                 "/run/plane-minio.json",
