@@ -101,11 +101,14 @@ export function FiltersDropdown(props: Props) {
             </div>
           </>
         )}
-        <PopoverContent variant="rich" {...toSideAndAlign(placement ?? "auto")}>
+        {/* A panel taller than the room under its button stays there and scrolls; Base UI would move it beside the button. */}
+        <PopoverContent
+          variant="rich"
+          {...toSideAndAlign(placement ?? "auto")}
+          collisionAvoidance={{ fallbackAxisSide: "none" }}
+        >
           <PopoverBody tabIndex={0} render={<div className="flex flex-col" />}>
-            <div className="flex max-h-[30rem] min-h-0 w-[18.75rem] flex-col overflow-hidden lg:max-h-[37.5rem]">
-              {children}
-            </div>
+            <div className="flex min-h-0 w-[18.75rem] flex-col overflow-hidden">{children}</div>
           </PopoverBody>
         </PopoverContent>
       </Popover>

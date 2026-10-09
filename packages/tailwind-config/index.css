@@ -28,6 +28,15 @@
   transition-property: transform, translate, scale, rotate, opacity;
 }
 
+/*
+ * propel lets a menu or a list that is as wide as its content grow to 24rem and no taller, however much room the
+ * window has, so one that is an entry longer scrolls beside empty space. The room the window has is the limit:
+ * Base UI measures it into `--available-height`.
+ */
+.max-h-\[min\(var\(--available-height\)\,24rem\)\] {
+  max-height: var(--available-height);
+}
+
 * {
   -webkit-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;

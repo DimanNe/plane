@@ -234,7 +234,10 @@ export function VirtualListBody<T>(props: VirtualListBodyProps<T>) {
     // A row that measures 0 has not been laid out yet (the panel is still animating in, or the
     // row's content loaded late). Keeping the estimate for those beats collapsing the list to zero
     // height, which strands the scroller with nothing to scroll and no way back.
-    measureElement: (element) => element.getBoundingClientRect().height || estimateItemSize,
+    // The height is the laid-out one, `offsetHeight`. `getBoundingClientRect()` reports the drawn
+    // one, and the panel is drawn scaled down while it opens: a height taken then is too small,
+    // and the last option sticks out of the list by a pixel or two, which makes the list scroll.
+    measureElement: (element) => (element as HTMLElement).offsetHeight || estimateItemSize,
   });
 
   // In virtualized mode base-ui skips its `CompositeList`, so only the rows we actually render
