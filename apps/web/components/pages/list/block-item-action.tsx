@@ -5,17 +5,19 @@
  */
 
 import { observer } from "mobx-react";
-import { GlobeOutline, InfoOutline, LockOutline, MinusOutline } from "@makeplane/propel/icons";
+import { GlobeOutline, InfoOutline, LockOutline, MinusOutline, PagesOutline } from "@makeplane/propel/icons";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { FavoriteStar } from "@plane/blocks/common";
+import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate, getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { usePageOperations } from "@/hooks/use-page-operations";
 // plane web hooks
 import type { EPageStoreType } from "@/hooks/store";
+import { usePageStore } from "@/hooks/store";
 // store
 import type { TPageInstance } from "@/store/pages/base-page";
 // local imports
@@ -29,8 +31,11 @@ type Props = {
 
 export const BlockItemAction = observer(function BlockItemAction(props: Props) {
   const { page, parentRef, storeType } = props;
+  // plane hooks
+  const { t } = useTranslation();
   // store hooks
   const { getUserDetails } = useMember();
+  const { getNestedPageIds } = usePageStore(storeType);
   // page operations
   const { pageOperations } = usePageOperations({
     page,
@@ -38,9 +43,19 @@ export const BlockItemAction = observer(function BlockItemAction(props: Props) {
   // derived values
   const { access, created_at, is_favorite, owned_by, canCurrentUserFavoritePage } = page;
   const ownerDetails = owned_by ? getUserDetails(owned_by) : undefined;
+  const nestedPagesCount = page.id ? getNestedPageIds(page.id).length : 0;
 
   return (
     <>
+      {/* nested pages */}
+      {nestedPagesCount > 0 && (
+        <Tooltip label={t("wiki_collections.list.columns.nested_pages")}>
+          <span className="flex cursor-default items-center gap-1 text-11 text-tertiary">
+            <PagesOutline className="h-3.5 w-3.5" />
+            {nestedPagesCount}
+          </span>
+        </Tooltip>
+      )}
       {/* page details */}
       <div className="cursor-default">
         <Tooltip label={`Owned by: ${ownerDetails?.display_name ?? ""}`} layout="stacked">
@@ -84,8 +99,10 @@ export const BlockItemAction = observer(function BlockItemAction(props: Props) {
         optionsOrder={[
           "open-in-new-tab",
           "copy-link",
+          "remove-from-collection",
           "make-a-copy",
           "toggle-lock",
+          "toggle-lock-with-nested-pages",
           "toggle-access",
           "archive-restore",
           "delete",

@@ -277,8 +277,10 @@ export class FavoriteStore implements IFavoriteStore {
           this.moduleStore.moduleMap[entity_identifier] &&
           (this.moduleStore.moduleMap[entity_identifier].is_favorite = false)
         );
-      case "page":
-        return this.pageStore.data[entity_identifier] && (this.pageStore.data[entity_identifier].is_favorite = false);
+      case "page": {
+        const page = this.pageStore.data[entity_identifier] ?? this.rootStore.wikiPages.data[entity_identifier];
+        return page && (page.is_favorite = false);
+      }
       case "cycle":
         return (
           this.cycleStore.cycleMap[entity_identifier] &&

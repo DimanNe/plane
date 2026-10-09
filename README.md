@@ -30,6 +30,8 @@ Meet [Plane](https://plane.so/), an open-source project management tool to track
 
 ## 🚀 Installation
 
+This checkout adds timeline dependencies, milestones, custom properties, a wiki with nested pages, and the API the upstream MCP server needs for them: see [what it adds](docs/internal-features/README.md) and [how to run and back it up](docs/internal-features/runtime.md).
+
 Getting started with Plane is simple. Choose the setup that works best for you:
 
 - **Plane Cloud**

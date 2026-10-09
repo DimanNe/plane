@@ -18,6 +18,7 @@ import {
   LockedOutline,
   MoreHorizontalOutline,
   NewTabOutline,
+  RemoveOutline,
   RestoreOutline,
   UnlockedOutline,
 } from "@makeplane/propel/icons";
@@ -30,12 +31,13 @@ import { IconButton } from "@makeplane/propel/components/icon-button";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@makeplane/propel/components/menu";
 import type { TContextMenuItem } from "@plane/blocks/context-menu";
 import { ContextMenu, getRenderableItems, resolveItemVariant } from "@plane/blocks/context-menu";
+import { setToast } from "@plane/blocks/toast";
 // components
 import { DeletePageModal } from "@/components/pages/modals/delete-page-modal";
 // hooks
 import { usePageOperations } from "@/hooks/use-page-operations";
 // plane web hooks
-import type { EPageStoreType } from "@/hooks/store";
+import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { usePageFlag } from "@/hooks/use-page-flag";
 // store types
 import type { TPageInstance } from "@/store/pages/base-page";
@@ -53,7 +55,9 @@ export type TPageActions =
   | "delete"
   | "version-history"
   | "export"
-  | "move";
+  | "move"
+  | "toggle-lock-with-nested-pages"
+  | "remove-from-collection";
 
 type Props = {
   extraOptions?: (TContextMenuItem & { key: TPageActions })[];
@@ -80,7 +84,12 @@ export const PageActions = observer(function PageActions(props: Props) {
   const { pageOperations } = usePageOperations({
     page,
   });
+  // store hooks
+  const { getNestedPageIds } = usePageStore(storeType);
+  const { getCollectionById, movePage } = usePageStore(EPageStoreType.WORKSPACE);
   // derived values
+  const hasNestedPages = !!page.id && getNestedPageIds(page.id).length > 0;
+  const collection = page.collection_id ? getCollectionById(page.collection_id) : undefined;
   const {
     access,
     archived_at,
@@ -104,6 +113,15 @@ export const PageActions = observer(function PageActions(props: Props) {
           title: is_locked ? "Unlock" : "Lock",
           icon: is_locked ? UnlockedOutline : LockedOutline,
           shouldRender: canCurrentUserLockPage,
+        },
+        {
+          key: "toggle-lock-with-nested-pages",
+          action: () => {
+            pageOperations.toggleLock(true);
+          },
+          title: t(is_locked ? "nested_pages.unlock" : "nested_pages.lock"),
+          icon: is_locked ? UnlockedOutline : LockedOutline,
+          shouldRender: canCurrentUserLockPage && hasNestedPages,
         },
         {
           key: "toggle-access",
@@ -162,6 +180,31 @@ export const PageActions = observer(function PageActions(props: Props) {
           icon: ExportOutline,
           shouldRender: canCurrentUserMovePage && isMovePageEnabled,
         },
+        {
+          key: "remove-from-collection",
+          action: () => {
+            if (!page.id) return;
+            movePage(page.id, { collection_id: null })
+              .then(() =>
+                setToast({
+                  type: "success",
+                  title: t("toast.success"),
+                  message: t("page_actions.remove_from_collection.success_message"),
+                })
+              )
+              .catch(() =>
+                setToast({
+                  type: "error",
+                  title: t("toast.error"),
+                  message: t("page_actions.remove_from_collection.error_message"),
+                })
+              );
+          },
+          title: t("page_actions.remove_from_collection.label"),
+          icon: RemoveOutline,
+          // a nested page follows its parent, and a public page always is in a collection
+          shouldRender: canCurrentUserMovePage && !page.parent_id && !!collection && !collection.is_default,
+        },
       ];
       if (extraOptions) {
         menuItems.push(...extraOptions);
@@ -181,6 +224,11 @@ export const PageActions = observer(function PageActions(props: Props) {
       canCurrentUserMovePage,
       isMovePageEnabled,
       pageOperations,
+      page,
+      hasNestedPages,
+      collection,
+      movePage,
+      t,
     ]
   );
   // arrange options

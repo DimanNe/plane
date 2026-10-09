@@ -4,4 +4,16 @@
  * See the LICENSE file for details.
  */
 
-export type TPageExtended = object;
+import type { TPaginationInfo } from "../common";
+import type { TPage } from "./core";
+
+export type TPageExtended = {
+  parent_id?: string | null;
+  // wiki pages only
+  collection_id?: string | null;
+  sort_order?: number;
+};
+
+export type TWorkspacePagesResponse = TPaginationInfo & {
+  results: TPage[];
+};

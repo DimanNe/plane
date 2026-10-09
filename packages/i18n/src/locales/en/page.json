@@ -104,6 +104,16 @@
           "title": "Moved to wiki",
           "message": "Page was moved to wiki, but could not be added to the selected collection. It remains in General."
         }
+      },
+      "confirmation": {
+        "make_public": {
+          "title": "Open this page to the workspace?",
+          "description": "The move makes the page and its nested pages public. Every member of the workspace will see them."
+        },
+        "make_private": {
+          "title": "Make this page private?",
+          "description": "The move makes the page and its nested pages private. Only their owner will see them."
+        }
       }
     },
     "remove_from_collection": {
@@ -111,6 +121,35 @@
       "success_message": "Page removed from collection.",
       "error_message": "Page could not be removed from the collection. Please try again."
     }
+  },
+  "nested_pages": {
+    "add": "Add nested page",
+    "lock": "Lock with nested pages",
+    "unlock": "Unlock with nested pages",
+    "block": {
+      "not_available": "This page is not available",
+      "delete_title": "Delete page",
+      "delete_wiki_description": "{name} and every page nested under it will be deleted permanently. This action cannot be undone.",
+      "delete_project_description": "{name} will be deleted permanently. This action cannot be undone. The pages nested under it stay in the Archived tab.",
+      "archive_error": "Page could not be archived. Please try again.",
+      "delete_error": "Page could not be deleted. Please try again."
+    }
+  },
+  "link_pages": {
+    "title": "Link pages",
+    "source": "Source",
+    "sources": {
+      "parent_pages": "Parent pages",
+      "created_by": "Created by"
+    },
+    "parent_page_placeholder": "Choose a parent page",
+    "members_placeholder": "Choose members",
+    "nesting_level": {
+      "label": "Nesting level",
+      "all": "All levels",
+      "count": "{count, plural, one {# level} other {# levels}}"
+    },
+    "empty": "No pages to list"
   },
   "page_content_limit_banner": {
     "message": "Content limit reached and live sync is off. Create a new page or use nested pages to continue syncing."

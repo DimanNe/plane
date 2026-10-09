@@ -9,7 +9,9 @@ import { useRef } from "react";
 import { observer } from "mobx-react";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
 //components
+import { SpreadsheetWorkItemPropertyHeader } from "@/components/work-item-types/property-column";
 import { shouldRenderColumn } from "@/helpers/issue-filter.helper";
+import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
 import { WithDisplayPropertiesHOC } from "../properties/with-display-properties-HOC";
 import { HeaderColumn } from "./columns/header-column";
 
@@ -26,8 +28,10 @@ export const SpreadsheetHeaderColumn = observer(function SpreadsheetHeaderColumn
 
   //hooks
   const tableHeaderCellRef = useRef<HTMLTableCellElement | null>(null);
+  const { getWorkItemPropertyByKey } = useWorkItemTypes();
 
   const shouldRenderProperty = shouldRenderColumn(property);
+  const workItemProperty = getWorkItemPropertyByKey(property);
 
   return (
     <WithDisplayPropertiesHOC
@@ -40,6 +44,7 @@ export const SpreadsheetHeaderColumn = observer(function SpreadsheetHeaderColumn
         ref={tableHeaderCellRef}
         tabIndex={0}
       >
+        {workItemProperty && <SpreadsheetWorkItemPropertyHeader property={workItemProperty} />}
         <HeaderColumn
           displayFilters={displayFilters}
           handleDisplayFilterUpdate={handleDisplayFilterUpdate}

@@ -12,6 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import { setPromiseToast, setToast } from "@plane/blocks/toast";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
+import { getWorkItemPropertyErrorMessage } from "@plane/utils";
 // assets
 import emptyIssue from "@/app/assets/empty-state/issue.svg?url";
 // components
@@ -99,7 +100,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           setToast({
             title: t("common.error.label"),
             type: "error",
-            message: t("entity.update.failed", { entity: t("issue.label") }),
+            message: getWorkItemPropertyErrorMessage(error) ?? t("entity.update.failed", { entity: t("issue.label") }),
           });
         }
       },

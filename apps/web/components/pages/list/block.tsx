@@ -22,10 +22,11 @@ import { usePage } from "@/hooks/store";
 type TPageListBlock = {
   pageId: string;
   storeType: EPageStoreType;
+  prependTitleElement?: React.ReactNode;
 };
 
 export const PageListBlock = observer(function PageListBlock(props: TPageListBlock) {
-  const { pageId, storeType } = props;
+  const { pageId, storeType, prependTitleElement } = props;
   // refs
   const parentRef = useRef(null);
   // hooks
@@ -43,6 +44,7 @@ export const PageListBlock = observer(function PageListBlock(props: TPageListBlo
     <ListItem
       prependTitleElement={
         <>
+          {prependTitleElement}
           {logo_props?.in_use ? (
             <Logo logo={logo_props} size={16} type="lucide" />
           ) : (

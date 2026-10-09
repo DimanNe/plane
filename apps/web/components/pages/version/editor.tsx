@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { useMemo } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
@@ -14,6 +15,7 @@ import { isJSONContentEmpty } from "@plane/utils";
 // components
 import { DocumentEditor } from "@/components/editor/document/editor";
 // hooks
+import { getPageBlocksEditorProps } from "@/hooks/pages";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePageFilters } from "@/hooks/use-page-filters";
 // plane web hooks
@@ -26,7 +28,7 @@ export type TVersionEditorProps = {
 };
 
 export const PagesVersionEditor = observer(function PagesVersionEditor(props: TVersionEditorProps) {
-  const { activeVersion, versionDetails } = props;
+  const { activeVersion, versionDetails, storeType } = props;
   // params
   const { workspaceSlug, projectId } = useParams();
   // store hooks
@@ -35,6 +37,8 @@ export const PagesVersionEditor = observer(function PagesVersionEditor(props: TV
   const workspaceDetails = getWorkspaceBySlug(workspaceSlug?.toString() ?? "");
   // page filters
   const { fontSize, fontStyle } = usePageFilters();
+  // nested page and link pages blocks
+  const extendedEditorProps = useMemo(() => getPageBlocksEditorProps(storeType), [storeType]);
 
   const displayConfig: TDisplayConfig = {
     fontSize,
@@ -99,6 +103,7 @@ export const PagesVersionEditor = observer(function PagesVersionEditor(props: TV
       containerClassName="p-0 pb-64 border-none"
       displayConfig={displayConfig}
       editorClassName="pl-10"
+      extendedEditorProps={extendedEditorProps}
       projectId={projectId?.toString()}
       workspaceId={workspaceDetails?.id ?? ""}
       workspaceSlug={workspaceSlug?.toString() ?? ""}

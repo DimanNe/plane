@@ -5,6 +5,7 @@
  */
 
 import { useParams } from "next/navigation";
+import { useTranslation } from "@plane/i18n";
 import { setToast } from "@plane/blocks/toast";
 import type { SetToastProps } from "@plane/blocks/toast";
 import type { EIssuesStoreType, TIssue, TIssueGroupByOptions, TIssueOrderByOptions } from "@plane/types";
@@ -35,6 +36,7 @@ export const useGroupIssuesDragNDrop = (
   subGroupBy?: TIssueGroupByOptions
 ) => {
   const { workspaceSlug } = useParams();
+  const { t } = useTranslation();
 
   const {
     issue: { getIssueById },
@@ -106,6 +108,18 @@ export const useGroupIssuesDragNDrop = (
       destination.id === source.id
     )
       return;
+
+    if (
+      (groupBy === "milestone" && source.groupId !== destination.groupId) ||
+      (subGroupBy === "milestone" && source.subGroupId !== destination.subGroupId)
+    ) {
+      setToast({
+        type: "warning",
+        title: t("project_milestones.toast.drop_disabled.title"),
+        message: t("project_milestones.toast.drop_disabled.message"),
+      });
+      return;
+    }
 
     await handleGroupDragDrop(
       source,

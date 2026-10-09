@@ -28,7 +28,7 @@ import type {
 } from "@plane/types";
 import { EIssueServiceType, EIssueLayoutTypes } from "@plane/types";
 // helpers
-import { convertToISODateString } from "@plane/utils";
+import { convertToISODateString, getOptimisticWorkItemUpdate } from "@plane/utils";
 // plane web imports
 // services
 import { CycleService } from "@/services/cycle.service";
@@ -123,6 +123,7 @@ export const ISSUE_GROUP_BY_KEY: Record<TIssueDisplayFilterOptions, keyof TIssue
   target_date: "target_date",
   cycle: "cycle_id",
   module: "module_ids",
+  milestone: "milestone_id",
   team_project: "project_id",
 };
 
@@ -130,6 +131,7 @@ export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof
   project: "project_id",
   cycle: "cycle_id",
   module: "module_ids",
+  milestone: "milestone_id",
   state: "state_id",
   "state_detail.group": "state__group", // state_detail.group is only being used for state_group display,
   priority: "priority",
@@ -157,6 +159,8 @@ const ISSUE_ORDERBY_KEY: Record<TIssueOrderByOptions, keyof TIssue> = {
   "-labels__name": "label_ids",
   issue_module__module__name: "module_ids",
   "-issue_module__module__name": "module_ids",
+  milestone__title: "milestone_id",
+  "-milestone__title": "milestone_id",
   issue_cycle__cycle__name: "cycle_id",
   "-issue_cycle__cycle__name": "cycle_id",
   target_date: "target_date",
@@ -563,7 +567,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     const issueBeforeUpdate = clone(this.rootIssueStore.issues.getIssueById(issueId));
     try {
       // Update the Respective Stores
-      this.rootIssueStore.issues.updateIssue(issueId, data);
+      this.rootIssueStore.issues.updateIssue(issueId, getOptimisticWorkItemUpdate(issueBeforeUpdate, data));
       this.updateIssueList({ ...issueBeforeUpdate, ...data } as TIssue, issueBeforeUpdate);
 
       // Check if should Sync
@@ -783,7 +787,13 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
         }
       });
 
-      await this.issueService.updateIssueDates(workspaceSlug, projectId, updates);
+      const response = await this.issueService.updateIssueDates(workspaceSlug, projectId, updates);
+      // the response also lists the dependent work items that were moved
+      runInAction(() => {
+        for (const { id, start_date, target_date } of response.updates) {
+          this.rootIssueStore.issues.updateIssue(id, { start_date, target_date });
+        }
+      });
     } catch (e) {
       runInAction(() => {
         // oxlint-disable-next-line no-shadow
@@ -1681,7 +1691,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
    * @returns string | string[] of sortable fields to be used for sorting
    */
   populateIssueDataForSorting(
-    dataType: "state_id" | "label_ids" | "assignee_ids" | "module_ids" | "cycle_id" | "estimate_point",
+    dataType: "state_id" | "label_ids" | "assignee_ids" | "module_ids" | "cycle_id" | "milestone_id" | "estimate_point",
     dataIds: string | string[] | null | undefined,
     projectId: string | undefined | null,
     order?: "asc" | "desc"
@@ -1735,6 +1745,14 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
         for (const dataId of dataIdsArray) {
           const cycle = cycleMap[dataId];
           if (cycle && cycle.name) dataValues.push(cycle.name.toLocaleLowerCase());
+        }
+        break;
+      }
+      case "milestone_id": {
+        const milestoneMap = this.rootIssueStore.rootStore.milestone.milestoneMap;
+        for (const dataId of dataIdsArray) {
+          const milestone = milestoneMap[dataId];
+          if (milestone && milestone.title) dataValues.push(milestone.title.toLocaleLowerCase());
         }
         break;
       }
@@ -1922,6 +1940,27 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
               getSortOrderToFilterEmptyValues.bind(null, "cycle_id"), //preferring sorting based on empty values to always keep the empty values below
               (issue) =>
                 this.populateIssueDataForSorting("cycle_id", issue?.["cycle_id"], issue?.["project_id"], "asc"),
+            ],
+            ["asc", "desc"]
+          )
+        );
+
+      case "milestone__title":
+        return getIssueIds(
+          orderBy(array, [
+            getSortOrderToFilterEmptyValues.bind(null, "milestone_id"), //preferring sorting based on empty values to always keep the empty values below
+            (issue) =>
+              this.populateIssueDataForSorting("milestone_id", issue?.["milestone_id"], issue?.["project_id"], "asc"),
+          ])
+        );
+      case "-milestone__title":
+        return getIssueIds(
+          orderBy(
+            array,
+            [
+              getSortOrderToFilterEmptyValues.bind(null, "milestone_id"), //preferring sorting based on empty values to always keep the empty values below
+              (issue) =>
+                this.populateIssueDataForSorting("milestone_id", issue?.["milestone_id"], issue?.["project_id"], "asc"),
             ],
             ["asc", "desc"]
           )

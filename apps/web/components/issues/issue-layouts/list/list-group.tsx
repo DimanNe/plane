@@ -166,6 +166,8 @@ export const ListGroup = observer(function ListGroup(props: Props) {
         preloadedData = { ...preloadedData, cycle_id: value };
       } else if (groupByKey === "module" && value != "None") {
         preloadedData = { ...preloadedData, module_ids: [value] };
+      } else if (groupByKey === "milestone") {
+        preloadedData = { ...preloadedData, milestone_id: value === "None" ? null : value };
       } else if (groupByKey === "created_by") {
         preloadedData = { ...preloadedData };
       } else {

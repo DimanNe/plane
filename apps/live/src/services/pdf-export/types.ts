@@ -18,6 +18,7 @@ export interface PdfExportInput {
   readonly fileName?: string;
   readonly noAssets?: boolean;
   readonly cookie: string;
+  readonly requestHost?: string;
   readonly requestId: string;
 }
 

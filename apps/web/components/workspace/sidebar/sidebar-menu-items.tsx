@@ -20,6 +20,7 @@ import { useTranslation } from "@plane/i18n";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // store hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import useLocalStorage from "@/hooks/use-local-storage";
 import {
   usePersonalNavigationPreferences,
@@ -36,6 +37,7 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
   // store hooks
   const { isExtendedSidebarOpened, toggleExtendedSidebar } = useAppTheme();
+  const { currentWorkspace } = useWorkspace();
   // hooks
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
   const { preferences: workspacePreferences } = useWorkspaceNavigationPreferences();
@@ -109,9 +111,11 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
         }
       >
         <div className="flex flex-col gap-0.5">
-          {WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS.map((item, _index) => (
+          {WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS.filter(
+            (item) => item.key !== "wiki" || currentWorkspace?.is_wiki_enabled
+          ).map((item, _index) => (
             // oxlint-disable-next-line react/no-array-index-key
-            <SidebarItemBase key={`static_${_index}`} item={item} />
+            <SidebarItemBase key={`static_${_index}`} item={item} additionalStaticItems={["wiki"]} />
           ))}
           {sortedNavigationItems.map((item, _index) => (
             // oxlint-disable-next-line react/no-array-index-key

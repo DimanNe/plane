@@ -7,6 +7,13 @@
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { AnyExtension } from "@tiptap/core";
 import { SlashCommands } from "@/extensions";
+import {
+  getPageBlocksSlashCommandOptions,
+  LinkPagesExtension,
+  LinkPagesExtensionConfig,
+  NestedPageExtension,
+  NestedPageExtensionConfig,
+} from "@/extensions/page-blocks";
 // types
 import type { IEditorProps, TExtensions, TUserDetails } from "@/types";
 
@@ -27,8 +34,22 @@ export type TDocumentEditorAdditionalExtensionsRegistry = {
 const extensionRegistry: TDocumentEditorAdditionalExtensionsRegistry[] = [
   {
     isEnabled: (disabledExtensions) => !disabledExtensions.includes("slash-commands"),
-    getExtension: ({ disabledExtensions, flaggedExtensions }) =>
-      SlashCommands({ disabledExtensions, flaggedExtensions }),
+    getExtension: ({ disabledExtensions, flaggedExtensions, extendedEditorProps }) =>
+      SlashCommands({
+        disabledExtensions,
+        flaggedExtensions,
+        additionalOptions: getPageBlocksSlashCommandOptions(extendedEditorProps),
+      }),
+  },
+  {
+    isEnabled: () => true,
+    getExtension: ({ extendedEditorProps }) =>
+      extendedEditorProps.nestedPage ? NestedPageExtension(extendedEditorProps.nestedPage) : NestedPageExtensionConfig,
+  },
+  {
+    isEnabled: () => true,
+    getExtension: ({ extendedEditorProps }) =>
+      extendedEditorProps.linkPages ? LinkPagesExtension(extendedEditorProps.linkPages) : LinkPagesExtensionConfig,
   },
 ];
 

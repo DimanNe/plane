@@ -32,6 +32,8 @@ import { MemberSelect } from "@/components/dropdowns/member/member-select";
 import { ModuleSelect } from "@/components/dropdowns/module/module-select";
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
 import { StateSelect } from "@/components/dropdowns/state/state-select";
+import { MilestoneSelect } from "@/components/milestones/select";
+import { WorkItemPropertyBadges } from "@/components/work-item-types/property-badges";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -335,6 +337,23 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       <>
         {!isEpic && (
           <>
+            {/* milestone */}
+            {projectDetails?.milestone_view && (
+              <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="milestone">
+                {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
+                <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+                  <MilestoneSelect
+                    projectId={issue?.project_id ?? undefined}
+                    value={issue?.milestone_id}
+                    onChange={(milestoneId) => updateIssue?.(issue.project_id, issue.id, { milestone_id: milestoneId })}
+                    disabled={isReadOnly}
+                    variant="pill-sm"
+                    tooltip
+                  />
+                </div>
+              </WithDisplayPropertiesHOC>
+            )}
+
             {/* modules */}
             {projectDetails?.module_view && (
               <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="modules">
@@ -458,6 +477,8 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
           </div>
         </Tooltip>
       </WithDisplayPropertiesHOC>
+
+      <WorkItemPropertyBadges issue={issue} displayProperties={displayProperties} />
 
       {/* label */}
       <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="labels">

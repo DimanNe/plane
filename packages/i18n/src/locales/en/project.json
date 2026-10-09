@@ -414,5 +414,45 @@
         }
       }
     }
+  },
+  "project_milestones": {
+    "add_milestone": "Add milestone",
+    "create_milestone": "Create milestone",
+    "update_milestone": "Update milestone",
+    "delete_milestone": "Delete milestone",
+    "delete_confirmation": "Are you sure you want to delete the milestone \"{title}\"? Its work items are not deleted, they are unlinked from the milestone. This action cannot be undone.",
+    "no_milestone": "No milestone",
+    "no_matching_milestones": "No matching milestones",
+    "link_work_items": "Link work items",
+    "due_date_after_target_date": "The due date is after the target date of {title} ({date}).",
+    "empty_state": {
+      "title": "Mark the checkpoints of your project with milestones.",
+      "description": "Give a milestone a target date, link the work items that have to be done by then, and see how much of that work is finished."
+    },
+    "disabled": {
+      "title": "Milestones are not enabled for this project.",
+      "description": "Enable milestones in the project settings to set target dates and link work items to them."
+    },
+    "not_found": {
+      "title": "Milestone does not exist",
+      "description": "The milestone you are looking for does not exist or has been deleted.",
+      "view_milestones": "View other milestones"
+    },
+    "activity": {
+      "set_milestone": "set the milestone to",
+      "removed_from_milestone": "removed the work item from the milestone"
+    },
+    "toast": {
+      "created": "Milestone created successfully.",
+      "updated": "Milestone updated successfully.",
+      "deleted": "Milestone deleted successfully.",
+      "delete_failed": "The milestone could not be deleted. Please try again.",
+      "link_failed": "The work items could not be linked to the milestone. Please try again.",
+      "dates_update_failed": "The dates of the work item could not be updated. Please try again.",
+      "drop_disabled": {
+        "title": "Work items cannot be moved between milestones",
+        "message": "Change the milestone of the work item in its properties."
+      }
+    }
   }
 }

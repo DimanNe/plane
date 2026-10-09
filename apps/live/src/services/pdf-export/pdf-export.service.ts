@@ -40,8 +40,8 @@ export class PdfExportService extends Effect.Service<PdfExportService>()("PdfExp
     /**
      * Determines document type
      */
-    getDocumentType: (_input: PdfExportInput): TDocumentTypes => {
-      return "project_page";
+    getDocumentType: (input: PdfExportInput): TDocumentTypes => {
+      return input.projectId ? "project_page" : "workspace_page";
     },
 
     /**
@@ -149,7 +149,8 @@ export class PdfExportService extends Effect.Service<PdfExportService>()("PdfExp
       workspaceSlug: string,
       projectId: string | undefined,
       assetIds: string[],
-      requestId: string
+      requestId: string,
+      requestHost?: string
     ): Effect.Effect<Record<string, string>> =>
       Effect.gen(function* () {
         if (assetIds.length === 0) {
@@ -166,7 +167,7 @@ export class PdfExportService extends Effect.Service<PdfExportService>()("PdfExp
           async () => {
             const urlMap = new Map<string, string>();
             for (const assetId of assetIds) {
-              const url = await pageService.resolveImageAssetUrl?.(workspaceSlug, assetId, projectId);
+              const url = await pageService.resolveImageAssetUrl?.(workspaceSlug, assetId, projectId, requestHost);
               if (url) urlMap.set(assetId, url);
             }
             return urlMap;
@@ -338,7 +339,8 @@ export const exportToPdf = (
         workspaceSlug,
         projectId,
         imageAssetIds,
-        requestId
+        requestId,
+        input.requestHost
       );
       metadata = { ...metadata, resolvedImageUrls: resolvedImages };
     }

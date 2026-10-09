@@ -204,3 +204,9 @@ export const WORK_ITEM_TYPES_PROPERTIES_AND_OPTIONS = (projectId: string, projec
 
 export const PROJECT_MILESTONES = (projectId: string, projectRole: EUserPermissions | undefined) =>
   `PROJECT_MILESTONES_${projectId.toString().toUpperCase()}_${projectRole}`;
+
+export const PROJECT_MILESTONE_WORK_ITEMS = (milestoneId: string, projectRole: EUserPermissions | undefined) =>
+  `PROJECT_MILESTONE_WORK_ITEMS_${milestoneId.toString().toUpperCase()}_${projectRole}`;
+
+export const PROJECT_TIMELINE_DEPENDENCIES = (projectId: string, projectRole: EUserPermissions | undefined) =>
+  `PROJECT_TIMELINE_DEPENDENCIES_${projectId.toString().toUpperCase()}_${projectRole}`;

@@ -12,7 +12,10 @@ import { ISSUE_DISPLAY_PROPERTIES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // types
 import type { IIssueDisplayProperties } from "@plane/types";
+// hooks
+import { useProject } from "@/hooks/store/use-project";
 // components
+import { WorkItemPropertyDisplayProperties } from "@/components/work-item-types/display-properties";
 import { FilterHeader } from "../helpers/filter-header";
 
 type Props = {
@@ -35,6 +38,7 @@ export const FilterDisplayProperties = observer(function FilterDisplayProperties
   } = props;
   // hooks
   const { t } = useTranslation();
+  const { currentProjectDetails } = useProject();
   // states
   const [previewEnabled, setPreviewEnabled] = React.useState(true);
 
@@ -43,6 +47,8 @@ export const FilterDisplayProperties = observer(function FilterDisplayProperties
   const filteredDisplayProperties = ISSUE_DISPLAY_PROPERTIES.filter((property) => {
     if (!displayPropertiesToRender.includes(property.key)) return false;
     switch (property.key) {
+      case "milestone":
+        return !!currentProjectDetails?.milestone_view;
       case "cycle":
         return !cycleViewDisabled;
       case "modules":
@@ -86,6 +92,7 @@ export const FilterDisplayProperties = observer(function FilterDisplayProperties
               </button>
             </>
           ))}
+          <WorkItemPropertyDisplayProperties displayProperties={displayProperties} handleUpdate={handleUpdate} />
         </div>
       )}
     </>

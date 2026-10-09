@@ -11,7 +11,7 @@ import { computedFn } from "mobx-utils";
 import type { TIssueRelationIdMap, TIssueRelationMap, TIssueRelation, TIssue, TIssueRelationTypes } from "@plane/types";
 // components
 import type { TRelationObject } from "@/components/issues/issue-detail-widgets/relations";
-import { REVERSE_RELATIONS } from "@plane/constants";
+import { REVERSE_RELATIONS, TIMELINE_DEPENDENCY_RELATIONS } from "@plane/constants";
 // services
 import { IssueRelationService } from "@/services/issue";
 // types
@@ -162,6 +162,12 @@ export class IssueRelationStore implements IIssueRelationStore {
         set(this.relationMap, [issueId, relationType], uniq(issuesOfRelation));
       });
 
+    // fetching timeline dependencies
+    if (TIMELINE_DEPENDENCY_RELATIONS.includes(relationType))
+      this.rootIssueDetailStore.rootIssueStore.rootStore.timelineStore.issuesTimeLineStore.fetchDependencies(
+        workspaceSlug,
+        projectId
+      );
     // fetching activity
     this.rootIssueDetailStore.activity.fetchActivities(workspaceSlug, projectId, issueId);
     return response;
@@ -256,6 +262,12 @@ export class IssueRelationStore implements IIssueRelationStore {
           this.relationMap[related_issue]?.[reverseRelatedType]?.splice(relatedIndex, 1);
         });
 
+      // fetching timeline dependencies
+      if (TIMELINE_DEPENDENCY_RELATIONS.includes(relationType))
+        this.rootIssueDetailStore.rootIssueStore.rootStore.timelineStore.issuesTimeLineStore.fetchDependencies(
+          workspaceSlug,
+          projectId
+        );
       // fetching activity
       this.rootIssueDetailStore.activity.fetchActivities(workspaceSlug, projectId, issueId);
     } catch (error) {

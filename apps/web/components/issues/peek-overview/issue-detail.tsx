@@ -113,7 +113,8 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         entityId={issue.id}
         fileAssetType={EFileAssetType.ISSUE_DESCRIPTION}
         initialValue={issueDescription}
-        key={issue.id}
+        // a new type arrives with a description to which the server has appended the old type's values
+        key={`${issue.id}-${issue.type_id}`}
         onSubmit={async (value, isMigrationUpdate) => {
           if (!issue.id || !issue.project_id) return;
           await issueOperations.update(workspaceSlug, issue.project_id, issue.id, {

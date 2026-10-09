@@ -33,6 +33,7 @@ export * from "./issues/base"; // TODO: Remove this after development and the re
 export * from "./issues/issue-identifier";
 export * from "./issues/issue-property-values";
 export * from "./layout";
+export * from "./milestone";
 export * from "./module";
 export * from "./navigation-preferences";
 export * from "./page";
@@ -54,6 +55,7 @@ export * from "./view-props";
 export * from "./views";
 export * from "./waitlist";
 export * from "./webhook";
+export * from "./work-item-type";
 export * from "./workspace";
 export * from "./workspace-draft-issues/base";
 export * from "./workspace-notifications";

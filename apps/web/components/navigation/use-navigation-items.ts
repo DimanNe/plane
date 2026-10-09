@@ -11,6 +11,7 @@ import {
   CyclesOutline,
   IntakeOutline,
   ModuleOutline,
+  OverviewOutline,
   PagesOutline,
   ViewsOutline,
   WorkItemsOutline,
@@ -40,6 +41,16 @@ export const useNavigationItems = ({
   const baseNavigation = useCallback(
     // oxlint-disable-next-line no-shadow
     (workspaceSlug: string, projectId: string): TNavigationItem[] => [
+      {
+        i18n_key: "common.overview",
+        key: "overview",
+        name: "Overview",
+        href: `/${workspaceSlug}/projects/${projectId}/overview`,
+        icon: OverviewOutline,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        shouldRender: !!project?.milestone_view,
+        sortOrder: 0,
+      },
       {
         i18n_key: "sidebar.work_items",
         key: "work_items",

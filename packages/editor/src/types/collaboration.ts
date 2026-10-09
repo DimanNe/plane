@@ -36,7 +36,18 @@ export type CollaborationState = {
   stage: CollabStage;
   isServerSynced: boolean;
   isServerDisconnected: boolean;
+  isSaved: boolean | null;
 };
+
+/**
+ * Stateless messages about whether the server has stored the document.
+ * The server sends "saved" or "unsaved" after a change, after a store, and in reply to "request".
+ */
+export const SAVE_STATUS = {
+  saved: "saved",
+  unsaved: "unsaved",
+  request: "save-status",
+} as const;
 
 export type TServerHandler = {
   onStateChange: (state: CollaborationState) => void;

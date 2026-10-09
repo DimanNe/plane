@@ -12,6 +12,7 @@ import { IndexeddbPersistence } from "y-indexeddb";
 // yjs
 import type * as Y from "yjs";
 // types
+import { SAVE_STATUS } from "@/types/collaboration";
 import type { CollaborationState, CollabStage, CollaborationError } from "@/types/collaboration";
 
 // Helper to check if a close code indicates a forced close
@@ -36,6 +37,8 @@ const DEFAULT_MAX_RETRIES = 3;
 export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseYjsSetupArgs) => {
   // Current collaboration stage
   const [stage, setStage] = useState<CollabStage>({ kind: "initial" });
+  // Whether the server has stored every change made in this document; null until it is known
+  const [isSaved, setIsSaved] = useState<boolean | null>(null);
 
   // Cache readiness state
   const [hasCachedContent, setHasCachedContent] = useState(false);
@@ -58,6 +61,7 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
     isDisposedRef.current = false;
     forcedCloseSignalRef.current = false;
     stageRef.current = { kind: "initial" };
+    setIsSaved(null);
 
     const provider = new HocuspocusProvider({
       name: docId,
@@ -193,6 +197,27 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
 
     provider.on("close", handleClose);
 
+    // A change made here is unsaved until the server reports a store that holds it. The server's
+    // "saved" can be about an older store, so it counts only once the server has acknowledged
+    // every change sent to it.
+    const handleSaveStatus = ({ payload }: { payload: string }) => {
+      if (payload === SAVE_STATUS.unsaved) {
+        setIsSaved(false);
+      } else if (payload === SAVE_STATUS.saved && !provider.hasUnsyncedChanges) {
+        setIsSaved(true);
+      }
+    };
+    const handleLocalChange = (_update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) => {
+      if (transaction.local) setIsSaved(false);
+    };
+    // After a (re)connection nothing else tells whether the changes made before it were stored.
+    const requestSaveStatus = ({ state }: { state: boolean }) => {
+      if (state) provider.sendStateless(SAVE_STATUS.request);
+    };
+    provider.on("stateless", handleSaveStatus);
+    provider.on("synced", requestSaveStatus);
+    provider.document.on("update", handleLocalChange);
+
     setYjsSession({ provider, ydoc: provider.document });
 
     // Handle page visibility changes (sleep/wake, tab switching)
@@ -255,6 +280,9 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
     return () => {
       try {
         provider.off("close", handleClose);
+        provider.off("stateless", handleSaveStatus);
+        provider.off("synced", requestSaveStatus);
+        provider.document.off("update", handleLocalChange);
       } catch (error) {
         console.error(`Error unregistering close handler:`, error);
       }
@@ -338,10 +366,11 @@ export const useYjsSetup = ({ docId, serverUrl, authToken, onStateChange }: UseY
       stage,
       isServerSynced,
       isServerDisconnected,
+      isSaved,
     };
 
     stateChangeCallbackRef.current(state);
-  }, [stage]);
+  }, [stage, isSaved]);
 
   // Derived values for convenience
   const isServerSynced = stage.kind === "synced";

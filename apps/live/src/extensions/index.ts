@@ -4,15 +4,15 @@
  * See the LICENSE file for details.
  */
 
-import { Database } from "./database";
 import { ForceCloseHandler } from "./force-close-handler";
 import { Logger } from "./logger";
 import { Redis } from "./redis";
+import { DatabaseWithSaveStatus } from "./save-status";
 import { TitleSyncExtension } from "./title-sync";
 
 export const getExtensions = () => [
   new Logger(),
-  new Database(),
+  new DatabaseWithSaveStatus(),
   new Redis(),
   new TitleSyncExtension(),
   new ForceCloseHandler(), // Must be after Redis to receive broadcasts

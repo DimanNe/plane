@@ -14,6 +14,7 @@ import {
   EstimateOutline,
   LabelsOutline,
   MembersOutline,
+  MilestoneOutline,
   ModuleOutline,
   ParentOutline,
   PriorityOutline,
@@ -38,7 +39,10 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserProfile } from "@/hooks/store/user";
 // components
 import { IssueParentSelectRoot } from "@/components/issues/parent-select-root";
+import { MilestoneDueDateWarning } from "@/components/milestones/due-date-warning";
+import { MilestoneSelect } from "@/components/milestones/select";
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
+import { WorkItemSidebarProperties } from "@/components/work-item-types/sidebar-properties";
 import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
@@ -174,6 +178,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   showTooltip
                   tooltipHeading={t("common.order_by.due_date")}
                 />
+                <MilestoneDueDateWarning milestoneId={issue.milestone_id} dueDate={issue.target_date} />
               </div>
             </SidebarPropertyListItem>
 
@@ -188,6 +193,20 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   disabled={!isEditable}
                   variant="select-ghost-md"
                   placeholder={t("common.none")}
+                  tooltip
+                />
+              </SidebarPropertyListItem>
+            )}
+
+            {projectDetails?.milestone_view && (
+              <SidebarPropertyListItem icon={MilestoneOutline} label={t("common.milestone")}>
+                <MilestoneSelect
+                  value={issue.milestone_id}
+                  onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { milestone_id: val })}
+                  projectId={projectId}
+                  disabled={!isEditable}
+                  variant="select-ghost-md"
+                  placeholder={t("project_milestones.no_milestone")}
                   tooltip
                 />
               </SidebarPropertyListItem>
@@ -238,6 +257,14 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 disabled={!isEditable}
               />
             </SidebarPropertyListItem>
+
+            <WorkItemSidebarProperties
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              issueId={issueId}
+              issueOperations={issueOperations}
+              disabled={!isEditable}
+            />
           </div>
         </div>
       </div>

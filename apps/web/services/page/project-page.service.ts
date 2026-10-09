@@ -132,16 +132,16 @@ export class ProjectPageService extends APIService {
       });
   }
 
-  async lock(workspaceSlug: string, projectId: string, pageId: string): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/lock/`)
+  async lock(workspaceSlug: string, projectId: string, pageId: string, recursive = false): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/lock/`, { recursive })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
   }
 
-  async unlock(workspaceSlug: string, projectId: string, pageId: string): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/lock/`)
+  async unlock(workspaceSlug: string, projectId: string, pageId: string, recursive = false): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/lock/`, { recursive })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

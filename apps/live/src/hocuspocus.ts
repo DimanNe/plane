@@ -47,7 +47,9 @@ export class HocusPocusServerManager {
       onAuthenticate,
       onStateless,
       extensions: getExtensions(),
-      debounce: 10000,
+      // A hard kill of the process loses at most this window of edits.
+      debounce: 1000,
+      maxDebounce: 3000,
     });
 
     return this.server;

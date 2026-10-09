@@ -25,6 +25,8 @@ import { useProjectCrumbProps } from "@/components/breadcrumbs/use-project-crumb
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { EPageStoreType, usePage, usePageStore } from "@/hooks/store";
+// store
+import type { TProjectPage } from "@/store/pages/project-page";
 
 export interface IPagesHeaderProps {
   showButton?: boolean;
@@ -65,6 +67,13 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
       };
     })
     .filter((option) => option !== undefined);
+  // the pages the page is nested under, the top level one first
+  const ancestorPages: TProjectPage[] = [];
+  let parentPage = page?.parent_id ? getPageById(page.parent_id) : undefined;
+  while (parentPage) {
+    ancestorPages.unshift(parentPage);
+    parentPage = parentPage.parent_id ? getPageById(parentPage.parent_id) : undefined;
+  }
 
   if (!page) return null;
 
@@ -87,6 +96,18 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
                 />
               }
             />
+            {ancestorPages.map((ancestorPage) => (
+              <Breadcrumbs.Item
+                key={ancestorPage.id}
+                component={
+                  <BreadcrumbLink
+                    label={getPageName(ancestorPage.name)}
+                    href={ancestorPage.getRedirectionLink()}
+                    icon={<SwitcherIcon logo_props={ancestorPage.logo_props} LabelIcon={PagesOutline} size={16} />}
+                  />
+                }
+              />
+            ))}
 
             <Breadcrumbs.Item
               component={

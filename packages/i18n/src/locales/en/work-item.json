@@ -428,5 +428,8 @@
       "label": "Epic Title",
       "required": "Epic title is required."
     }
+  },
+  "timeline_dependency": {
+    "title": "Timeline Relation"
   }
 }

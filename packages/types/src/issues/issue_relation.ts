@@ -14,4 +14,21 @@ export type TIssueRelationMap = {
 
 export type TIssueRelationIdMap = Record<TIssueRelationTypes, string[]>;
 
-export type TIssueRelationTypes = "blocking" | "blocked_by" | "duplicate" | "relates_to";
+export type TIssueRelationTypes =
+  | "blocking"
+  | "blocked_by"
+  | "duplicate"
+  | "relates_to"
+  | "start_before"
+  | "start_after"
+  | "finish_before"
+  | "finish_after";
+
+export type TTimelineDependencyTypes = Extract<TIssueRelationTypes, "blocking" | "start_before" | "finish_before">;
+
+export type TTimelineDependency = {
+  id: string;
+  predecessor_id: string;
+  dependent_id: string;
+  relation_type: TTimelineDependencyTypes;
+};

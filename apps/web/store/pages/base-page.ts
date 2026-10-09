@@ -19,7 +19,7 @@ import { PageEditorInstance } from "./page-editor-info";
 export type TBasePage = TPage & {
   // observables
   isSubmitting: TNameDescriptionLoader;
-  isSyncingWithServer: "syncing" | "synced" | "error";
+  isSyncingWithServer: "syncing" | "synced" | "unsaved" | "error";
   // computed
   asJSON: TPage | undefined;
   isCurrentUserOwner: boolean;
@@ -42,7 +42,7 @@ export type TBasePage = TPage & {
   removePageFromFavorites: () => Promise<void>;
   duplicate: () => Promise<TPage | undefined>;
   mutateProperties: (data: Partial<TPage>, shouldUpdateName?: boolean) => void;
-  setSyncingStatus: (status: "syncing" | "synced" | "error") => void;
+  setSyncingStatus: (status: "syncing" | "synced" | "unsaved" | "error") => void;
   // sub-store
   editor: PageEditorInstance;
 };
@@ -64,8 +64,8 @@ export type TBasePageServices = {
   update: (payload: Partial<TPage>) => Promise<Partial<TPage>>;
   updateDescription: (document: TDocumentPayload) => Promise<void>;
   updateAccess: (payload: Pick<TPage, "access">) => Promise<void>;
-  lock: () => Promise<void>;
-  unlock: () => Promise<void>;
+  lock: (recursive?: boolean) => Promise<void>;
+  unlock: (recursive?: boolean) => Promise<void>;
   archive: () => Promise<{
     archived_at: string;
   }>;
@@ -81,7 +81,7 @@ export type TPageInstance = TBasePage &
 export class BasePage extends ExtendedBasePage implements TBasePage {
   // loaders
   isSubmitting: TNameDescriptionLoader = "saved";
-  isSyncingWithServer: "syncing" | "synced" | "error" = "syncing";
+  isSyncingWithServer: "syncing" | "synced" | "unsaved" | "error" = "syncing";
   // page properties
   id: string | undefined;
   name: string | undefined;
@@ -197,6 +197,8 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
     const titleDisposer = reaction(
       () => this.name,
       (name) => {
+        // the name the server has is not written back to it
+        if (name === this.oldName) return;
         this.isSubmitting = "submitting";
         this.services
           .update({
@@ -370,12 +372,12 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
   /**
    * @description lock the page
    */
-  lock = async ({ shouldSync = true }) => {
+  lock = async ({ shouldSync = true, recursive = false }: { shouldSync?: boolean; recursive?: boolean }) => {
     const pageIsLocked = this.is_locked;
     runInAction(() => (this.is_locked = true));
 
     if (shouldSync) {
-      await this.services.lock().catch((error) => {
+      await this.services.lock(recursive).catch((error) => {
         runInAction(() => {
           this.is_locked = pageIsLocked;
         });
@@ -387,12 +389,12 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
   /**
    * @description unlock the page
    */
-  unlock = async ({ shouldSync = true }) => {
+  unlock = async ({ shouldSync = true, recursive = false }: { shouldSync?: boolean; recursive?: boolean }) => {
     const pageIsLocked = this.is_locked;
     runInAction(() => (this.is_locked = false));
 
     if (shouldSync) {
-      await this.services.unlock().catch((error) => {
+      await this.services.unlock(recursive).catch((error) => {
         runInAction(() => {
           this.is_locked = pageIsLocked;
         });
@@ -546,7 +548,7 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
     });
   };
 
-  setSyncingStatus = (status: "syncing" | "synced" | "error") => {
+  setSyncingStatus = (status: "syncing" | "synced" | "unsaved" | "error") => {
     runInAction(() => {
       this.isSyncingWithServer = status;
     });

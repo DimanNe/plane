@@ -11,11 +11,13 @@ import { SPREADSHEET_SELECT_GROUP, SPREADSHEET_PROPERTY_LIST } from "@plane/cons
 // types
 import type { TIssue, IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
+import { getWorkItemPropertyKey, isWorkItemPropertyDisplayProperty } from "@plane/utils";
 // components
 import { MultipleSelectGroup } from "@/components/core/multiple-select";
 import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
 // local imports
 import type { TRenderQuickActions } from "../list/list-view-types";
@@ -62,18 +64,26 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
   const portalRef = useRef<HTMLDivElement | null>(null);
   // store hooks
   const { currentProjectDetails } = useProject();
+  const { getProjectWorkItemProperties } = useWorkItemTypes();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
 
   const isEstimateEnabled: boolean = currentProjectDetails?.estimate !== null;
 
   const spreadsheetColumnsList = isWorkspaceLevel
-    ? SPREADSHEET_PROPERTY_LIST
+    ? SPREADSHEET_PROPERTY_LIST.filter((property) => property !== "milestone")
     : SPREADSHEET_PROPERTY_LIST.filter((property) => {
+        if (property === "milestone" && !currentProjectDetails?.milestone_view) return false;
         if (property === "cycle" && !currentProjectDetails?.cycle_view) return false;
         if (property === "modules" && !currentProjectDetails?.module_view) return false;
         return true;
       });
+  // a workspace view spans projects, whose types and properties differ
+  const workItemPropertyColumnsList = isWorkspaceLevel
+    ? []
+    : getProjectWorkItemProperties(currentProjectDetails?.id)
+        .filter(isWorkItemPropertyDisplayProperty)
+        .map((property) => getWorkItemPropertyKey(property.id));
 
   if (!issueIds || issueIds.length === 0) return <></>;
   return (
@@ -102,7 +112,7 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
                 containerRef={containerRef}
                 canLoadMoreIssues={canLoadMoreIssues}
                 loadMoreIssues={loadMoreIssues}
-                spreadsheetColumnsList={spreadsheetColumnsList}
+                spreadsheetColumnsList={[...spreadsheetColumnsList, ...workItemPropertyColumnsList]}
                 selectionHelpers={helpers}
                 isEpic={isEpic}
               />

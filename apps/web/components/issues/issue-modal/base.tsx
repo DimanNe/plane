@@ -14,6 +14,7 @@ import { useTranslation } from "@plane/i18n";
 import { setToast } from "@plane/blocks/toast";
 import type { TBaseIssue, TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
+import { getWorkItemPropertyErrorMessage } from "@plane/utils";
 // hooks
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -75,7 +76,8 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   const { issues: projectIssues } = useIssues(EIssuesStoreType.PROJECT);
   const { issues: draftIssues } = useIssues(EIssuesStoreType.WORKSPACE_DRAFT);
   const { fetchIssue } = useIssueDetail();
-  const { allowedProjectIds, handleCreateUpdatePropertyValues, handleCreateSubWorkItem } = useIssueModal();
+  const { allowedProjectIds, handleCreateUpdatePropertyValues, handleCreateSubWorkItem, setIssuePropertyValueErrors } =
+    useIssueModal();
   const { getProjectByIdentifier } = useProject();
   // current store details
   const { createIssue, updateIssue } = useIssuesActions(storeType);
@@ -250,10 +252,15 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
       setChangesMade(null);
       return response;
     } catch (error: any) {
+      // a refused property value is shown at its field
+      setIssuePropertyValueErrors(error?.custom_properties ?? {});
       setToast({
         type: "error",
         title: t("error"),
-        message: error?.error ?? t(is_draft_issue ? "draft_creation_failed" : "issue_creation_failed"),
+        message:
+          error?.error ??
+          getWorkItemPropertyErrorMessage(error) ??
+          t(is_draft_issue ? "draft_creation_failed" : "issue_creation_failed"),
       });
       throw error;
     }
@@ -326,6 +333,12 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     try {
       if (isDraft) await draftIssues.updateIssue(workspaceSlug.toString(), data.id, payload);
       else if (updateIssue) await updateIssue(payload.project_id, data.id, payload);
+      // The server applies a new type: default values, and a description that keeps the old type's values.
+      // The update is saved by now, so a failure to read the work item again is not a failure of the update.
+      if (!isDraft && payload.type_id && payload.type_id !== data.type_id)
+        await fetchIssue(workspaceSlug.toString(), payload.project_id, data.id).catch((error) => {
+          console.error(error);
+        });
 
       // Run cycle, module, and property changes sequentially to avoid
       // optimistic store writes from racing against each other.
@@ -351,10 +364,12 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
       handleClose();
     } catch (error: any) {
       console.error(error);
+      // a refused property value is shown at its field
+      setIssuePropertyValueErrors(error?.custom_properties ?? {});
       setToast({
         type: "error",
         title: t("error"),
-        message: error?.error ?? t("issue_could_not_be_updated"),
+        message: error?.error ?? getWorkItemPropertyErrorMessage(error) ?? t("issue_could_not_be_updated"),
       });
     }
   };

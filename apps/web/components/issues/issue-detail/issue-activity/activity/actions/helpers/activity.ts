@@ -10,6 +10,13 @@ export const getRelationActivityContent = (activity: TIssueActivity | undefined)
   if (!activity) return;
 
   switch (activity.field) {
+    case "start_before":
+    case "start_after":
+    case "finish_before":
+    case "finish_after":
+      return activity.old_value === ""
+        ? `added ${activity.field.replaceAll("_", " ")} dependency on `
+        : `removed ${activity.field.replaceAll("_", " ")} dependency on `;
     case "blocking":
       return activity.old_value === ""
         ? `marked this work item is blocking work item `

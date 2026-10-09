@@ -181,6 +181,7 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
       stage: { kind: "connecting" },
       isServerSynced: false,
       isServerDisconnected: false,
+      isSaved: null,
     });
   }, [pageId, setSyncingStatus, onCollaborationStateChange]);
 
@@ -204,11 +205,12 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
         onCollaborationStateChange?.(state);
 
         // Map collaboration stage to UI syncing status
-        // Stage → UI mapping: disconnected → error | synced → synced | all others → syncing
+        // Stage → UI mapping: disconnected → error | synced → synced or unsaved, once the server has told which
+        // | all others → syncing
         if (state.stage.kind === "disconnected") {
           setSyncingStatus("error");
-        } else if (state.stage.kind === "synced") {
-          setSyncingStatus("synced");
+        } else if (state.stage.kind === "synced" && state.isSaved !== null) {
+          setSyncingStatus(state.isSaved ? "synced" : "unsaved");
         } else {
           // initial, connecting, awaiting-sync, reconnecting → show as syncing
           setSyncingStatus("syncing");

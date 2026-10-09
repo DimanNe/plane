@@ -18,7 +18,7 @@ import type { TPageInstance } from "@/store/pages/base-page";
 import useLocalStorage from "./use-local-storage";
 
 export type TPageOperations = {
-  toggleLock: () => void;
+  toggleLock: (recursive?: boolean) => void;
   toggleAccess: () => void;
   toggleFavorite: () => void;
   openInNewTab: () => void;
@@ -172,10 +172,10 @@ export const usePageOperations = (
           }
         }
       },
-      toggleLock: async () => {
+      toggleLock: async (recursive) => {
         if (is_locked) {
           try {
-            await executeCollaborativeAction({ type: "sendMessageToServer", message: "unlock" });
+            await executeCollaborativeAction({ type: "sendMessageToServer", message: "unlock", recursive });
             setToast({
               type: "success",
               title: "Success!",
@@ -190,7 +190,7 @@ export const usePageOperations = (
           }
         } else {
           try {
-            await executeCollaborativeAction({ type: "sendMessageToServer", message: "lock" });
+            await executeCollaborativeAction({ type: "sendMessageToServer", message: "lock", recursive });
             setToast({
               type: "success",
               title: "Success!",

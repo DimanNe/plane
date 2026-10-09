@@ -32,6 +32,7 @@ export enum EIssueGroupByToServerOptions {
   "assignees" = "assignees__id",
   "cycle" = "cycle_id",
   "module" = "issue_module__module_id",
+  "milestone" = "milestone_id",
   "target_date" = "target_date",
   "project" = "project_id",
   "created_by" = "created_by",
@@ -47,6 +48,7 @@ export enum EIssueGroupBYServerToProperty {
   "assignees__id" = "assignee_ids",
   "cycle_id" = "cycle_id",
   "issue_module__module_id" = "module_ids",
+  "milestone_id" = "milestone_id",
   "target_date" = "target_date",
   "project_id" = "project_id",
   "created_by" = "created_by",
@@ -121,6 +123,7 @@ export const ISSUE_GROUP_BY_OPTIONS: {
   { key: "project", titleTranslationKey: "common.project" }, // required this on my issues
   { key: "cycle", titleTranslationKey: "common.cycle" }, // required this on my issues
   { key: "module", titleTranslationKey: "common.module" }, // required this on my issues
+  { key: "milestone", titleTranslationKey: "common.milestone" },
   { key: "labels", titleTranslationKey: "common.labels" },
   { key: "assignees", titleTranslationKey: "common.assignees" },
   { key: "created_by", titleTranslationKey: "common.created_by" },
@@ -153,6 +156,7 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "estimate",
   "created_on",
   "updated_on",
+  "milestone",
   "modules",
   "cycle",
   "issue_type",
@@ -206,6 +210,7 @@ export const ISSUE_DISPLAY_PROPERTIES: {
     key: "estimate",
     titleTranslationKey: "common.estimate",
   },
+  { key: "milestone", titleTranslationKey: "common.milestone" },
   { key: "modules", titleTranslationKey: "common.module" },
   { key: "cycle", titleTranslationKey: "common.cycle" },
 ];
@@ -215,6 +220,7 @@ export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
   "priority",
   "assignee",
   "labels",
+  "milestone",
   "modules",
   "cycle",
   "start_date",
@@ -276,6 +282,14 @@ export const SPREADSHEET_PROPERTY_DETAILS: {
     descendingOrderKey: "-labels__name",
     descendingOrderTitle: "Z",
     icon: "LabelPropertyIcon",
+  },
+  milestone: {
+    i18n_title: "common.milestone",
+    ascendingOrderKey: "milestone__title",
+    ascendingOrderTitle: "A",
+    descendingOrderKey: "-milestone__title",
+    descendingOrderTitle: "Z",
+    icon: "MilestoneOutline",
   },
   modules: {
     i18n_title: "common.modules",

@@ -14,6 +14,7 @@ import { useTranslation } from "@plane/i18n";
 import { setPromiseToast, setToast } from "@plane/blocks/toast";
 import type { IWorkItemPeekOverview, TIssue } from "@plane/types";
 import { EIssueServiceType, EIssuesStoreType } from "@plane/types";
+import { getWorkItemPropertyErrorMessage } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -83,11 +84,13 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
               fetchActivities(workspaceSlug, projectId, issueId);
               return;
             })
-            .catch((_error) => {
+            .catch((error) => {
               setToast({
                 title: t("toast.error"),
                 type: "error",
-                message: t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
+                message:
+                  getWorkItemPropertyErrorMessage(error) ??
+                  t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
               });
             });
         }

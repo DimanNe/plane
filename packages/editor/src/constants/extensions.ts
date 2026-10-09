@@ -4,6 +4,9 @@
  * See the LICENSE file for details.
  */
 
-export enum ADDITIONAL_EXTENSIONS {}
+export enum ADDITIONAL_EXTENSIONS {
+  NESTED_PAGE = "nestedPage",
+  LINK_PAGES = "linkPages",
+}
 
 export const ADDITIONAL_BLOCK_NODE_TYPES = [];

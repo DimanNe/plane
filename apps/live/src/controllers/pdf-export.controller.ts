@@ -54,6 +54,7 @@ export class PdfExportController {
         fileName: body.fileName,
         noAssets: body.noAssets,
         cookie,
+        requestHost: req.get("host"),
         requestId,
       };
     });

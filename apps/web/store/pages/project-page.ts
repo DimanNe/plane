@@ -38,22 +38,28 @@ export class ProjectPage extends BasePage implements TProjectPage {
       updateAccess: async (payload) => {
         if (!workspaceSlug || !projectId || !page.id) throw new Error("Missing required fields.");
         await projectPageService.updateAccess(workspaceSlug, projectId, page.id, payload);
+        store.projectPages.updateNestedPages(page.id, payload);
       },
-      lock: async () => {
+      lock: async (recursive) => {
         if (!workspaceSlug || !projectId || !page.id) throw new Error("Missing required fields.");
-        await projectPageService.lock(workspaceSlug, projectId, page.id);
+        await projectPageService.lock(workspaceSlug, projectId, page.id, recursive);
+        if (recursive) store.projectPages.updateNestedPages(page.id, { is_locked: true });
       },
-      unlock: async () => {
+      unlock: async (recursive) => {
         if (!workspaceSlug || !projectId || !page.id) throw new Error("Missing required fields.");
-        await projectPageService.unlock(workspaceSlug, projectId, page.id);
+        await projectPageService.unlock(workspaceSlug, projectId, page.id, recursive);
+        if (recursive) store.projectPages.updateNestedPages(page.id, { is_locked: false });
       },
       archive: async () => {
         if (!workspaceSlug || !projectId || !page.id) throw new Error("Missing required fields.");
-        return await projectPageService.archive(workspaceSlug, projectId, page.id);
+        const response = await projectPageService.archive(workspaceSlug, projectId, page.id);
+        store.projectPages.updateNestedPages(page.id, response);
+        return response;
       },
       restore: async () => {
         if (!workspaceSlug || !projectId || !page.id) throw new Error("Missing required fields.");
         await projectPageService.restore(workspaceSlug, projectId, page.id);
+        store.projectPages.updateNestedPages(page.id, { archived_at: null });
       },
       duplicate: async () => {
         if (!workspaceSlug || !projectId || !page.id) throw new Error("Missing required fields.");
@@ -133,7 +139,8 @@ export class ProjectPage extends BasePage implements TProjectPage {
    */
   get canCurrentUserChangeAccess() {
     const highestRole = this.getHighestRoleAcrossProjects();
-    return this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN;
+    // a nested page takes the access of its parent
+    return !this.parent_id && (this.isCurrentUserOwner || highestRole === EUserPermissions.ADMIN);
   }
 
   /**

@@ -25,6 +25,7 @@ import {
   DialogMain,
   DialogTitle,
 } from "@makeplane/propel/components/dialog";
+import { ConfirmDialog } from "@plane/blocks/dialog";
 import { setToast } from "@plane/blocks/toast";
 import type { TIssue, TWorkspaceDraftIssue } from "@plane/types";
 // hooks
@@ -34,6 +35,7 @@ import {
   getUpdateFormDataForReset,
   getChangedIssuefields,
   getTabIndex,
+  getWorkItemFormPropertyValuesToSubmit,
 } from "@plane/utils";
 // components
 import {
@@ -43,12 +45,15 @@ import {
   IssueProjectSelect,
   IssueTitleInput,
 } from "@/components/issues/issue-modal/components";
+import { WorkItemModalProperties } from "@/components/work-item-types/modal-properties";
+import { WorkItemTypeSelect } from "@/components/work-item-types/type-select";
 // helpers
 // hooks
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
 import { useWorkspaceDraftIssues } from "@/hooks/store/workspace-draft";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties";
@@ -105,6 +110,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   // states
   const [gptAssistantModal, setGptAssistantModal] = useState(false);
   const [isMoving, setIsMoving] = useState<boolean>(false);
+  const [isTypeChangeConfirmationOpen, setIsTypeChangeConfirmationOpen] = useState(false);
 
   // refs
   const editorRef = useRef<EditorRefApi>(null);
@@ -136,6 +142,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = useIssueDetail();
   const { fetchCycles } = useProjectIssueProperties();
   const { getStateById } = useProjectState();
+  const { fetchWorkItemTypes, getProjectWorkItemTypes, getWorkItemTypeProperties } = useWorkItemTypes();
 
   // form info
   const methods = useForm<TIssue>({
@@ -154,6 +161,10 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
   } = methods;
 
   const projectId = watch("project_id");
+  const typeId = watch("type_id");
+  const workItemTypes = getProjectWorkItemTypes(projectId);
+  const typeProperties = getWorkItemTypeProperties(typeId);
+  const isTypeChange = !!data?.id && !!data.type_id && typeId !== data.type_id;
 
   const isDisabled = isSubmitting || isApplyingTemplate;
 
@@ -172,6 +183,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       }
     }
     if (projectId && routeProjectId !== projectId) fetchCycles(workspaceSlug?.toString(), projectId);
+    if (projectId && routeProjectId !== projectId) fetchWorkItemTypes(workspaceSlug?.toString(), projectId);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
@@ -196,7 +208,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     if (issueTypeIdOnProjectChange) setValue("type_id", issueTypeIdOnProjectChange, { shouldValidate: true });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, projectId]);
+  }, [data, projectId, workItemTypes]);
 
   useEffect(() => {
     if (workItemTemplateId && editorRef.current) {
@@ -209,7 +221,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workItemTemplateId]);
 
-  const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false) => {
+  const handleFormSubmit = async (formData: Partial<TIssue>, is_draft_issue = false, isTypeChangeConfirmed = false) => {
     // Check if the editor is ready to discard
     if (!editorRef.current?.isEditorReadyToDiscard()) {
       setToast({
@@ -222,6 +234,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
 
     // check for required properties validation
     if (
+      !isDraft &&
       !handlePropertyValuesValidation({
         projectId: projectId,
         workspaceSlug: workspaceSlug?.toString(),
@@ -229,6 +242,12 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       })
     )
       return;
+
+    // a type change cannot be undone, so it is saved only after it has been confirmed
+    if (isTypeChange && !isTypeChangeConfirmed) {
+      setIsTypeChangeConfirmationOpen(true);
+      return;
+    }
 
     const submitData = !data?.id
       ? formData
@@ -239,6 +258,12 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
           description_html: formData.description_html ?? "<p></p>",
           type_id: getValues<"type_id">("type_id"),
         };
+
+    submitData.custom_properties = getWorkItemFormPropertyValuesToSubmit(
+      typeProperties,
+      formData,
+      isDraft ? undefined : data
+    );
 
     // this condition helps to move the issues from draft to project issues
     if (formData.hasOwnProperty("is_draft")) submitData.is_draft = formData.is_draft;
@@ -283,6 +308,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       await moveIssue(workspaceSlug.toString(), data.id, {
         ...data,
         ...getValues(),
+        custom_properties: getWorkItemFormPropertyValuesToSubmit(typeProperties, getValues(), undefined),
       } as TWorkspaceDraftIssue);
     } catch {
       setToast({
@@ -371,8 +397,13 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                   <IssueProjectSelect
                     control={control}
                     disabled={!!data?.id || !!data?.sourceIssueId || isProjectSelectionDisabled}
-                    handleFormChange={handleFormChange}
+                    handleFormChange={() => {
+                      // a type belongs to its project: the default type of the chosen project takes its place
+                      setValue("type_id", null);
+                      handleFormChange();
+                    }}
                   />
+                  <WorkItemTypeSelect data={data} disabled={isDisabled} handleFormChange={handleFormChange} />
                 </div>
               </div>
               {watch("parent_id") && selectedParentIssue && (
@@ -410,6 +441,13 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                 handleGptAssistantClose={() => reset(getValues())}
                 onAssetUpload={onAssetUpload}
                 onClose={onClose}
+              />
+              <WorkItemModalProperties
+                data={data}
+                disabled={isDisabled}
+                isDraft={isDraft}
+                handleFormChange={handleFormChange}
+                onAssetUpload={onAssetUpload}
               />
             </DialogBody>
             <div className="shrink-0">
@@ -488,6 +526,19 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
           )}
         </form>
       </div>
+      <ConfirmDialog
+        isOpen={isTypeChangeConfirmationOpen}
+        handleClose={() => setIsTypeChangeConfirmationOpen(false)}
+        handleSubmit={() => {
+          setIsTypeChangeConfirmationOpen(false);
+          return handleSubmit((formData) => handleFormSubmit(formData, false, true))();
+        }}
+        isSubmitting={false}
+        title={t("work_item_types.change_confirmation.title")}
+        content={t("work_item_types.change_confirmation.values_move_description")}
+        primaryButtonText={{ default: t("work_item_types.change_confirmation.button.default") }}
+        variant="warning"
+      />
     </FormProvider>
   );
 });

@@ -21,6 +21,8 @@ import {
   FilterOrderBy,
   FilterSubGroupBy,
 } from "@/components/issues/issue-layouts/filters";
+// hooks
+import { useProject } from "@/hooks/store/use-project";
 
 type Props = {
   displayFilters: IIssueDisplayFilterOptions | undefined;
@@ -46,6 +48,8 @@ export const DisplayFiltersSelection = observer(function DisplayFiltersSelection
     moduleViewDisabled = false,
     isEpic = false,
   } = props;
+  // store hooks
+  const { currentProjectDetails } = useProject();
 
   const isDisplayFilterEnabled = (displayFilter: keyof IIssueDisplayFilterOptions) =>
     Object.keys(layoutDisplayFiltersOptions?.display_filters ?? {}).includes(displayFilter);
@@ -56,6 +60,9 @@ export const DisplayFiltersSelection = observer(function DisplayFiltersSelection
   }
   if (moduleViewDisabled) {
     ignoreGroupedFilters.push("module");
+  }
+  if (!currentProjectDetails?.milestone_view) {
+    ignoreGroupedFilters.push("milestone");
   }
 
   return (

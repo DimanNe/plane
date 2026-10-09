@@ -50,6 +50,7 @@ export interface IIssue extends Pick<
   | "target_date"
   | "cycle_id"
   | "module_ids"
+  | "milestone_id"
   | "label_ids"
   | "assignee_ids"
   | "attachment_count"

@@ -97,6 +97,14 @@
           }
         }
       },
+      "wiki": {
+        "heading": "Wiki",
+        "description": "The knowledge base of the workspace: pages that belong to the workspace, not to a project.",
+        "title": "Wiki",
+        "toggle_title": "Turn on wiki for this workspace",
+        "toggle_description": "While it's off, the wiki is hidden and its pages can't be opened.",
+        "toggle_error": "The wiki setting could not be updated. Please try again."
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "Automate notifications to external services when project events occur.",

@@ -45,8 +45,17 @@
           "member_picker": {
             "label": "Member picker"
           },
+          "rich_text": {
+            "label": "Rich text"
+          },
+          "url": {
+            "label": "URL"
+          },
           "formula": {
             "label": "Formula"
+          },
+          "cascading": {
+            "label": "Cascading"
           }
         },
         "attributes": {
@@ -64,7 +73,15 @@
             },
             "invalid_text_format": {
               "label": "Invalid text format"
-            }
+            },
+            "placeholder": "Add text"
+          },
+          "date": {
+            "display_format": "Display format",
+            "placeholder": "Add date"
+          },
+          "url": {
+            "placeholder": "Add URL"
           },
           "number": {
             "default": {
@@ -107,7 +124,23 @@
                   "variable": "{count} options selected"
                 }
               }
+            },
+            "delete_confirmation": {
+              "title": "Remove this option",
+              "description": "{count, plural, one {# work item uses} other {# work items use}} {name}. Removing it clears the value from those work items and adds it to their descriptions as text. You can't undo this.",
+              "input_label": "Type {word} to continue."
             }
+          },
+          "cascading": {
+            "levels": "Levels",
+            "manage_levels": "Manage levels",
+            "level_name": "Level {number}",
+            "add_level": "Add level",
+            "delete_level_warning": "Deleting a level also deletes every level below it and all their options. Values that work items have on those levels are added to their descriptions as text. You can't undo this.",
+            "add_options": "Add cascading options",
+            "manage_options": "Manage options",
+            "sub_level_label": "Sub-level label",
+            "skip": "Skip"
           }
         },
         "toast": {
@@ -177,6 +210,9 @@
             "options": {
               "required": "You must add at least one option."
             },
+            "levels": {
+              "required": "You must name every level."
+            },
             "formula": {
               "required": "Formula expression is required.",
               "invalid": "Invalid formula: {error}",
@@ -201,7 +237,8 @@
           "picker": {
             "no_match": "No matching properties",
             "no_available": "No available properties"
-          }
+          },
+          "help": "Refer to a text, number, boolean or date property of this type as '{{'Name'}}'. Functions: IF, ROUND, ABS, UPPER, LOWER, LEN, CONCAT, TODAY, NOW."
         },
         "enable_disable": {
           "label": "Active",
@@ -275,6 +312,7 @@
         "title": "Delete this type",
         "description": "Deletion of types may lead to loss of existing data.",
         "can_disable_warning": "Do you want to disable the type instead?",
+        "work_items_keep_type": "Work items of this type are not deleted. They keep the type until you change it.",
         "primary_button": "Yes, delete it",
         "toast": {
           "success": {
@@ -356,7 +394,9 @@
       "button": {
         "loading": "Changing",
         "default": "Change type"
-      }
+      },
+      "values_move_description": "Custom property values that only exist on the current type are removed from their fields and added to the description as text. You can't undo this change.",
+      "switch": "Switch work item type"
     },
     "empty_state": {
       "enable": {

@@ -47,6 +47,9 @@ export interface IProjectPageStore {
   getCurrentProjectPageIds: (projectId: string) => string[];
   getCurrentProjectFilteredPageIdsByTab: (pageType: TPageNavigationTabs) => string[] | undefined;
   getPageById: (pageId: string) => TProjectPage | undefined;
+  getChildPageIds: (pageId: string) => string[];
+  getNestedPageIds: (pageId: string) => string[];
+  updateNestedPages: (pageId: string, data: Partial<TPage>) => void;
   updateFilters: <T extends keyof TPageFilters>(filterKey: T, filterValue: TPageFilters[T]) => void;
   clearAllFilters: () => void;
   // actions
@@ -64,6 +67,7 @@ export interface IProjectPageStore {
   createPage: (pageData: Partial<TPage>) => Promise<TPage | undefined>;
   removePage: (params: { pageId: string; shouldSync?: boolean }) => Promise<void>;
   movePage: (workspaceSlug: string, projectId: string, pageId: string, newProjectId: string) => Promise<void>;
+  setPageParent: (pageId: string, parentId: string | null) => Promise<void>;
 }
 
 export class ProjectPageStore implements IProjectPageStore {
@@ -93,12 +97,14 @@ export class ProjectPageStore implements IProjectPageStore {
       // helper actions
       updateFilters: action,
       clearAllFilters: action,
+      updateNestedPages: action,
       // actions
       fetchPagesList: action,
       fetchPageDetails: action,
       createPage: action,
       removePage: action,
       movePage: action,
+      setPageParent: action,
     });
     this.rootStore = store;
     // service
@@ -188,6 +194,30 @@ export class ProjectPageStore implements IProjectPageStore {
    */
   getPageById = computedFn((pageId: string) => this.data?.[pageId] || undefined);
 
+  /**
+   * @description get the ids of the pages nested directly under a page, archived ones under an archived page only
+   * @param {string} pageId
+   */
+  getChildPageIds = computedFn((pageId: string) => {
+    const isArchived = !!this.data[pageId]?.archived_at;
+    const childPages = Object.values(this?.data || {}).filter(
+      (page) => page.parent_id === pageId && !!page.archived_at === isArchived
+    );
+    return orderPages(childPages, this.filters.sortKey, this.filters.sortBy).map((page) => page.id) as string[];
+  });
+
+  /**
+   * @description get the ids of the pages nested under a page at any depth
+   * @param {string} pageId
+   */
+  getNestedPageIds = computedFn((pageId: string): string[] => {
+    const nestedPageIds: string[] = [];
+    Object.values(this?.data || {}).forEach((page) => {
+      if (page.id && page.parent_id === pageId) nestedPageIds.push(page.id, ...this.getNestedPageIds(page.id));
+    });
+    return nestedPageIds;
+  });
+
   updateFilters = <T extends keyof TPageFilters>(filterKey: T, filterValue: TPageFilters[T]) => {
     runInAction(() => {
       set(this.filters, [filterKey], filterValue);
@@ -201,6 +231,15 @@ export class ProjectPageStore implements IProjectPageStore {
     runInAction(() => {
       set(this.filters, ["filters"], {});
     });
+
+  /**
+   * @description apply to the pages nested under a page a change of the page that they follow
+   * @param {string} pageId
+   * @param {Partial<TPage>} data
+   */
+  updateNestedPages = (pageId: string, data: Partial<TPage>) => {
+    this.getNestedPageIds(pageId).forEach((nestedPageId) => this.data[nestedPageId]?.mutateProperties(data));
+  };
 
   /**
    * @description fetch all the pages
@@ -366,5 +405,21 @@ export class ProjectPageStore implements IProjectPageStore {
       console.error("Unable to move page", error);
       throw error;
     }
+  };
+
+  /**
+   * @description nest a page under another page of the project, or move it to the top level
+   * @param {string} pageId
+   * @param {string | null} parentId
+   */
+  setPageParent = async (pageId: string, parentId: string | null) => {
+    const { workspaceSlug, projectId } = this.store.router;
+    if (!workspaceSlug || !projectId) return undefined;
+
+    const page = await this.service.update(workspaceSlug, projectId, pageId, { parent_id: parentId });
+    runInAction(() => {
+      this.getPageById(pageId)?.mutateProperties({ parent_id: page.parent_id, access: page.access });
+      this.updateNestedPages(pageId, { access: page.access });
+    });
   };
 }

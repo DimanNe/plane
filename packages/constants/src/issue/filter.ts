@@ -25,6 +25,7 @@ export enum EServerGroupByToFilterOptions {
   "state__group" = "state_group",
   "assignees__id" = "assignees",
   "cycle_id" = "cycle",
+  "milestone_id" = "milestone",
   "issue_module__module_id" = "module",
   "target_date" = "target_date",
   "project_id" = "project",
@@ -146,6 +147,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       "state_id",
       "cycle_id",
       "module_id",
+      "milestone_id",
       "assignee_id",
       "created_by_id",
       "label_id",
@@ -156,7 +158,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       list: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          group_by: ["state", "cycle", "module", "priority", "labels", "assignees", "created_by", null],
+          group_by: ["state", "cycle", "module", "milestone", "priority", "labels", "assignees", "created_by", null],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority"],
           type: ["active", "backlog"],
         },
@@ -210,6 +212,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       "state_id",
       "cycle_id",
       "module_id",
+      "milestone_id",
       "assignee_id",
       "mention_id",
       "created_by_id",
@@ -221,7 +224,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       list: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          group_by: ["state", "priority", "cycle", "module", "labels", "assignees", "created_by", null],
+          group_by: ["state", "priority", "cycle", "module", "milestone", "labels", "assignees", "created_by", null],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority", "target_date"],
           type: ["active", "backlog"],
         },
@@ -233,8 +236,18 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       kanban: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          group_by: ["state", "priority", "cycle", "module", "labels", "assignees", "created_by"],
-          sub_group_by: ["state", "priority", "cycle", "module", "labels", "assignees", "created_by", null],
+          group_by: ["state", "priority", "cycle", "module", "milestone", "labels", "assignees", "created_by"],
+          sub_group_by: [
+            "state",
+            "priority",
+            "cycle",
+            "module",
+            "milestone",
+            "labels",
+            "assignees",
+            "created_by",
+            null,
+          ],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority", "target_date"],
           type: ["active", "backlog"],
         },

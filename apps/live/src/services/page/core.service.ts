@@ -115,7 +115,7 @@ export abstract class PageCoreService extends APIService {
     }
   }
 
-  async updateDescriptionBinary(pageId: string, data: TDocumentPayload): Promise<any> {
+  async updateDescriptionBinary(pageId: string, data: TDocumentPayload & { name?: string }): Promise<any> {
     try {
       const response = await this.patch(`${this.basePath}/pages/${pageId}/description/`, data, {
         headers: this.getHeader(),
@@ -163,7 +163,8 @@ export abstract class PageCoreService extends APIService {
   async resolveImageAssetUrl(
     workspaceSlug: string,
     assetId: string,
-    projectId?: string | null
+    projectId?: string | null,
+    requestHost?: string
   ): Promise<string | null> {
     const path = projectId
       ? `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/${assetId}/?disposition=inline`
@@ -171,7 +172,9 @@ export abstract class PageCoreService extends APIService {
 
     try {
       const response = await this.get(path, {
-        headers: this.getHeader(),
+        // The API signs the storage link for the host of the request it gets. This request goes
+        // straight to the API, so it names the host the browser used, where the storage is served.
+        headers: { ...this.getHeader(), ...(requestHost ? { Host: requestHost } : {}) },
         maxRedirects: 0,
         validateStatus: (status: number) => status >= 200 && status < 400,
       });

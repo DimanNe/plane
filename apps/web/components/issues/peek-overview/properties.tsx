@@ -14,6 +14,7 @@ import {
   EstimateOutline,
   LabelsOutline,
   MembersOutline,
+  MilestoneOutline,
   ModuleOutline,
   ParentOutline,
   PriorityOutline,
@@ -29,7 +30,10 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberSelect } from "@/components/dropdowns/member/member-select";
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
 import { StateSelect } from "@/components/dropdowns/state/state-select";
+import { MilestoneDueDateWarning } from "@/components/milestones/due-date-warning";
+import { MilestoneSelect } from "@/components/milestones/select";
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
+import { WorkItemSidebarProperties } from "@/components/work-item-types/sidebar-properties";
 // helpers
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
@@ -172,6 +176,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               showTooltip
               tooltipHeading={t("common.order_by.due_date")}
             />
+            <MilestoneDueDateWarning milestoneId={issue.milestone_id} dueDate={issue.target_date} />
           </div>
         </SidebarPropertyListItem>
 
@@ -184,6 +189,20 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               disabled={disabled}
               variant="select-ghost-md"
               placeholder={t("common.none")}
+              tooltip
+            />
+          </SidebarPropertyListItem>
+        )}
+
+        {projectDetails?.milestone_view && (
+          <SidebarPropertyListItem icon={MilestoneOutline} label={t("common.milestone")}>
+            <MilestoneSelect
+              value={issue.milestone_id}
+              onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { milestone_id: val })}
+              projectId={projectId}
+              disabled={disabled}
+              variant="select-ghost-md"
+              placeholder={t("project_milestones.no_milestone")}
               tooltip
             />
           </SidebarPropertyListItem>
@@ -229,6 +248,14 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         <SidebarPropertyListItem icon={LabelsOutline} label={t("common.labels")}>
           <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
         </SidebarPropertyListItem>
+
+        <WorkItemSidebarProperties
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          issueId={issueId}
+          issueOperations={issueOperations}
+          disabled={disabled}
+        />
       </div>
     </div>
   );

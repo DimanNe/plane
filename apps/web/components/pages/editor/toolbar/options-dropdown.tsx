@@ -138,6 +138,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
           "sticky-toolbar",
           "copy-markdown",
           "version-history",
+          "toggle-lock-with-nested-pages",
           "make-a-copy",
           "archive-restore",
           "delete",

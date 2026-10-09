@@ -78,17 +78,15 @@ const storeDocument = async ({
   try {
     const service = getPageService(context.documentType, context);
     // convert binary data to all formats
-    const { contentBinaryEncoded, contentHTML, contentJSON } = getAllDocumentFormatsFromDocumentEditorBinaryData(
-      pageBinaryData,
-      true
-    );
+    const { contentBinaryEncoded, contentHTML, contentJSON, titleHTML } =
+      getAllDocumentFormatsFromDocumentEditorBinaryData(pageBinaryData, true);
     // create payload
     const payload: TDocumentPayload = {
       description_binary: contentBinaryEncoded,
       description_html: contentHTML,
       description_json: contentJSON,
     };
-    await service.updateDescriptionBinary(pageId, payload);
+    await service.updateDescriptionBinary(pageId, { ...payload, name: titleHTML || undefined });
   } catch (error) {
     const appError = new AppError(error, { context: { pageId } });
     logger.error("Error in updating document:", appError);

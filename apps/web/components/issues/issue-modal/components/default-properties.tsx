@@ -29,6 +29,7 @@ import { ModuleSelect } from "@/components/dropdowns/module/module-select";
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
 import { StateSelect } from "@/components/dropdowns/state/state-select";
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
+import { MilestoneSelect } from "@/components/milestones/select";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -216,6 +217,25 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               variant="pill-md"
               clearable
               tabIndex={getIndex("cycle_id")}
+            />
+          )}
+        />
+      )}
+      {projectDetails?.milestone_view && projectId && !isDraft && (
+        <Controller
+          control={control}
+          name="milestone_id"
+          render={({ field: { value, onChange } }) => (
+            <MilestoneSelect
+              projectId={projectId}
+              onChange={(milestoneId) => {
+                onChange(milestoneId);
+                handleFormChange();
+              }}
+              placeholder={t("common.milestone")}
+              value={value ?? null}
+              variant="pill-md"
+              clearable
             />
           )}
         />

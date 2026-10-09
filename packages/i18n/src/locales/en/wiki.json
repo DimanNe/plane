@@ -1,5 +1,6 @@
 {
   "wiki_collections": {
+    "title": "Collections",
     "predefined": {
       "general": "General",
       "private": "Private",
@@ -30,6 +31,8 @@
       "transfer_target_placeholder": "Select a collection",
       "delete_with_pages_title": "Delete collection with pages",
       "delete_with_pages_description": "Permanently delete the collection and all its pages. This action can't be undone.",
+      "keep_pages_description": "The collection will be deleted. Its pages stay in the wiki and move to General.",
+      "archive_pages_description": "The collection will be deleted and its pages archived. You can restore them from Archived.",
       "submit": "Delete collection"
     },
     "header": {
@@ -47,6 +50,8 @@
       "error_message": "Pages could not be moved. Please try again.",
       "no_pages_found": "No pages found matching your search",
       "no_pages_available": "No pages available to move",
+      "public_hint": "A page added to a public collection becomes public, with its nested pages.",
+      "private_hint": "A page added to a private collection becomes private, with its nested pages.",
       "submit": "Move"
     },
     "list": {
@@ -78,6 +83,7 @@
       "rename_error": "Collection could not be updated. Please try again.",
       "transferred_deleted": "Pages transferred and collection deleted.",
       "deleted_with_pages": "Collection and its pages deleted.",
+      "deleted": "Collection deleted successfully.",
       "delete_error": "Collection could not be deleted. Please try again.",
       "target_required": "Please select a collection to move pages to.",
       "create_page_error": "Page could not be created. Please try again.",
@@ -86,6 +92,17 @@
     }
   },
   "wiki": {
+    "title": "Wiki",
+    "new_page": "New page",
+    "disabled": {
+      "title": "The wiki is turned off",
+      "description": "A workspace admin can turn it on in Workspace settings, under Wiki."
+    },
+    "not_found": {
+      "title": "Page not found",
+      "description": "The page you are trying to access doesn't exist or you don't have permission to view it.",
+      "cta": "Go to wiki home"
+    },
     "upgrade_flow": {
       "title": "Upgrade to unlock Wiki",
       "description": "Unlock public pages, version history, shared pages, real-time collaboration, and workspace pages for wikis, company-wide docs, and knowledge bases with Plane Pro.",

@@ -5,7 +5,7 @@
  */
 
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
-import { isEmpty } from "lodash-es";
+import { isEmpty, pickBy } from "lodash-es";
 import { v4 as uuidv4 } from "uuid";
 // plane imports
 import type { TIssueFilterPriorityObject, TIssuePriorities } from "@plane/constants";
@@ -28,6 +28,7 @@ import { EIssueLayoutTypes } from "@plane/types";
 import { orderArrayBy } from "../array";
 import { getDate } from "../datetime";
 import { isEditorEmpty } from "../editor";
+import { isWorkItemPropertyKey } from "../work-item-type";
 
 type THandleIssuesMutation = (
   formData: Partial<TIssue>,
@@ -294,6 +295,8 @@ export const getComputedDisplayFilters = (
 export const getComputedDisplayProperties = (
   displayProperties: IIssueDisplayProperties = {}
 ): IIssueDisplayProperties => ({
+  // custom properties have a key each, which the fixed keys below would drop
+  ...pickBy(displayProperties, (_value, key) => isWorkItemPropertyKey(key)),
   assignee: displayProperties?.assignee ?? true,
   start_date: displayProperties?.start_date ?? true,
   due_date: displayProperties?.due_date ?? true,
@@ -307,6 +310,7 @@ export const getComputedDisplayProperties = (
   key: displayProperties?.key ?? true,
   created_on: displayProperties?.created_on ?? true,
   updated_on: displayProperties?.updated_on ?? true,
+  milestone: displayProperties?.milestone ?? true,
   modules: displayProperties?.modules ?? true,
   cycle: displayProperties?.cycle ?? true,
   issue_type: displayProperties?.issue_type ?? true,

@@ -19,6 +19,8 @@ import { logger, loggerMiddleware } from "@plane/logger";
 import { CONTROLLERS } from "@/controllers";
 // env
 import { env } from "@/env";
+// extensions
+import { DatabaseWithSaveStatus } from "@/extensions/save-status";
 // hocuspocus server
 import { HocusPocusServerManager } from "@/hocuspocus";
 // redis
@@ -62,6 +64,8 @@ export class Server {
     // Logging middleware
     this.app.use(loggerMiddleware);
     // Body parsing middleware
+    // A page document is larger than the default limit of the JSON parser.
+    this.app.use(`${env.LIVE_BASE_PATH}/page-content`, express.json({ limit: "20mb" }));
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
     // cors middleware
@@ -104,25 +108,34 @@ export class Server {
   }
 
   public async destroy() {
+    // Stop listening first: an editor connects again as soon as its connection is closed.
+    const httpServer = this.httpServer;
+    const httpServerClosed = new Promise<void>((resolve, reject) => {
+      if (httpServer) {
+        httpServer.close((err) => (err ? reject(err) : resolve()));
+      } else {
+        resolve();
+      }
+    });
+
     if (this.hocuspocusServer) {
-      this.hocuspocusServer.closeConnections();
-      logger.info("SERVER: HocusPocus connections closed gracefully.");
+      const hocuspocusServer = this.hocuspocusServer;
+      const database = hocuspocusServer.configuration.extensions.find(
+        (extension) => extension instanceof DatabaseWithSaveStatus
+      );
+      // Hocuspocus drops the error of a store it runs while closing, and does not wait for one that is
+      // running. This throws unless every document is stored, and the process then exits with an error.
+      await database!.storeLoadedDocuments(hocuspocusServer);
+      await hocuspocusServer.destroy();
+      logger.info("SERVER: HocusPocus documents stored and connections closed gracefully.");
     }
 
     await redisManager.disconnect();
     logger.info("SERVER: Redis connection closed gracefully.");
 
-    if (this.httpServer) {
-      await new Promise<void>((resolve, reject) => {
-        this.httpServer!.close((err) => {
-          if (err) {
-            reject(err);
-          } else {
-            logger.info("SERVER: Express server closed gracefully.");
-            resolve();
-          }
-        });
-      });
-    }
+    // connections that are kept alive would hold the server open
+    httpServer?.closeAllConnections();
+    await httpServerClosed;
+    logger.info("SERVER: Express server closed gracefully.");
   }
 }

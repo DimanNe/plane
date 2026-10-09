@@ -19,6 +19,7 @@ import {
   LabelsOutline,
   LinkOutline,
   MembersOutline,
+  MilestoneOutline,
   ModuleOutline,
   PriorityOutline,
   StartDateOutline,
@@ -66,6 +67,7 @@ import {
   SpreadsheetLabelColumn,
   SpreadsheetModuleColumn,
   SpreadsheetCycleColumn,
+  SpreadsheetMilestoneColumn,
   SpreadsheetLinkColumn,
   SpreadsheetPriorityColumn,
   SpreadsheetStartDateColumn,
@@ -146,6 +148,7 @@ export const getGroupByColumns = ({
     project: getProjectColumns,
     cycle: getCycleColumns,
     module: getModuleColumns,
+    milestone: getMilestoneColumns,
     state: getStateColumns,
     "state_detail.group": getStateGroupColumns,
     priority: getPriorityColumns,
@@ -237,6 +240,31 @@ const getModuleColumns = (): IGroupByColumn[] | undefined => {
     payload: {},
   });
   return modules;
+};
+
+const getMilestoneColumns = (): IGroupByColumn[] | undefined => {
+  // get current project details
+  const { currentProjectDetails } = store.projectRoot.project;
+  if (!currentProjectDetails || !currentProjectDetails?.id) return;
+  // get the milestones of the project, by target date
+  const milestoneDetails = store.milestone.getProjectMilestones(currentProjectDetails.id);
+  // map milestone details to group by columns
+  const milestones: IGroupByColumn[] = [];
+  milestoneDetails?.map((milestone) => {
+    milestones.push({
+      id: milestone.id,
+      name: milestone.title,
+      icon: <MilestoneOutline className="h-3.5 w-3.5" />,
+      payload: { milestone_id: milestone.id },
+    });
+  });
+  milestones.push({
+    id: "None",
+    name: "None",
+    icon: <MilestoneOutline className="h-3.5 w-3.5" />,
+    payload: { milestone_id: null },
+  });
+  return milestones;
 };
 
 const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefined => {
@@ -852,6 +880,7 @@ export const SpreadSheetPropertyIconMap: Record<string, FC<ISvgIcons>> = {
   EstimateOutline: EstimateOutline,
   LabelsOutline: LabelsOutline,
   ModuleOutline: ModuleOutline,
+  MilestoneOutline: MilestoneOutline,
   ContrastIcon: CyclesOutline,
   PriorityOutline: PriorityOutline,
   StartDateOutline: StartDateOutline,
@@ -869,6 +898,7 @@ export const SPREADSHEET_COLUMNS: { [key in keyof IIssueDisplayProperties]: TSpr
   labels: SpreadsheetLabelColumn,
   modules: SpreadsheetModuleColumn,
   cycle: SpreadsheetCycleColumn,
+  milestone: SpreadsheetMilestoneColumn,
   link: SpreadsheetLinkColumn,
   priority: SpreadsheetPriorityColumn,
   start_date: SpreadsheetStartDateColumn,

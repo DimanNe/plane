@@ -21,7 +21,9 @@ import {
   PROJECT_MEMBER_PREFERENCES,
   PROJECT_STATES,
   PROJECT_ESTIMATES,
+  WORK_ITEM_TYPES_PROPERTIES_AND_OPTIONS,
   PROJECT_ALL_CYCLES,
+  PROJECT_MILESTONES,
   PROJECT_MODULES,
   PROJECT_VIEWS,
   PROJECT_INTAKE_STATE,
@@ -31,10 +33,12 @@ import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useLabel } from "@/hooks/store/use-label";
 import { useMember } from "@/hooks/store/use-member";
+import { useMilestone } from "@/hooks/store/use-milestone";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectView } from "@/hooks/store/use-project-view";
+import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useTimeLineChart } from "@/hooks/use-timeline-chart";
 
@@ -54,6 +58,7 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { fetchProjectDetails } = useProject();
   const { joinProject } = useUserPermissions();
   const { fetchAllCycles } = useCycle();
+  const { fetchMilestones } = useMilestone();
   const { fetchModulesSlim, fetchModules } = useModule();
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.MODULE);
   const { fetchViews } = useProjectView();
@@ -64,6 +69,7 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { data: currentUserData } = useUser();
   const { fetchProjectLabels } = useLabel();
   const { getProjectEstimates } = useProjectEstimates();
+  const { fetchWorkItemTypes } = useWorkItemTypes();
   // derived values
   const hasPermissionToCurrentProject = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
@@ -117,8 +123,19 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
     revalidateIfStale: false,
     revalidateOnFocus: false,
   });
+  // fetching project work item types and their properties
+  useSWR(
+    WORK_ITEM_TYPES_PROPERTIES_AND_OPTIONS(projectId, currentProjectRole),
+    () => fetchWorkItemTypes(workspaceSlug, projectId),
+    { revalidateIfStale: false, revalidateOnFocus: false }
+  );
   // fetching project cycles
   useSWR(PROJECT_ALL_CYCLES(projectId, currentProjectRole), () => fetchAllCycles(workspaceSlug, projectId), {
+    revalidateIfStale: false,
+    revalidateOnFocus: false,
+  });
+  // fetching project milestones
+  useSWR(PROJECT_MILESTONES(projectId, currentProjectRole), () => fetchMilestones(workspaceSlug, projectId), {
     revalidateIfStale: false,
     revalidateOnFocus: false,
   });

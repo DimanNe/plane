@@ -12,6 +12,7 @@ import {
   DueDateOutline,
   LabelsOutline,
   MembersOutline,
+  MilestoneOutline,
   ModuleOutline,
   PriorityOutline,
   ProjectsOutline,
@@ -23,6 +24,7 @@ import {
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { Logo } from "@plane/blocks/emoji-icon-picker";
 import { CycleGroupIcon, PriorityIcon, StateGroupIcon } from "@plane/blocks/icons";
+import { useTranslation } from "@plane/i18n";
 import type {
   ICycle,
   IState,
@@ -33,33 +35,45 @@ import type {
   IProject,
   TWorkItemFilterProperty,
 } from "@plane/types";
+import { COLLECTION_OPERATOR, EQUALITY_OPERATOR } from "@plane/types";
 
 import {
+  createFilterConfig,
+  createOperatorConfigEntry,
   getAssigneeFilterConfig,
   getCreatedAtFilterConfig,
   getCreatedByFilterConfig,
   getCycleFilterConfig,
+  getDatePropertyFilterConfig,
   getFileURL,
   getLabelFilterConfig,
+  getMemberMultiSelectConfig,
   getMentionFilterConfig,
   getModuleFilterConfig,
+  getMultiSelectConfig,
   getPriorityFilterConfig,
   getProjectFilterConfig,
+  getSingleSelectConfig,
   getStartDateFilterConfig,
   getStateFilterConfig,
   getStateGroupFilterConfig,
   getSubscriberFilterConfig,
   getTargetDateFilterConfig,
   getUpdatedAtFilterConfig,
+  getWorkItemPropertyTypeKey,
   isLoaderReady,
 } from "@plane/utils";
+// components
+import { WORK_ITEM_PROPERTY_TYPE_ICONS } from "@/components/work-item-types/property-icon";
 // store hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useLabel } from "@/hooks/store/use-label";
 import { useMember } from "@/hooks/store/use-member";
+import { useMilestone } from "@/hooks/store/use-milestone";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/hooks/rich-filters/use-filters-operator-configs";
 
@@ -96,8 +110,12 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const { getCycleById } = useCycle();
   const { getLabelById } = useLabel();
   const { getModuleById } = useModule();
+  const { getProjectMilestones } = useMilestone();
   const { getStateById } = useProjectState();
   const { getUserDetails } = useMember();
+  const { getProjectWorkItemProperties } = useWorkItemTypes();
+  // translation
+  const { t } = useTranslation();
   // derived values
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
   const filtersToShow = useMemo(() => new Set(allowedFilters), [allowedFilters]);
@@ -137,6 +155,9 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         : [],
     [projectIds, getProjectById]
   );
+  const milestones = projectId ? getProjectMilestones(projectId) : null;
+  const milestoneLabel = t("common.milestone");
+  const workItemProperties = getProjectWorkItemProperties(projectId);
   const areAllConfigsInitialized = useMemo(() => isLoaderReady(projectLoader), [projectLoader]);
 
   /**
@@ -211,6 +232,33 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         ...operatorConfigs,
       }),
     [isFilterEnabled, project?.module_view, modules, operatorConfigs]
+  );
+
+  // milestone filter config
+  const milestoneFilterConfig = useMemo(
+    () =>
+      createFilterConfig<TWorkItemFilterProperty>({
+        id: "milestone_id",
+        label: milestoneLabel,
+        isEnabled: isFilterEnabled("milestone_id") && project?.milestone_view === true && !!milestones,
+        icon: MilestoneOutline,
+        supportedOperatorConfigsMap: new Map([
+          createOperatorConfigEntry(COLLECTION_OPERATOR.IN, { isEnabled: true, ...operatorConfigs }, (params) =>
+            getMultiSelectConfig<{ id: string; title: string }, string, undefined>(
+              {
+                items: milestones ?? [],
+                getId: (milestone) => milestone.id,
+                getLabel: (milestone) => milestone.title,
+                getValue: (milestone) => milestone.id,
+                getIconData: () => undefined,
+              },
+              { singleValueOperator: EQUALITY_OPERATOR.EXACT, ...params },
+              { getOptionIcon: () => <MilestoneOutline className="h-3 w-3 flex-shrink-0" /> }
+            )
+          ),
+        ]),
+      }),
+    [isFilterEnabled, project?.milestone_view, milestones, milestoneLabel, operatorConfigs]
   );
 
   // assignee filter config
@@ -362,6 +410,88 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     [isFilterEnabled, projects, operatorConfigs]
   );
 
+  // custom property filter configs
+  const workItemPropertyFilterConfigs = useMemo(
+    () =>
+      workItemProperties.flatMap((property) => {
+        const id: TWorkItemFilterProperty = `customproperty_${property.id}`;
+        const propertyTypeKey = getWorkItemPropertyTypeKey(property);
+        const params = {
+          isEnabled: property.is_active,
+          filterIcon: WORK_ITEM_PROPERTY_TYPE_ICONS[propertyTypeKey],
+          ...operatorConfigs,
+        };
+        const getSelectFilterConfig = (operatorConfigEntry: ReturnType<typeof createOperatorConfigEntry>) =>
+          createFilterConfig<TWorkItemFilterProperty>({
+            id,
+            label: property.display_name,
+            isEnabled: params.isEnabled,
+            icon: params.filterIcon,
+            supportedOperatorConfigsMap: new Map([operatorConfigEntry]),
+          });
+        switch (propertyTypeKey) {
+          case "OPTION":
+            return getSelectFilterConfig(
+              createOperatorConfigEntry(COLLECTION_OPERATOR.IN, params, (updatedParams) =>
+                getMultiSelectConfig(
+                  {
+                    items: property.options,
+                    getId: (option) => option.id,
+                    getLabel: (option) => option.name,
+                    getValue: (option) => option.id,
+                  },
+                  { singleValueOperator: EQUALITY_OPERATOR.EXACT, ...updatedParams }
+                )
+              )
+            );
+          case "RELATION_USER":
+            return getSelectFilterConfig(
+              createOperatorConfigEntry(
+                COLLECTION_OPERATOR.IN,
+                {
+                  ...params,
+                  members: members ?? [],
+                  getOptionIcon: (memberDetails: IUserLite) => (
+                    <Avatar
+                      alt={memberDetails.display_name}
+                      fallback={memberDetails.display_name?.[0]?.toUpperCase()}
+                      src={getFileURL(memberDetails.avatar_url)}
+                      size="2xs"
+                    />
+                  ),
+                },
+                (updatedParams) => getMemberMultiSelectConfig(updatedParams, EQUALITY_OPERATOR.EXACT)
+              )
+            );
+          case "BOOLEAN":
+            return getSelectFilterConfig(
+              createOperatorConfigEntry(EQUALITY_OPERATOR.EXACT, params, (updatedParams) =>
+                getSingleSelectConfig(
+                  {
+                    items: [
+                      { value: "true", label: t("common.yes") },
+                      { value: "false", label: t("common.no") },
+                    ],
+                    getId: (item) => item.value,
+                    getLabel: (item) => item.label,
+                    getValue: (item) => item.value,
+                  },
+                  updatedParams
+                )
+              )
+            );
+          case "DATETIME":
+            return getDatePropertyFilterConfig<TWorkItemFilterProperty>(id)({
+              ...params,
+              propertyDisplayName: property.display_name,
+            });
+          default:
+            return [];
+        }
+      }),
+    [workItemProperties, members, operatorConfigs, t]
+  );
+
   return {
     areAllConfigsInitialized,
     configs: [
@@ -374,12 +504,14 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       labelFilterConfig,
       cycleFilterConfig,
       moduleFilterConfig,
+      milestoneFilterConfig,
       startDateFilterConfig,
       targetDateFilterConfig,
       createdAtFilterConfig,
       updatedAtFilterConfig,
       createdByFilterConfig,
       subscriberFilterConfig,
+      ...workItemPropertyFilterConfigs,
     ],
     configMap: {
       project_id: projectFilterConfig,
@@ -388,6 +520,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       label_id: labelFilterConfig,
       cycle_id: cycleFilterConfig,
       module_id: moduleFilterConfig,
+      milestone_id: milestoneFilterConfig,
       assignee_id: assigneeFilterConfig,
       mention_id: mentionFilterConfig,
       created_by_id: createdByFilterConfig,

@@ -6,6 +6,7 @@
 
 import type { TIssuePriorities } from "../issues";
 import type { TStateGroups } from "../state";
+import type { TWorkItemPropertyValue } from "../work-item-type";
 import type { TIssuePublicComment } from "./activity/issue_comment";
 import type { TIssueAttachment } from "./issue_attachment";
 import type { TIssueLink } from "./issue_link";
@@ -61,8 +62,12 @@ export type TBaseIssue = {
   project_id: string | null;
   parent_id: string | null;
   cycle_id: string | null;
+  milestone_id?: string | null;
   module_ids: string[] | null;
   type_id: string | null;
+  custom_properties?: Record<string, TWorkItemPropertyValue>;
+  formula_values?: Record<string, TWorkItemPropertyValue>;
+  formula_errors?: Record<string, string>;
 
   created_at: string;
   updated_at: string;

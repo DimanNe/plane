@@ -44,6 +44,7 @@ type ChartViewRootProps = {
   canLoadMoreBlocks?: boolean;
   quickAdd?: React.ReactNode | undefined;
   showToday: boolean;
+  initialDate?: Date;
   isEpic?: boolean;
 };
 
@@ -75,6 +76,7 @@ export const ChartViewRoot = observer(function ChartViewRoot(props: ChartViewRoo
     showAllBlocks,
     quickAdd,
     showToday,
+    initialDate,
     updateBlockDates,
     isEpic = false,
   } = props;
@@ -96,12 +98,19 @@ export const ChartViewRoot = observer(function ChartViewRoot(props: ChartViewRoo
 
   const updateCurrentViewRenderPayload = (side: null | "left" | "right", view: TGanttViews, targetDate?: Date) => {
     const selectedCurrentView: TGanttViews = view;
-    const selectedCurrentViewData: ChartDataType | undefined =
+    let selectedCurrentViewData: ChartDataType | undefined =
       selectedCurrentView && selectedCurrentView === currentViewData?.key
         ? currentViewData
         : currentViewDataWithView(view);
 
     if (selectedCurrentViewData === undefined) return;
+
+    // a chart that is not extended to a side is generated around the target date
+    if (side === null && targetDate)
+      selectedCurrentViewData = {
+        ...selectedCurrentViewData,
+        data: { ...selectedCurrentViewData.data, currentDate: targetDate },
+      };
 
     const currentViewHelpers = timelineViewHelpers[selectedCurrentView];
     const currentRender = currentViewHelpers.generateChart(selectedCurrentViewData, side, targetDate, startOfWeek);
@@ -138,11 +147,11 @@ export const ChartViewRoot = observer(function ChartViewRoot(props: ChartViewRoo
     return currentRender.state;
   };
 
-  const handleToday = () => updateCurrentViewRenderPayload(null, currentView);
+  const handleToday = () => updateCurrentViewRenderPayload(null, currentView, new Date());
 
   // handling the scroll positioning from left and right
   useEffect(() => {
-    handleToday();
+    updateCurrentViewRenderPayload(null, currentView, initialDate ?? new Date());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

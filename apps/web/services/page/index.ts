@@ -4,5 +4,7 @@
  * See the LICENSE file for details.
  */
 
+export * from "./page-collection.service";
 export * from "./project-page-version.service";
 export * from "./project-page.service";
+export * from "./workspace-page.service";

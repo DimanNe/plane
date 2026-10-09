@@ -21,6 +21,7 @@ export type TIssueGroupByOptions =
   | "assignees"
   | "cycle"
   | "module"
+  | "milestone"
   | "target_date"
   | "team_project"
   | null;
@@ -39,6 +40,8 @@ export type TIssueOrderByOptions =
   | "-assignees__first_name"
   | "labels__name"
   | "-labels__name"
+  | "milestone__title"
+  | "-milestone__title"
   | "issue_module__module__name"
   | "-issue_module__module__name"
   | "issue_cycle__cycle__name"
@@ -71,6 +74,7 @@ export type TIssueParams =
   | "labels"
   | "cycle"
   | "module"
+  | "milestone"
   | "start_date"
   | "target_date"
   | "project"
@@ -106,11 +110,12 @@ export const WORK_ITEM_FILTER_PROPERTY_KEYS = [
   "state_id",
   "cycle_id",
   "module_id",
+  "milestone_id",
   "project_id",
   "created_at",
   "updated_at",
 ] as const;
-export type TWorkItemFilterProperty = (typeof WORK_ITEM_FILTER_PROPERTY_KEYS)[number];
+export type TWorkItemFilterProperty = (typeof WORK_ITEM_FILTER_PROPERTY_KEYS)[number] | `customproperty_${string}`;
 
 export type TWorkItemFilterConditionKey = `${TWorkItemFilterProperty}__${TSupportedOperators}`;
 
@@ -172,9 +177,11 @@ export interface IIssueDisplayProperties {
   estimate?: boolean;
   created_on?: boolean;
   updated_on?: boolean;
+  milestone?: boolean;
   modules?: boolean;
   cycle?: boolean;
   issue_type?: boolean;
+  [key: `custom_properties__${string}`]: boolean | undefined;
 }
 
 export type TIssueKanbanFilters = {
@@ -267,6 +274,7 @@ export interface IssuePaginationOptions {
 
 export type TSpreadsheetColumn = React.FC<{
   issue: TIssue;
+  property: keyof IIssueDisplayProperties;
   onClose: () => void;
   onChange: (issue: TIssue, data: Partial<TIssue>, updates: any) => void;
   disabled: boolean;

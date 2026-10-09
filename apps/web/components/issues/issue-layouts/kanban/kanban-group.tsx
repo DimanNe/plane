@@ -218,6 +218,8 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
         preloadedData = { ...preloadedData, label_ids: [groupValue] };
       } else if (groupByKey === "assignees" && groupValue != "None") {
         preloadedData = { ...preloadedData, assignee_ids: [groupValue] };
+      } else if (groupByKey === "milestone") {
+        preloadedData = { ...preloadedData, milestone_id: groupValue === "None" ? null : groupValue };
       } else if (groupByKey === "created_by") {
         preloadedData = { ...preloadedData };
       } else {
@@ -238,6 +240,8 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
         preloadedData = { ...preloadedData, label_ids: [subGroupValue] };
       } else if (subGroupByKey === "assignees" && subGroupValue != "None") {
         preloadedData = { ...preloadedData, assignee_ids: [subGroupValue] };
+      } else if (subGroupByKey === "milestone") {
+        preloadedData = { ...preloadedData, milestone_id: subGroupValue === "None" ? null : subGroupValue };
       } else if (subGroupByKey === "created_by") {
         preloadedData = { ...preloadedData };
       } else {

@@ -4,7 +4,13 @@
  * See the LICENSE file for details.
  */
 
-import { BlockingOutline, CloseCircleOutline, DuplicateOfOutline, RelatesToOutline } from "@makeplane/propel/icons";
+import {
+  BlockingOutline,
+  CloseCircleOutline,
+  DependencyOutline,
+  DuplicateOfOutline,
+  RelatesToOutline,
+} from "@makeplane/propel/icons";
 import type { TRelationObject } from "@/components/issues/issue-detail-widgets/relations";
 import type { TIssueRelationTypes } from "@plane/types";
 
@@ -35,6 +41,34 @@ export const ISSUE_RELATION_OPTIONS: Record<TIssueRelationTypes, TRelationObject
     i18n_label: "issue.relation.blocking",
     className: "bg-yellow-500/20 text-yellow-700",
     icon: (size) => <CloseCircleOutline width={size} height={size} className="text-secondary" />,
+    placeholder: "None",
+  },
+  start_before: {
+    key: "start_before",
+    i18n_label: "issue.relation.start_before",
+    className: "bg-layer-1 text-secondary",
+    icon: (size) => <DependencyOutline width={size} height={size} className="text-secondary" />,
+    placeholder: "None",
+  },
+  start_after: {
+    key: "start_after",
+    i18n_label: "issue.relation.start_after",
+    className: "bg-layer-1 text-secondary",
+    icon: (size) => <DependencyOutline width={size} height={size} className="text-secondary" />,
+    placeholder: "None",
+  },
+  finish_before: {
+    key: "finish_before",
+    i18n_label: "issue.relation.finish_before",
+    className: "bg-layer-1 text-secondary",
+    icon: (size) => <DependencyOutline width={size} height={size} className="text-secondary" />,
+    placeholder: "None",
+  },
+  finish_after: {
+    key: "finish_after",
+    i18n_label: "issue.relation.finish_after",
+    className: "bg-layer-1 text-secondary",
+    icon: (size) => <DependencyOutline width={size} height={size} className="text-secondary" />,
     placeholder: "None",
   },
 };

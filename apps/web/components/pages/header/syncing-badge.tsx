@@ -4,19 +4,26 @@
  * See the LICENSE file for details.
  */
 
-import { useState, useEffect } from "react";
-import { CloudOff, Dot } from "lucide-react";
+import { Check, CloudOff, Dot } from "lucide-react";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { Badge } from "@makeplane/propel/components/badge";
 
 type Props = {
-  syncStatus: "syncing" | "synced" | "error";
+  syncStatus: "syncing" | "synced" | "unsaved" | "error";
 };
 
 const BADGE_CONTENT = {
   syncing: {
     label: "Syncing...",
     tooltipLabel: "Syncing... Your changes are being synced with the server. You can continue making changes.",
+  },
+  synced: {
+    label: "Saved",
+    tooltipLabel: "Saved. The server has stored all your changes.",
+  },
+  unsaved: {
+    label: "Unsaved changes",
+    tooltipLabel: "Unsaved changes. The server has not stored your latest changes yet. Keep this page open.",
   },
   error: {
     label: "Connection lost",
@@ -25,35 +32,21 @@ const BADGE_CONTENT = {
   },
 };
 
+const BADGE_VARIANT = { syncing: "brand", synced: "neutral", unsaved: "warning", error: "danger" } as const;
+
+const BADGE_ICON = { syncing: Dot, synced: Check, unsaved: Dot, error: CloudOff };
+
 export function PageSyncingBadge({ syncStatus }: Props) {
-  const [isVisible, setIsVisible] = useState(syncStatus !== "synced");
-
-  // Runs once per status change. The pending hide is cancelled if the status moves on (or the badge
-  // unmounts) before it fires, so a stale timer can't hide the badge during a later sync.
-  useEffect(() => {
-    if (syncStatus !== "synced") {
-      setIsVisible(true);
-      return;
-    }
-    // Delay hiding to allow exit animation to complete
-    const timeoutId = setTimeout(() => {
-      setIsVisible(false);
-    }, 300); // match animation duration
-    return () => clearTimeout(timeoutId);
-  }, [syncStatus]);
-
-  if (!isVisible || syncStatus === "synced") return null;
-
-  // The synced early-return above guarantees this key exists
   const content = BADGE_CONTENT[syncStatus];
+  const Icon = BADGE_ICON[syncStatus];
 
   return (
     <Tooltip label={content.tooltipLabel} layout="stacked">
       <span className="animate-quickFadeIn">
         <Badge
-          variant={syncStatus === "syncing" ? "brand" : "danger"}
+          variant={BADGE_VARIANT[syncStatus]}
           size="sm"
-          startIcon={syncStatus === "syncing" ? <Dot className="size-4" /> : <CloudOff className="size-4" />}
+          startIcon={<Icon className="size-4" />}
           label={content.label}
         />
       </span>

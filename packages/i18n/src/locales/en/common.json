@@ -723,7 +723,8 @@
     "developer": "Developer",
     "work_structure": "Work structure",
     "execution": "Execution",
-    "administration": "Administration"
+    "administration": "Administration",
+    "milestone": "Milestone"
   },
   "chart": {
     "x_axis": "X-axis",

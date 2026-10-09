@@ -26,6 +26,7 @@ export interface IPartialProject {
   archived_at: string | null;
   workspace: IWorkspace | string;
   cycle_view: boolean;
+  milestone_view?: boolean;
   issue_views_view: boolean;
   module_view: boolean;
   page_view: boolean;
@@ -54,6 +55,7 @@ export interface IProject extends IPartialProject {
   default_state?: string | null;
   description?: string;
   estimate?: string | null;
+  is_issue_type_enabled?: boolean;
   anchor?: string | null;
   is_favorite?: boolean;
   members?: string[];
@@ -151,6 +153,7 @@ export type TProjectIssuesSearchParams = {
   issue_relation?: boolean;
   cycle?: boolean;
   module?: string;
+  milestone?: boolean;
   sub_issue?: boolean;
   issue_id?: string;
   workspace_search: boolean;

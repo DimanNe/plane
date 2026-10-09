@@ -5,13 +5,14 @@
  */
 
 import type { RefObject } from "react";
-import React from "react";
+import React, { useRef } from "react";
 import { observer } from "mobx-react";
 // hooks
 import type { IGanttBlock } from "@plane/types";
 // helpers
 import { cn } from "@plane/utils";
 // components
+import { DependencyHandle } from "../dependency/handle";
 import { LeftResizable } from "./blockResizables/left-resizable";
 import { RightResizable } from "./blockResizables/right-resizable";
 
@@ -35,11 +36,17 @@ export const ChartDraggable = observer(function ChartDraggable(props: Props) {
     enableBlockLeftResize,
     enableBlockRightResize,
     enableBlockMove,
+    enableDependency,
     isMoving,
   } = props;
+  // refs
+  const blockRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="group relative z-[5] inline-flex h-full w-full cursor-pointer items-center font-medium transition-all">
+    <div
+      ref={blockRef}
+      className="group relative z-[5] inline-flex h-full w-full cursor-pointer items-center font-medium transition-all"
+    >
       <LeftResizable
         enableBlockLeftResize={enableBlockLeftResize}
         handleBlockDrag={handleBlockDrag}
@@ -62,6 +69,7 @@ export const ChartDraggable = observer(function ChartDraggable(props: Props) {
         isMoving={isMoving}
         position={block.position}
       />
+      {enableDependency === true && enableBlockMove && <DependencyHandle blockId={block.id} blockRef={blockRef} />}
     </div>
   );
 });

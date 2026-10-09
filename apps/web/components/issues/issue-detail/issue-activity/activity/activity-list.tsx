@@ -18,6 +18,7 @@ import {
   IssueStateActivity,
   IssueAssigneeActivity,
   IssuePriorityActivity,
+  IssueCustomPropertyActivity,
   IssueEstimateActivity,
   IssueParentActivity,
   IssueRelationActivity,
@@ -25,6 +26,7 @@ import {
   IssueTargetDateActivity,
   IssueCycleActivity,
   IssueModuleActivity,
+  IssueMilestoneActivity,
   IssueLabelActivity,
   IssueLinkActivity,
   IssueAttachmentActivity,
@@ -64,6 +66,9 @@ export const IssueActivityItem = observer(function IssueActivityItem(props: TIss
       return <IssueAssigneeActivity {...componentDefaultProps} showIssue={false} />;
     case "priority":
       return <IssuePriorityActivity {...componentDefaultProps} showIssue={false} />;
+    case "type":
+    case "custom_property":
+      return <IssueCustomPropertyActivity {...componentDefaultProps} />;
     case "estimate_points":
     case "estimate_categories":
     case "estimate_point" /* This case is to handle all the older recorded activities for estimates. Field changed from  "estimate_point" -> `estimate_${estimate_type}`*/:
@@ -80,6 +85,8 @@ export const IssueActivityItem = observer(function IssueActivityItem(props: TIss
       return <IssueCycleActivity {...componentDefaultProps} />;
     case "modules":
       return <IssueModuleActivity {...componentDefaultProps} />;
+    case "milestone":
+      return <IssueMilestoneActivity {...componentDefaultProps} />;
     case "labels":
       return <IssueLabelActivity {...componentDefaultProps} showIssue={false} />;
     case "link":

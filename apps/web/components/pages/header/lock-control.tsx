@@ -81,7 +81,7 @@ export const PageLockControl = observer(function PageLockControl({ page }: Props
         <Tooltip label="Lock" side="bottom">
           <button
             type="button"
-            onClick={toggleLock}
+            onClick={() => toggleLock()}
             className="grid size-6 flex-shrink-0 place-items-center rounded-sm text-secondary transition-colors hover:bg-layer-1 hover:text-primary"
             aria-label="Lock"
           >
@@ -93,7 +93,7 @@ export const PageLockControl = observer(function PageLockControl({ page }: Props
       {displayState === "locked" && (
         <button
           type="button"
-          onClick={toggleLock}
+          onClick={() => toggleLock()}
           className="flex h-6 items-center gap-1 rounded-sm bg-accent-primary/20 px-2 text-accent-primary transition-colors hover:bg-accent-primary/30"
           aria-label="Locked"
         >

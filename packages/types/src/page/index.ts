@@ -4,5 +4,6 @@
  * See the LICENSE file for details.
  */
 
+export * from "./collection";
 export * from "./core";
 export * from "./extended";

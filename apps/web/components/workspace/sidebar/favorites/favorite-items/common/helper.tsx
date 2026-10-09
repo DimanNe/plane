@@ -18,6 +18,8 @@ export const generateFavoriteItemLink = (workspaceSlug: string, favorite: IFavor
   if (entityLinkDetails.itemLevel === "workspace") {
     return `/${workspaceSlug}/${entityLinkDetails.getLink(favorite)}`;
   } else if (entityLinkDetails.itemLevel === "project") {
+    // a wiki page has no project
+    if (!favorite.project_id) return `/${workspaceSlug}/wiki/${entityLinkDetails.getLink(favorite)}`;
     return `/${workspaceSlug}/projects/${favorite.project_id}/${entityLinkDetails.getLink(favorite)}`;
   } else {
     return `/${workspaceSlug}`;
