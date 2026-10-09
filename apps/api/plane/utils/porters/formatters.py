@@ -15,7 +15,6 @@ from abc import ABC, abstractmethod
 from io import BytesIO, StringIO
 from typing import Any, Dict, List, Union
 
-from openpyxl import Workbook, load_workbook
 
 
 # Module imports
@@ -197,6 +196,9 @@ class XLSXFormatter(BaseFormatter):
 
     def encode(self, data: List[Dict]) -> bytes:
         """Encode data to XLSX bytes."""
+        # Imported where it is used: the package is slow to load and few requests need it
+        from openpyxl import Workbook
+
         wb = Workbook()
         ws = wb.active
 
@@ -238,6 +240,9 @@ class XLSXFormatter(BaseFormatter):
             content: XLSX file bytes
             normalize_headers: If True, converts 'Display Name' → 'display_name'
         """
+        # Imported where it is used: the package is slow to load and few requests need it
+        from openpyxl import load_workbook
+
         wb = load_workbook(filename=BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
 

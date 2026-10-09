@@ -41,6 +41,10 @@ test-results/
 # Caches and build artifacts
 .cache/
 **/.cache/
+**/.pytest_cache/
+**/.ruff_cache/
+apps/api/plane/logs/
+apps/api/static-assets/
 storybook-static/
 *storybook.log
 *.tsbuildinfo

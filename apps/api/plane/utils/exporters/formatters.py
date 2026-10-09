@@ -7,7 +7,6 @@ import io
 import json
 from typing import Any, Dict, List, Type
 
-from openpyxl import Workbook
 
 # Module imports
 from plane.utils.csv_utils import sanitize_csv_row
@@ -172,6 +171,9 @@ class XLSXFormatter(BaseFormatter):
 
     def _create_xlsx_file(self, data: List[List[str]]) -> bytes:
         """Create XLSX file content from row data."""
+        # Imported where it is used: the package is slow to load and few requests need it
+        from openpyxl import Workbook
+
         wb = Workbook()
         sh = wb.active
         for row in data:

@@ -7,7 +7,6 @@ import os
 from typing import List, Dict, Tuple
 
 # Third party import
-from openai import OpenAI
 import requests
 
 from rest_framework import status
@@ -127,6 +126,10 @@ def get_llm_response(task, prompt, api_key: str, model: str, provider: str) -> T
         # For Gemini, prepend provider name to model
         if provider.lower() == "gemini":
             model = f"gemini/{model}"
+
+        # Imported here because the package is slow to load, every process that loads the views
+        # would wait for it at start, and only this function uses it
+        from openai import OpenAI
 
         client = OpenAI(api_key=api_key)
         chat_completion = client.chat.completions.create(

@@ -110,6 +110,12 @@ build/
 .react-router/
 temp/
 scripts/
+!/scripts/
+/scripts/*
+!/scripts/plane_runtime.py
+!/scripts/plane_config.py
+!/scripts/runtime/
+!/scripts/tests/
 !packages/i18n/scripts/
 
 # i18n auto-generated types (regenerated on every build)

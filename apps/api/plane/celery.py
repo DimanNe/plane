@@ -3,14 +3,18 @@
 # See the LICENSE file for details.
 
 # Python imports
+import gc
 import os
+import sys
 import logging
+from functools import partialmethod
 from datetime import timedelta
 
 # Third party imports
 from celery import Celery
+from kombu.transport import redis as redis_transport
 from pythonjsonlogger.json import JsonFormatter
-from celery.signals import after_setup_logger, after_setup_task_logger
+from celery.signals import after_setup_logger, after_setup_task_logger, beat_init, worker_ready, worker_shutdown
 from celery.schedules import crontab, schedule
 
 # Module imports
@@ -34,6 +38,11 @@ def _get_metrics_push_interval_minutes() -> int:
         return 360
 
 METRICS_PUSH_INTERVAL_MINUTES = _get_metrics_push_interval_minutes()
+
+# A worker that stops first waits for its pending blocking read of the queue to return, so that a
+# task Redis hands over at that instant is not lost. kombu fixes the timeout of that read at one
+# second and has no setting for it; a shorter one lets a stopping worker exit that much sooner.
+redis_transport.Channel._brpop_start = partialmethod(redis_transport.Channel._brpop_start, timeout=0.01)
 
 app = Celery("plane")
 
@@ -110,6 +119,26 @@ def setup_task_loggers(logger, *args, **kwargs):
     handler = logging.StreamHandler()
     handler.setFormatter(fmt=formatter)
     logger.addHandler(handler)
+
+
+# The script that starts the services waits for these lines
+@worker_ready.connect
+def announce_worker_ready(sender, *args, **kwargs):
+    print(f"Plane worker ready: {sender.hostname}", file=sys.__stderr__, flush=True)
+
+
+# When this signal is sent a stopping worker has finished its task and closed its connections. The
+# interpreter would then spend longer than all of that on collecting garbage in memory that the
+# exit frees anyway; frozen objects are left out of those collections.
+@worker_shutdown.connect
+def skip_garbage_collection_at_exit(sender, *args, **kwargs):
+    gc.freeze()
+
+
+@beat_init.connect
+def announce_beat_ready(sender, *args, **kwargs):
+    sender.scheduler  # loads the schedule, so that the line below is printed only after it
+    print("Plane beat ready:", file=sys.__stderr__, flush=True)
 
 
 # Load task modules from all registered Django app configs.
