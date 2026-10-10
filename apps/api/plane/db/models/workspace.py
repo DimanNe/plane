@@ -426,6 +426,11 @@ class WorkspaceUserPreference(BaseModel):
         YOUR_WORK = "your_work", "Your Work"
         ARCHIVES = "archives", "Archives"
         STICKIES = "stickies", "Stickies"
+        # the order of the sections of the sidebar, which hold the entries above
+        SECTION_PERSONAL = "section_personal", "Section: personal"
+        SECTION_WORKSPACE = "section_workspace", "Section: workspace"
+        SECTION_FAVORITES = "section_favorites", "Section: favorites"
+        SECTION_PROJECTS = "section_projects", "Section: projects"
 
     workspace = models.ForeignKey(
         "db.Workspace",

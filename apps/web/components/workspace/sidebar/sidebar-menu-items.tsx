@@ -24,7 +24,11 @@ import {
 } from "@/hooks/use-navigation-preferences";
 import { SidebarItemBase } from "./sidebar-item";
 
-export const SidebarMenuItems = observer(function SidebarMenuItems() {
+type Props = {
+  section: "personal" | "workspace";
+};
+
+export const SidebarMenuItems = observer(function SidebarMenuItems(props: Props) {
   // routers
   const { setValue: toggleWorkspaceMenu, storedValue: isWorkspaceMenuOpen } = useLocalStorage<boolean>(
     "is_workspace_menu_open",
@@ -89,14 +93,16 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
     [workspacePreferences]
   );
 
-  return (
-    <>
+  const sections = {
+    personal: (
       <div className="flex flex-col gap-0.5">
         {filteredStaticNavigationItems.map((item, _index) => (
           // oxlint-disable-next-line react/no-array-index-key
           <SidebarItemBase key={`static_${_index}`} item={item} />
         ))}
       </div>
+    ),
+    workspace: (
       <Collapsible
         placement="sidebar"
         open={!!isWorkspaceMenuOpen}
@@ -118,6 +124,8 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
           ))}
         </div>
       </Collapsible>
-    </>
-  );
+    ),
+  };
+
+  return sections[props.section];
 });

@@ -13,6 +13,7 @@ import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
 import { SidebarFavoritesMenu } from "@/components/workspace/sidebar/favorites/favorites-menu";
 import { SidebarProjectsList } from "@/components/workspace/sidebar/projects-list";
 import { SidebarMenuItems } from "@/components/workspace/sidebar/sidebar-menu-items";
+import { SidebarSections } from "@/components/workspace/sidebar/sidebar-sections";
 // hooks
 import { useFavorite } from "@/hooks/store/use-favorite";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -32,11 +33,14 @@ export const AppSidebar = observer(function AppSidebar() {
 
   return (
     <SidebarWrapper title="Projects">
-      <SidebarMenuItems />
-      {/* Favorites Menu */}
-      {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}
-      {/* Projects List */}
-      <SidebarProjectsList />
+      <SidebarSections
+        sections={{
+          personal: <SidebarMenuItems section="personal" />,
+          workspace: <SidebarMenuItems section="workspace" />,
+          favorites: canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />,
+          projects: <SidebarProjectsList />,
+        }}
+      />
     </SidebarWrapper>
   );
 });
