@@ -14,6 +14,7 @@ export {
   moveTask,
   placeTask,
   removeArrow,
+  removeTask,
   resizeTask,
 } from "./gestures";
 export { getChanges, getPlan } from "./stored-plan";

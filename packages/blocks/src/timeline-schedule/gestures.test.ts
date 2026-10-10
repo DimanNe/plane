@@ -15,6 +15,7 @@ import {
   moveTask,
   placeTask,
   removeArrow,
+  removeTask,
   resizeTask,
 } from "./gestures";
 import { arrow, day, fixed, following } from "./test-helpers";
@@ -190,6 +191,87 @@ describe("placeTask", () => {
 
   it.each(cases)("$name", ({ plan, expected }) => {
     const actual = placeTask(plan, "B", day(9));
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("removeTask", () => {
+  const cases: { name: string; plan: TPlan; taskId: string; expected: TPlan }[] = [
+    {
+      name: "a task without arrows leaves, and nothing else changes",
+      plan: { tasks: [fixed("A", 1, 3), fixed("B", 9, 2)], arrows: [] },
+      taskId: "A",
+      expected: { tasks: [fixed("B", 9, 2)], arrows: [] },
+    },
+    {
+      name: "its arrows leave with it, those that lead from it and those that lead to it",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("B", 9, 2), fixed("C", 20, 1), fixed("D", 1, 1)],
+        arrows: [arrow("A>B", "end-start"), arrow("B>C", "end-start"), arrow("D>C", "start-start")],
+      },
+      taskId: "B",
+      expected: {
+        tasks: [fixed("A", 1, 3), fixed("C", 20, 1), fixed("D", 1, 1)],
+        arrows: [arrow("D>C", "start-start")],
+      },
+    },
+    {
+      name: "a task that followed only it is fixed on the day it stood on",
+      plan: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 1)] },
+      taskId: "A",
+      expected: { tasks: [fixed("B", 5, 2)], arrows: [] },
+    },
+    {
+      name: "a task that its other arrow would start earlier is fixed on the day it stood on, too",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 1), following("B", 2)],
+        arrows: [arrow("A>B", "end-start"), arrow("X>B", "end-start")],
+      },
+      taskId: "A",
+      expected: { tasks: [fixed("X", 1, 1), fixed("B", 4, 2)], arrows: [arrow("X>B", "end-start")] },
+    },
+    {
+      name: "a task that another arrow holds on its day goes on following its arrows",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 3, 1), following("B", 2)],
+        arrows: [arrow("A>B", "end-start"), arrow("X>B", "end-start")],
+      },
+      taskId: "A",
+      expected: { tasks: [fixed("X", 3, 1), following("B", 2)], arrows: [arrow("X>B", "end-start")] },
+    },
+    {
+      name: "a task that followed its arrows leaves like any other, and the task after it stays",
+      plan: {
+        tasks: [fixed("A", 1, 3), following("B", 2), following("C", 1)],
+        arrows: [arrow("A>B", "end-start"), arrow("B>C", "end-start")],
+      },
+      taskId: "B",
+      expected: { tasks: [fixed("A", 1, 3), fixed("C", 6, 1)], arrows: [] },
+    },
+  ];
+
+  it.each(cases)("$name", ({ plan, taskId, expected }) => {
+    const actual = removeTask(plan, taskId);
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("no task stands on another day afterwards", () => {
+    const plan: TPlan = {
+      tasks: [fixed("A", 1, 3), fixed("X", 1, 1), following("B", 2), following("C", 1), following("D", 2)],
+      arrows: [
+        arrow("A>B", "end-start", 2),
+        arrow("X>B", "end-start"),
+        arrow("B>C", "end-start"),
+        arrow("A>D", "start-start", 4),
+      ],
+    };
+    const before = computeSchedule(plan.tasks, plan.arrows).dates;
+    const expected = { X: before.X, B: before.B, C: before.C, D: before.D };
+
+    const taken = removeTask(plan, "A");
+    const actual = computeSchedule(taken.tasks, taken.arrows).dates;
 
     expect(actual).toEqual(expected);
   });
@@ -448,6 +530,7 @@ describe("every gesture", () => {
     { name: "moveTask", run: (given) => moveTask(given, "B", day(12)) },
     { name: "resizeTask", run: (given) => resizeTask(given, "B", "end", day(12)) },
     { name: "placeTask", run: (given) => placeTask(given, "B", day(12)) },
+    { name: "removeTask", run: (given) => removeTask(given, "A") },
     { name: "addArrow", run: (given) => addArrow(given, "A", "C", "end-start") },
     { name: "changeArrow", run: (given) => changeArrow(given, "A>B", { delay: 1, kind: "start-start" }) },
     { name: "removeArrow", run: (given) => removeArrow(given, "A>B") },

@@ -55,5 +55,6 @@ export type TTimelineChanges = {
   // created, or given this delay when the two work items have a dependency of this type
   dependencies: Omit<TTimelineDependency, "id">[];
   removed_dependencies: string[];
-  issues: { id: string; start_date: string; target_date: string; is_start_fixed: boolean }[];
+  // without dates when the work item was taken off the timeline
+  issues: { id: string; start_date: string | null; target_date: string | null; is_start_fixed: boolean }[];
 };

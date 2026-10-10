@@ -15,7 +15,7 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { ArrowCollapseOutline, FullScreenOutline } from "@makeplane/propel/icons";
 import { DropIndicator } from "@plane/blocks/common";
 import { Row } from "@plane/blocks/layout";
-import { getConflictCause, moveTask, resizeTask } from "@plane/blocks/timeline-schedule";
+import { getConflictCause, moveTask, removeTask, resizeTask } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TScheduleArrow, TTaskEdge } from "@plane/blocks/timeline-schedule";
 import { ALL_ISSUES } from "@plane/constants";
 import { useLatestCallback } from "@plane/hooks";
@@ -47,11 +47,13 @@ import { TimelineConflict } from "./conflict";
 import { TimelineBarDimension } from "./dimension";
 import { TimelineHeader } from "./header";
 import { TimelineDaysContext, TimelineLine } from "./line";
+import { runOperation } from "./operation";
 import type { TTimelineOperation } from "./operation";
 import { trackPointer } from "./pointer";
 import { getDateOfDay, getDayOfDate, getDayOfTime, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
 import type { THandle } from "./use-arrow-link";
 import { useArrowLink } from "./use-arrow-link";
+import { useDeleteKey } from "./use-delete-key";
 import { useEntryAnchor } from "./use-entry-anchor";
 import { useTimelineView } from "./use-timeline-view";
 
@@ -144,7 +146,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     issue: { getIssueById },
     peekIssue,
   } = useIssueDetail();
-  const { setSelectedRow } = useListView();
+  const listView = useListView();
+  const { setSelectedRow } = listView;
   // hooks
   const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
@@ -297,6 +300,18 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     if (click.detail > 1 || isPeekOpenOnPressRef.current)
       handleRedirection(workspaceSlug?.toString(), getIssueById(taskId), isMobile);
   });
+
+  // Delete takes the selected task off the timeline: its dates and its arrows go, the work item stays. The
+  // selected arrow has the key while its control is open.
+  useDeleteKey(
+    scroll,
+    isEditable && !drag && !link && !selectedArrow
+      ? () => {
+          const taskId = listView.selectedRow?.issueId;
+          if (taskId && days[taskId]) runOperation(operation, (plan) => removeTask(plan, taskId));
+        }
+      : undefined
+  );
 
   useIntersectionObserver({ current: scroll }, loadMoreElement, loadMore, "100% 0% 100% 0%");
 

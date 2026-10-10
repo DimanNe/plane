@@ -54,8 +54,9 @@ export function getPlan(issues: TStoredTask[], dependencies: TTimelineDependency
 }
 
 /**
- * What one request has to save of a plan: the arrows that differ from the stored dependencies, and the tasks
- * whose computed dates differ from the stored ones or whose start an operation changed.
+ * What one request has to save of a plan: the arrows that differ from the stored dependencies, the tasks whose
+ * computed dates differ from the stored ones or whose start an operation changed, and the tasks that were taken
+ * off the timeline, which lose their dates and are fixed again, as a work item is that was never there.
  *
  * Whether a start is fixed is saved only when an operation changed that start: a plan says so by starting the
  * task otherwise than the plan of what is stored does. The stored field alone does not count. A work item stored
@@ -67,9 +68,9 @@ export function getPlan(issues: TStoredTask[], dependencies: TTimelineDependency
 export function getChanges(issues: TStoredTask[], dependencies: TTimelineDependency[], plan: TPlan): TTimelineChanges {
   const { dates } = computeSchedule(plan.tasks, plan.arrows);
   const storedTasks = new Map(issues.map((issue) => [issue.id, issue]));
-  const followingAsStored = new Set(
-    getPlan(issues, dependencies).tasks.flatMap((task) => (task.start === "anchor" ? [task.id] : []))
-  );
+  const storedPlan = getPlan(issues, dependencies);
+  const followingAsStored = new Set(storedPlan.tasks.flatMap((task) => (task.start === "anchor" ? [task.id] : [])));
+  const idsInPlan = new Set(plan.tasks.map((task) => task.id));
   const storedArrows = new Map(dependencies.map((dependency) => [dependency.id, toArrow(dependency)]));
   const kindInPlan = new Map(plan.arrows.map((arrow) => [arrow.id, arrow.kind]));
   return {
@@ -87,14 +88,19 @@ export function getChanges(issues: TStoredTask[], dependencies: TTimelineDepende
     removed_dependencies: [...storedArrows.values()]
       .filter((stored) => kindInPlan.get(stored.id) !== stored.kind)
       .map((stored) => stored.id),
-    issues: plan.tasks.flatMap((task) => {
-      const stored = storedTasks.get(task.id);
-      const { start, end } = dates[task.id];
-      const isStartFixed = task.start !== "anchor";
-      const isStartChanged = followingAsStored.has(task.id) === isStartFixed;
-      return stored?.start_date === start && stored.target_date === end && !isStartChanged
-        ? []
-        : [{ id: task.id, start_date: start, target_date: end, is_start_fixed: isStartFixed }];
-    }),
+    issues: [
+      ...plan.tasks.flatMap((task) => {
+        const stored = storedTasks.get(task.id);
+        const { start, end } = dates[task.id];
+        const isStartFixed = task.start !== "anchor";
+        const isStartChanged = followingAsStored.has(task.id) === isStartFixed;
+        return stored?.start_date === start && stored.target_date === end && !isStartChanged
+          ? []
+          : [{ id: task.id, start_date: start, target_date: end, is_start_fixed: isStartFixed }];
+      }),
+      ...storedPlan.tasks
+        .filter((task) => !idsInPlan.has(task.id))
+        .map((task) => ({ id: task.id, start_date: null, target_date: null, is_start_fixed: true })),
+    ],
   };
 }

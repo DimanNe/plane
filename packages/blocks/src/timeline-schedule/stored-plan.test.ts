@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { TTimelineChanges, TTimelineDependency, TTimelineDependencyTypes } from "@plane/types";
-import { addArrow, changeArrow, moveTask, placeTask, removeArrow } from "./gestures";
+import { addArrow, changeArrow, moveTask, placeTask, removeArrow, removeTask } from "./gestures";
 import { getChanges, getPlan } from "./stored-plan";
 import type { TStoredTask } from "./stored-plan";
 import { arrow, day, fixed, following } from "./test-helpers";
@@ -176,6 +176,27 @@ describe("getChanges", () => {
       expected: {
         ...nothing,
         issues: [{ id: "D", start_date: day(2), target_date: day(2), is_start_fixed: true }],
+      },
+    },
+    {
+      name: "a task taken off the timeline is saved without dates and its arrow removed; the task that followed it is fixed",
+      changed: removeTask(plan, "A"),
+      expected: {
+        ...nothing,
+        removed_dependencies: ["A>B"],
+        issues: [
+          { id: "B", start_date: day(4), target_date: day(5), is_start_fixed: true },
+          { id: "A", start_date: null, target_date: null, is_start_fixed: true },
+        ],
+      },
+    },
+    {
+      name: "a task that followed its arrows and is taken off is saved as fixed again, as a work item that was never there",
+      changed: removeTask(plan, "B"),
+      expected: {
+        ...nothing,
+        removed_dependencies: ["A>B"],
+        issues: [{ id: "B", start_date: null, target_date: null, is_start_fixed: true }],
       },
     },
   ];

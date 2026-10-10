@@ -150,6 +150,26 @@ export function changeArrow(plan: TPlan, arrowId: string, change: { kind?: TArro
   };
 }
 
+/**
+ * A task taken off the timeline: it has no dates any more, and its arrows are removed with it, those that lead to
+ * it and those that lead from it. No other task moves: a task that followed one of those arrows and that no arrow
+ * holds on its day any more is fixed on the day it stood on.
+ */
+export function removeTask(plan: TPlan, taskId: string): TPlan {
+  const schedule = computeSchedule(plan.tasks, plan.arrows);
+  const arrows = plan.arrows.filter((arrow) => arrow.previousId !== taskId && arrow.nextId !== taskId);
+  // an arrow whose gap is its delay asks for exactly the day its next task stands on
+  const heldIds = new Set(arrows.flatMap((arrow) => (schedule.gaps[arrow.id] === arrow.delay ? [arrow.nextId] : [])));
+  return {
+    tasks: plan.tasks.flatMap((task) => {
+      if (task.id === taskId) return [];
+      if (task.start !== "anchor" || heldIds.has(task.id)) return [task];
+      return [{ ...task, start: { at: schedule.dates[task.id].start } }];
+    }),
+    arrows,
+  };
+}
+
 /** A task that followed its arrows and has none left from a task of the timeline is fixed on the day it stood on. */
 export function removeArrow(plan: TPlan, arrowId: string): TPlan {
   const arrow = getArrow(plan, arrowId);
