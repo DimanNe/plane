@@ -41,6 +41,7 @@ import { getIssueBlockId, getSourceFromDropPayload, highlightIssueOnDrop } from 
 import { IssueBlocksList } from "./blocks-list";
 import { HeaderGroupByCard } from "./headers/group-by-card";
 import { ListGroupQuickAddChip } from "./headers/quick-add-chip";
+import { highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
 import { getListDropLocation } from "./utils";
 
@@ -313,7 +314,14 @@ export const ListGroup = observer(function ListGroup(props: Props) {
               layout={EIssueLayoutTypes.LIST}
               prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
               containerClassName="border-b border-subtle bg-surface-1"
-              quickAddCallback={quickAddCallback}
+              quickAddCallback={
+                quickAddCallback &&
+                (async (projectId, data) => {
+                  const workItem = await quickAddCallback(projectId, data);
+                  if (workItem) highlightNewWorkItem(workItem.id);
+                  return workItem;
+                })
+              }
               isEpic={isEpic}
             />
           </div>
