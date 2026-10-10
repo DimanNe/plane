@@ -18,12 +18,15 @@ import { TimelineText, TimelineTextPart } from "./text";
 
 type Props = {
   view: TTimelineView;
+  taskId: string;
   // the first and the last day of the task
   start: number;
   end: number;
   lineIndex: number;
   // it stands under the bar: above the first line in view the header of the timeline is in the way
   isBelow: boolean;
+  // the pointer is on the days of the task, which is as good as on its bar
+  onHover: (taskId: string | undefined) => void;
 };
 
 // how far the dimension line is from its bar, and the number from the line when it does not stand on it
@@ -36,11 +39,11 @@ const CHARACTER_WIDTH = 6;
 const NUMBER_PADDING = 16;
 
 /**
- * The dimension line of a bar whose edge is held: as wide as the bar, with the days the task lasts in its middle.
- * The dates beside the bar say where its edges are; this says what a resize is made for, how long the task is.
+ * The dimension line of a bar: as wide as the bar, with the days the task lasts in its middle. The dates beside
+ * the bar say where its edges are; this says what a resize is made for, how long the task is.
  */
 export function TimelineBarDimension(props: Props) {
-  const { view, start, end, lineIndex, isBelow } = props;
+  const { view, taskId, start, end, lineIndex, isBelow, onHover } = props;
   // translation
   const { t } = useTranslation();
   // derived values
@@ -82,7 +85,9 @@ export function TimelineBarDimension(props: Props) {
           top: isNumberOnLine ? top : top + (isBelow ? 1 : -1) * (HEAD_WIDTH / 2 + NUMBER_DISTANCE / 2),
         }}
       >
-        <TimelineTextPart>{number}</TimelineTextPart>
+        <TimelineTextPart onPointerEnter={() => onHover(taskId)} onPointerLeave={() => onHover(undefined)}>
+          {number}
+        </TimelineTextPart>
       </TimelineText>
     </>
   );

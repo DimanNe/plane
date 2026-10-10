@@ -35,14 +35,13 @@ type Props = {
   isCritical: boolean;
   isConflictCause: boolean;
   isEditable: boolean;
-  isDragged: boolean;
-  isStartDated: boolean;
   // how far the line is moved from its place while it is dragged up or down, in pixels
   moveOffset: number | undefined;
   areHandlesShown: boolean;
   linkedEdge: TTaskEdge | undefined;
   isLinkRefused: boolean;
   onBarPress: (press: React.PointerEvent, taskId: string, edge?: TTaskEdge) => void;
+  onBarHover: (taskId: string | undefined) => void;
   onHandlePress: (press: React.PointerEvent, taskId: string, edge: TTaskEdge) => void;
   onEntryPress: (press: React.PointerEvent, taskId: string) => void;
   onClick: (click: React.MouseEvent, taskId: string) => void;
@@ -91,7 +90,7 @@ function LineBar(props: Omit<ComponentProps<typeof TimelineBar>, "start" | "end"
 
 /** The line of a task: its entry in the list at the left, and its bar on the timeline when it has dates. */
 export const TimelineLine = observer(function TimelineLine(props: Props) {
-  const { taskId, lineIndex, moveOffset, onBarPress, onEntryPress, onClick, ...barProps } = props;
+  const { taskId, lineIndex, moveOffset, onBarPress, onBarHover, onEntryPress, onClick, ...barProps } = props;
   // router
   const { workspaceSlug } = useParams();
   // store hooks
@@ -165,6 +164,7 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
           isSelected={isSelected}
           isDisabled={!!issue.tempId}
           onPress={onBarPress}
+          onHover={onBarHover}
           onClick={onClick}
           {...barProps}
         >

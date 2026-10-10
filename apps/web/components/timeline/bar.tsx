@@ -13,13 +13,12 @@ import { getPillButtonClassName } from "@plane/blocks/pill-button";
 import type { TTaskEdge } from "@plane/blocks/timeline-schedule";
 import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
-import { cn, getTextFromHTML, renderFormattedDate } from "@plane/utils";
+import { cn, getTextFromHTML } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useLabel } from "@/hooks/store/use-label";
 // local imports
-import { getDateOfDay, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
-import { TimelineText, TimelineTextPart } from "./text";
+import { getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
 
 type Props = {
   taskId: string;
@@ -40,9 +39,6 @@ type Props = {
   isConflictCause: boolean;
   isSelected: boolean;
   isEditable: boolean;
-  isDragged: boolean;
-  // the day of its start shows beside it: it is fixed on that day and an arrow leads to it
-  isStartDated: boolean;
   isDisabled: boolean;
   // an arrow is being drawn, so every bar shows its handles
   areHandlesShown: boolean;
@@ -51,6 +47,8 @@ type Props = {
   linkedEdge: TTaskEdge | undefined;
   isLinkRefused: boolean;
   onPress: (press: React.PointerEvent, taskId: string, edge?: TTaskEdge) => void;
+  // the pointer came over the bar, or left it
+  onHover: (taskId: string | undefined) => void;
   onHandlePress: (press: React.PointerEvent, taskId: string, edge: TTaskEdge) => void;
   onClick: (click: React.MouseEvent, taskId: string) => void;
   // the text of the bar
@@ -65,7 +63,6 @@ export const BAR_HEIGHT = 32;
 export const DATE_DISTANCE = 28;
 export const DATE_WIDTH = 86;
 const TEXT_PADDING = 10;
-const DATE_CLASS_NAME = "absolute top-1/2 -translate-y-1/2";
 
 /**
  * The handles at the start and the end of a bar: an arrow is drawn from one to one of another bar. They show
@@ -116,13 +113,12 @@ export const TimelineBar = memo(function TimelineBar(props: Props) {
     isConflictCause,
     isSelected,
     isEditable,
-    isDragged,
-    isStartDated,
     isDisabled,
     areHandlesShown,
     linkedEdge,
     isLinkRefused,
     onPress,
+    onHover,
     onHandlePress,
     onClick,
     children,
@@ -140,6 +136,8 @@ export const TimelineBar = memo(function TimelineBar(props: Props) {
       className="group/bar absolute z-[2]"
       // out of view it is not laid out, so a change of the view costs nothing for it
       style={isInView ? { left, width, top: BAR_TOP, height: BAR_HEIGHT } : { display: "none" }}
+      onPointerEnter={() => onHover(taskId)}
+      onPointerLeave={() => onHover(undefined)}
     >
       {slack > 0 && (
         <div
@@ -194,16 +192,6 @@ export const TimelineBar = memo(function TimelineBar(props: Props) {
           isLinkRefused={isLinkRefused}
           onHandlePress={onHandlePress}
         />
-      )}
-      {(isDragged || isStartDated) && (
-        <TimelineText className={cn(DATE_CLASS_NAME, "right-full")} style={{ marginRight: DATE_DISTANCE }}>
-          <TimelineTextPart>{renderFormattedDate(getDateOfDay(start))}</TimelineTextPart>
-        </TimelineText>
-      )}
-      {isDragged && (
-        <TimelineText className={cn(DATE_CLASS_NAME, "left-full")} style={{ marginLeft: DATE_DISTANCE }}>
-          <TimelineTextPart>{renderFormattedDate(getDateOfDay(end))}</TimelineTextPart>
-        </TimelineText>
       )}
     </div>
   );
