@@ -40,6 +40,8 @@ type Props = {
   isSelected: boolean;
   isEditable: boolean;
   isDragged: boolean;
+  // the day of its start shows beside it: it is fixed on that day and an arrow leads to it
+  isStartDated: boolean;
   isDisabled: boolean;
   // an arrow is being drawn, so every bar shows its handles
   areHandlesShown: boolean;
@@ -53,9 +55,16 @@ type Props = {
   children: ReactNode;
 };
 
+// where a bar is in its line
+export const BAR_TOP = 6;
+export const BAR_HEIGHT = 32;
+// A date beside a bar stands this far from it, clear of the handle there and of the end of an arrow, and is about
+// this wide.
+export const DATE_DISTANCE = 28;
+export const DATE_WIDTH = 86;
 const TEXT_PADDING = 10;
 const DATE_CLASS_NAME =
-  "absolute top-1/2 -translate-y-1/2 rounded-sm bg-accent-subtle px-2 py-1 text-11 whitespace-nowrap text-tertiary";
+  "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-sm bg-accent-subtle px-2 py-1 text-11 whitespace-nowrap text-tertiary";
 
 /**
  * The handles at the start and the end of a bar: an arrow is drawn from one to one of another bar. They show
@@ -106,6 +115,7 @@ export function TimelineBar(props: Props) {
     isSelected,
     isEditable,
     isDragged,
+    isStartDated,
     isDisabled,
     areHandlesShown,
     linkedEdge,
@@ -125,9 +135,9 @@ export function TimelineBar(props: Props) {
 
   return (
     <div
-      className="group/bar absolute top-1.5 z-[2] h-8"
+      className="group/bar absolute z-[2]"
       // out of view it is not laid out, so a change of the view costs nothing for it
-      style={isInView ? { left, width } : { display: "none" }}
+      style={isInView ? { left, width, top: BAR_TOP, height: BAR_HEIGHT } : { display: "none" }}
     >
       {slack > 0 && (
         <div
@@ -183,11 +193,15 @@ export function TimelineBar(props: Props) {
           onHandlePress={onHandlePress}
         />
       )}
+      {(isDragged || isStartDated) && (
+        <div className={cn(DATE_CLASS_NAME, "right-full")} style={{ marginRight: DATE_DISTANCE }}>
+          {renderFormattedDate(getDateOfDay(start))}
+        </div>
+      )}
       {isDragged && (
-        <>
-          <div className={cn(DATE_CLASS_NAME, "right-full mr-2")}>{renderFormattedDate(getDateOfDay(start))}</div>
-          <div className={cn(DATE_CLASS_NAME, "left-full ml-2")}>{renderFormattedDate(getDateOfDay(end))}</div>
-        </>
+        <div className={cn(DATE_CLASS_NAME, "left-full")} style={{ marginLeft: DATE_DISTANCE }}>
+          {renderFormattedDate(getDateOfDay(end))}
+        </div>
       )}
     </div>
   );

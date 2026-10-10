@@ -26,15 +26,14 @@ type TTimelineSpan = Pick<TTimelineView, "originDay" | "pxPerDay">;
 
 /**
  * The part of time the timeline shows. The wheel changes the scale around the day under the pointer, a drag
- * of empty space moves the time and scrolls the lines; a press there that does not move is `onClick`.
+ * of empty space moves the time and scrolls the lines; a press there that does not move does nothing.
  * @param scroll the element that scrolls the lines and holds the list beside the timeline
  * @param canvas the element as wide as the timeline, to the right of the list
  */
 export const useTimelineView = (
   scroll: HTMLElement | null,
   canvas: HTMLElement | null,
-  getInitialView: (width: number) => TTimelineSpan,
-  onClick: (position: { clientX: number; clientY: number }) => void
+  getInitialView: (width: number) => TTimelineSpan
 ) => {
   // states
   const [span, setSpan] = useState<TTimelineSpan>();
@@ -135,10 +134,7 @@ export const useTimelineView = (
         lastClientX = clientX;
         scroll.scrollTop = scrollTop - (clientY - press.clientY);
       },
-      onEnd: ({ isDragged, isAborted }) => {
-        setIsPanning(false);
-        if (!isDragged && !isAborted) onClick(press);
-      },
+      onEnd: () => setIsPanning(false),
     });
   };
 

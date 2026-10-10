@@ -37,8 +37,9 @@ type Props = {
   isConflictCause: boolean;
   isEditable: boolean;
   isDragged: boolean;
-  // its line is being moved
-  isMoved: boolean;
+  isStartDated: boolean;
+  // how far the line is moved from its place while it is dragged up or down, in pixels
+  moveOffset: number | undefined;
   areHandlesShown: boolean;
   linkedEdge: TTaskEdge | undefined;
   isLinkRefused: boolean;
@@ -50,7 +51,7 @@ type Props = {
 
 /** The line of a task: its entry in the list at the left, and its bar on the timeline when it has dates. */
 export const TimelineLine = observer(function TimelineLine(props: Props) {
-  const { taskId, lineIndex, start, end, isMoved, onBarPress, onEntryPress, onClick, ...barProps } = props;
+  const { taskId, lineIndex, start, end, moveOffset, onBarPress, onEntryPress, onClick, ...barProps } = props;
   // router
   const { workspaceSlug } = useParams();
   // store hooks
@@ -69,7 +70,6 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
   const isSelected = getIsRowSelected(taskId, ALL_ISSUES);
   const cellClassName = cn("group-hover/line:bg-layer-transparent-hover", {
     "bg-layer-transparent-selected group-hover/line:bg-layer-transparent-selected": isSelected,
-    "bg-layer-1": isMoved,
   });
 
   if (!issue?.project_id) return null;
@@ -87,8 +87,15 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
     <div
       // a press on the work item that is open beside the timeline does not close it
       id={`issue-${taskId}`}
-      className="group/line absolute inset-x-0 flex"
-      style={{ top: lineIndex * BLOCK_HEIGHT, height: BLOCK_HEIGHT }}
+      // a line that is moved goes with the pointer, entry and bar together, above the other lines
+      className={cn("group/line absolute inset-x-0 flex", {
+        "z-[3] bg-surface-1 shadow-raised-200": moveOffset !== undefined,
+      })}
+      style={{
+        top: lineIndex * BLOCK_HEIGHT,
+        height: BLOCK_HEIGHT,
+        transform: moveOffset === undefined ? undefined : `translateY(${moveOffset}px)`,
+      }}
     >
       <ControlLink
         href={workItemLink}

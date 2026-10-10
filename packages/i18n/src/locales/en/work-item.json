@@ -432,29 +432,19 @@
   "timeline": {
     "leaves": "Leaves",
     "leaves_description": "Work items without sub-work items",
-    "manual_order_only": "A line can be moved when the work items are ordered manually.",
     "handle": {
       "start": "Draw an arrow from the start",
       "end": "Draw an arrow from the end"
     },
     "arrow": {
-      "starts": "starts",
-      "ends": "ends",
       "immediately": "immediately",
       "in_days": "in {days} d",
-      "on_day": "on {day}",
-      "asks": "asks {delay}",
-      "gap": "gap {days} d",
+      "too_early": "{days} d too early",
       "in": "in",
       "days": "d",
       "on": "on",
       "delay": "Delay in days",
       "remove": "Remove the arrow",
-      "after": {
-        "end-start": "after the end of {task}",
-        "start-start": "after the start of {task}",
-        "end-end": "after the end of {task}"
-      },
       "refused": {
         "no-such-kind": "No arrow runs from a start to an end",
         "same-task": "An arrow goes from one task to another",
