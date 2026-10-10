@@ -60,8 +60,18 @@ export interface IBaseIssuesStore {
   groupedIssueIds: TGroupedIssues | TSubGroupedIssues | undefined; // object to store Issue Ids based on group or subgroup
   groupedIssueCount: TGroupedIssueCount; // map of groupId/subgroup and issue count of that particular group/subgroup
   issuePaginationData: TIssuePaginationData; // map of groupId/subgroup and pagination Data of that particular group/subgroup
+  paginationOptions: IssuePaginationOptions | undefined;
 
   //actions
+  onfetchIssues: (
+    issuesResponse: TIssuesResponse,
+    options: IssuePaginationOptions,
+    workspaceSlug: string,
+    projectId?: string,
+    id?: string,
+    shouldClearPaginationOptions?: boolean
+  ) => void;
+  applyIssueFromServer: (issueId: string, issue: TIssue | undefined) => void;
   removeIssue: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
   clear(shouldClearPaginationOptions?: boolean): void;
   // helper methods
@@ -230,6 +240,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       clear: action.bound,
       setLoader: action.bound,
       addIssue: action.bound,
+      applyIssueFromServer: action.bound,
       removeIssueFromList: action.bound,
 
       createIssue: action,
@@ -1232,6 +1243,23 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
   removeIssueFromList(issueId: string) {
     const issue = this.rootIssueStore.issues.getIssueById(issueId);
     this.updateIssueList(undefined, issue, EIssueGroupedAction.DELETE);
+  }
+
+  /**
+   * A work item was changed outside this page
+   * @param issueId
+   * @param issue its state on the server, undefined when it does not belong in this list (any more)
+   */
+  applyIssueFromServer(issueId: string, issue: TIssue | undefined) {
+    const issueBeforeUpdate = clone(this.rootIssueStore.issues.getIssueById(issueId));
+    // adding and removing change the counts of the groups whether or not the id is in the list
+    const isListed = Object.values(this.groupedIssueIds ?? {}).some((issueIds) =>
+      (Array.isArray(issueIds) ? issueIds : Object.values(issueIds).flat()).includes(issueId)
+    );
+    if (issue) this.rootIssueStore.issues.addIssue([issue]);
+    if (issue && isListed) this.updateIssueList(this.rootIssueStore.issues.getIssueById(issueId), issueBeforeUpdate);
+    else if (issue) this.addIssueToList(issueId);
+    else if (isListed) this.removeIssueFromList(issueId);
   }
 
   /**

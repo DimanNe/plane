@@ -6,6 +6,7 @@
 
 import { CollaborationController } from "./collaboration.controller";
 import { DocumentController } from "./document.controller";
+import { EventsController } from "./events.controller";
 import { HealthController } from "./health.controller";
 import { PageContentController } from "./page-content.controller";
 import { PdfExportController } from "./pdf-export.controller";
@@ -13,6 +14,7 @@ import { PdfExportController } from "./pdf-export.controller";
 export const CONTROLLERS = [
   CollaborationController,
   DocumentController,
+  EventsController,
   HealthController,
   PageContentController,
   PdfExportController,

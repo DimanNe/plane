@@ -40,10 +40,12 @@ def test_work_item_lists_carry_the_start_of_the_plain_text_description(
 
     work_items: api_response.Response = session_client.get(url)
     sub_work_items: api_response.Response = session_client.get(f"{url}{parent.id}/sub-issues/")
+    work_items_by_id: api_response.Response = session_client.get(f"{url}list/", {"issues": str(parent.id)})
 
     assert (
         {work_item["name"]: work_item["description_prefix"] for work_item in work_items.data["results"]},
         {work_item["name"]: work_item["description_prefix"] for work_item in sub_work_items.data["sub_issues"]},
+        {work_item["name"]: work_item["description_prefix"] for work_item in work_items_by_id.data},
     ) == (
         {
             "Long": LONG_TEXT[: grouper.DESCRIPTION_PREFIX_LENGTH],
@@ -52,4 +54,5 @@ def test_work_item_lists_carry_the_start_of_the_plain_text_description(
             "Empty": "",
         },
         {"Short": "Two short words", "Blocks": "First paragraph. one two Q&amp;A last", "Empty": ""},
+        {"Long": LONG_TEXT[: grouper.DESCRIPTION_PREFIX_LENGTH]},
     )

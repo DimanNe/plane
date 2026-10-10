@@ -15,6 +15,8 @@ import helmet from "helmet";
 // plane imports
 import { registerController } from "@plane/decorators";
 import { logger, loggerMiddleware } from "@plane/logger";
+// change events
+import { changeEvents } from "@/change-events";
 // controllers
 import { CONTROLLERS } from "@/controllers";
 // env
@@ -45,6 +47,7 @@ export class Server {
     try {
       await redisManager.initialize();
       logger.info("SERVER: Redis setup completed");
+      changeEvents.start();
       const manager = HocusPocusServerManager.getInstance();
       this.hocuspocusServer = await manager.initialize();
       logger.info("SERVER: HocusPocus setup completed");
@@ -130,6 +133,7 @@ export class Server {
       logger.info("SERVER: HocusPocus documents stored and connections closed gracefully.");
     }
 
+    changeEvents.stop();
     await redisManager.disconnect();
     logger.info("SERVER: Redis connection closed gracefully.");
 

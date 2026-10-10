@@ -8,6 +8,7 @@
 import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import { create } from "axios";
 import { normalizeAPIRequestURL } from "@plane/services";
+import { trackOwnWrite } from "@/services/own-writes";
 
 export abstract class APIService {
   protected baseURL: string;
@@ -64,19 +65,19 @@ export abstract class APIService {
   }
 
   post(url: string, data = {}, config: AxiosRequestConfig = {}) {
-    return this.axiosInstance.post(url, data, config);
+    return trackOwnWrite(this.axiosInstance.post(url, data, config));
   }
 
   put(url: string, data = {}, config: AxiosRequestConfig = {}) {
-    return this.axiosInstance.put(url, data, config);
+    return trackOwnWrite(this.axiosInstance.put(url, data, config));
   }
 
   patch(url: string, data = {}, config: AxiosRequestConfig = {}) {
-    return this.axiosInstance.patch(url, data, config);
+    return trackOwnWrite(this.axiosInstance.patch(url, data, config));
   }
 
   delete(url: string, data?: any, config: AxiosRequestConfig = {}) {
-    return this.axiosInstance.delete(url, { data, ...config });
+    return trackOwnWrite(this.axiosInstance.delete(url, { data, ...config }));
   }
 
   request(config = {}) {

@@ -65,6 +65,7 @@ from plane.utils.custom_properties import add_formula_payload
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
 from plane.utils.grouper import (
+    get_description_prefix,
     issue_group_values,
     issue_on_results,
     issue_queryset_grouper,
@@ -204,6 +205,7 @@ class IssueListEndpoint(BaseAPIView):
                 "is_draft",
                 "archived_at",
                 "deleted_at",
+                description_prefix=get_description_prefix(),
             )
             datetime_fields = ["created_at", "updated_at"]
             issues = user_timezone_converter(issues, datetime_fields, request.user.user_timezone)

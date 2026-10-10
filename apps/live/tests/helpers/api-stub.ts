@@ -11,7 +11,8 @@ export type TStore = {
 
 /**
  * Stands for the API as the live server uses it for the pages of the workspace "plane": it knows one
- * user, serves the stored document of any page and takes the stores of it.
+ * user, serves the stored document of any page and takes the stores of it. The user, whose cookie
+ * is "session-id=1", is a member of the workspaces "plane" and "other".
  */
 export class ApiStub {
   origin = "";
@@ -60,8 +61,13 @@ export class ApiStub {
       response.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(data));
     const [, pageId, description] =
       /^\/api\/workspaces\/plane\/pages\/([^/]+)\/(description\/)?$/.exec(request.url ?? "") ?? [];
+    const [, workspaceSlug] = /^\/api\/workspaces\/([^/]+)\/$/.exec(request.url ?? "") ?? [];
     if (request.url === "/api/users/me/") {
       json(200, { id: "user", display_name: "User" });
+    } else if (workspaceSlug && request.headers.cookie !== "session-id=1") {
+      json(401, {});
+    } else if (workspaceSlug === "plane" || workspaceSlug === "other") {
+      json(200, { id: `id-of-${workspaceSlug}`, slug: workspaceSlug });
     } else if (!pageId) {
       json(404, {});
     } else if (!description) {

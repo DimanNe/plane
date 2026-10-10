@@ -38,6 +38,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useLiveUpdates } from "@/hooks/use-live-updates";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 interface IWorkspaceAuthWrapper {
@@ -70,6 +71,7 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   const currentWorkspace =
     (allWorkspaces && allWorkspaces.find((workspace) => workspace?.slug === workspaceSlug)) || undefined;
   const currentWorkspaceInfo = workspaceSlug && workspaceInfoBySlug(workspaceSlug.toString());
+  useLiveUpdates(currentWorkspace?.slug);
 
   // fetching user workspace information
   useSWR(
