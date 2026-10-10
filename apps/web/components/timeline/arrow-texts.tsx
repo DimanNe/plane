@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { minBy } from "lodash-es";
 import { memo, useEffect, useRef, useState } from "react";
 // plane imports
 import { changeArrow } from "@plane/blocks/timeline-schedule";
@@ -12,7 +13,7 @@ import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 // components
-import { BLOCK_HEIGHT } from "@/components/gantt-chart/constants";
+import { BLOCK_HEIGHT, HEADER_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 // local imports
 import type { TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
 import { getArrowLayerStyle, STUB } from "./arrows";
@@ -23,6 +24,8 @@ import { getDayDistance, MIN_BAR_WIDTH } from "./scale";
 import { useWheelNotches } from "./wheel";
 
 type TRect = { left: number; top: number; right: number; bottom: number };
+
+type TPosition = { clientX: number; clientY: number };
 
 type TArrowText = { look: "delay" | "conflict"; days: number };
 
@@ -38,6 +41,8 @@ type Props = Omit<TArrowWaysProps, "arrows"> & {
   viewBottom: number;
   operation: TTimelineOperation;
   isEditable: boolean;
+  // the element that scrolls the lines of the timeline
+  scroll: HTMLElement | null;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
 };
@@ -51,6 +56,9 @@ const TEXT_REACH = 240;
 const TEXT_STEP = 8;
 // how long the wheel rests over a text before what it changed is saved
 const WHEEL_REST_TIME = 800;
+// How far around a text that shows a delay the wheel still turns that delay: about a centimetre, by which a hand
+// that aims at a small text misses it.
+const WHEEL_MARGIN = 36;
 const CLASS_NAMES = {
   delay: "text-secondary",
   conflict: "text-danger-primary",
@@ -140,9 +148,10 @@ const getTextPlace = (
 };
 
 /**
- * The wheel over the text of an arrow changes the delay of the arrow, a day a notch. That is one operation: begun
- * at the first notch, shown at every notch, and saved when the wheel has rested for a moment or the pointer has
- * left the text; Escape drops it. It never stays open: changes of the plan made elsewhere wait for its end.
+ * The wheel near the text of an arrow changes the delay of the arrow, a day a notch. That is one operation: begun
+ * at the first notch, shown at every notch, and saved when the wheel has rested for a moment, the pointer has
+ * left the area of the text, or a button is pressed; Escape drops it. It never stays open: changes of the plan
+ * made elsewhere wait for its end.
  */
 const useDelayByWheel = (operation: TTimelineOperation) => {
   // the operation that is going on: the arrow, the plan it began with, and the timer of the rest
@@ -154,6 +163,7 @@ const useDelayByWheel = (operation: TTimelineOperation) => {
     turnRef.current = undefined;
     window.clearTimeout(turn.timer);
     document.removeEventListener("keydown", handleKeyDown, true);
+    document.removeEventListener("pointerdown", handlePress, true);
     if (isAborted) operation.abort();
     else operation.commit();
   });
@@ -166,6 +176,9 @@ const useDelayByWheel = (operation: TTimelineOperation) => {
     end(true);
   });
 
+  // a press begins another gesture, whose operation would take the place of this one
+  const handlePress = useLatestCallback(() => end(false));
+
   const turn = useLatestCallback((arrow: TScheduleArrow, direction: 1 | -1) => {
     if (turnRef.current && turnRef.current.arrowId !== arrow.id) end(false);
     if (!turnRef.current) {
@@ -173,6 +186,7 @@ const useDelayByWheel = (operation: TTimelineOperation) => {
       if (!plan) return;
       turnRef.current = { arrowId: arrow.id, plan, timer: 0 };
       document.addEventListener("keydown", handleKeyDown, true);
+      document.addEventListener("pointerdown", handlePress, true);
     }
     window.clearTimeout(turnRef.current.timer);
     turnRef.current.timer = window.setTimeout(() => end(false), WHEEL_REST_TIME);
@@ -181,31 +195,25 @@ const useDelayByWheel = (operation: TTimelineOperation) => {
 
   useEffect(() => () => end(true), [end]);
 
-  return { turn, end };
+  return { turn, end, getTurnedArrowId: () => turnRef.current?.arrowId };
 };
 
 type TTextProps = {
+  ref: React.RefCallback<HTMLButtonElement>;
   arrow: TScheduleArrow;
   text: string;
   look: TArrowText["look"];
   place: TPoint;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
-  onPointerEnter: (arrow: TScheduleArrow, place: TPoint) => void;
-  onPointerLeave: () => void;
-  // the wheel over the text turns the delay of its arrow; not given where the wheel does what it does elsewhere
-  onWheelNotch: ((arrow: TScheduleArrow, direction: 1 | -1) => void) | undefined;
+  onHover: (arrow: TScheduleArrow | undefined) => void;
 };
 
 function ArrowText(props: TTextProps) {
-  const { arrow, text, look, place, onClick, onPointerEnter, onPointerLeave, onWheelNotch } = props;
-  // states
-  const [element, setElement] = useState<HTMLButtonElement | null>(null);
-
-  useWheelNotches(element, onWheelNotch && ((direction) => onWheelNotch(arrow, direction)));
+  const { ref, arrow, text, look, place, onClick, onHover } = props;
 
   return (
     <button
-      ref={setElement}
+      ref={ref}
       type="button"
       className={cn(
         "pointer-events-auto absolute h-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-sm bg-surface-1 px-1 text-caption-md-medium whitespace-nowrap",
@@ -213,8 +221,8 @@ function ArrowText(props: TTextProps) {
       )}
       style={{ left: place[0], top: place[1] }}
       onClick={(e) => onClick(arrow, e)}
-      onPointerEnter={() => onPointerEnter(arrow, place)}
-      onPointerLeave={onPointerLeave}
+      onPointerEnter={() => onHover(arrow)}
+      onPointerLeave={() => onHover(undefined)}
     >
       {text}
     </button>
@@ -222,16 +230,28 @@ function ArrowText(props: TTextProps) {
 }
 
 const ArrowTexts = memo(function ArrowTexts(props: Props) {
-  const { drawnArrows, schedule, followingTaskIds, viewTop, viewBottom, operation, isEditable, onClick, onHover } =
-    props;
+  const {
+    drawnArrows,
+    schedule,
+    followingTaskIds,
+    viewTop,
+    viewBottom,
+    operation,
+    isEditable,
+    scroll,
+    onClick,
+    onHover,
+  } = props;
+  // refs
+  const elementsRef = useRef(new Map<string, HTMLElement>());
   // states
-  // The text the pointer is over, and its place. It stays there while the pointer is on it, whatever its arrow
-  // does: a text that moved away from under the pointer would have to be found again.
+  // The text whose area the pointer is in, and its place. It stays there while the pointer is in the area,
+  // whatever its arrow does: a text that moved away from the pointer would have to be found again.
   const [held, setHeld] = useState<{ arrowId: string; place: TPoint }>();
   // translation
   const { t } = useTranslation();
   // hooks
-  const { turn, end } = useDelayByWheel(operation);
+  const { turn, end, getTurnedArrowId } = useDelayByWheel(operation);
 
   const texts = drawnArrows.flatMap(({ arrow, points }) => {
     const arrowText = getArrowText(arrow, schedule, !followingTaskIds.has(arrow.nextId));
@@ -245,41 +265,91 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   const takenRects = getTakenRects(props);
   const heldText = texts.find(({ arrow }) => arrow.id === held?.arrowId);
   if (held && heldText) takenRects.push(getTextRect(held.place, heldText.width));
+  const placedTexts = texts.map(({ arrow, points, text, look, width }) => {
+    const place =
+      held && arrow.id === held.arrowId ? held.place : getTextPlace(points, width, takenRects, viewTop, viewBottom);
+    if (arrow.id !== held?.arrowId) takenRects.push(getTextRect(place, width));
+    return { arrow, text, look, place };
+  });
 
-  // a text that went away under the pointer tells nobody that the pointer has left it
+  /**
+   * The text that has a place of the window in its area; of several the nearest. The area of a text that shows a
+   * delay is the text and `WHEEL_MARGIN` on every side of it: there the wheel turns the delay. The area of
+   * another text is the text. A text whose delay is being turned keeps the wheel while the place is in its area:
+   * its bars move, and another text may come nearer.
+   */
+  const getTextNear = ({ clientX, clientY }: TPosition) => {
+    if (!isEditable || !scroll) return;
+    const frame = scroll.getBoundingClientRect();
+    // the list and the header of the timeline cover what is under them
+    if (clientX < frame.left + SIDEBAR_WIDTH || clientY < frame.top + HEADER_HEIGHT) return;
+    const textsNear = placedTexts.flatMap((placedText) => {
+      const box = elementsRef.current.get(placedText.arrow.id)?.getBoundingClientRect();
+      if (!box) return [];
+      const margin = placedText.look === "delay" ? WHEEL_MARGIN : 0;
+      const distanceX = Math.max(box.left - clientX, clientX - box.right, 0);
+      const distanceY = Math.max(box.top - clientY, clientY - box.bottom, 0);
+      if (distanceX > margin || distanceY > margin) return [];
+      return [{ ...placedText, distance: Math.hypot(distanceX, distanceY) }];
+    });
+    return textsNear.find(({ arrow }) => arrow.id === getTurnedArrowId()) ?? minBy(textsNear, "distance");
+  };
+
+  /** Holds the text that has the pointer in its area, and saves what the wheel turned on the one it has left. */
+  const holdTextNear = useLatestCallback((position: TPosition | undefined) => {
+    const textNear = position && getTextNear(position);
+    if (textNear?.arrow.id !== getTurnedArrowId()) end(false);
+    if (textNear?.arrow.id !== held?.arrowId)
+      setHeld(textNear && { arrowId: textNear.arrow.id, place: textNear.place });
+    return textNear;
+  });
+
+  useEffect(() => {
+    if (!scroll) return;
+    const handlePointerLeave = () => holdTextNear(undefined);
+    scroll.addEventListener("pointermove", holdTextNear);
+    scroll.addEventListener("pointerleave", handlePointerLeave);
+    return () => {
+      scroll.removeEventListener("pointermove", holdTextNear);
+      scroll.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, [scroll, holdTextNear]);
+
+  useWheelNotches(
+    scroll,
+    (direction, event) => {
+      const textNear = holdTextNear(event);
+      if (textNear) turn(textNear.arrow, direction);
+    },
+    (event) => holdTextNear(event)?.look === "delay"
+  );
+
+  // a text that went away with the pointer in its area tells nobody that the pointer has left it
   const isHeldTextGone = !!held && !heldText;
   useEffect(() => {
     if (isHeldTextGone) setHeld(undefined);
   }, [isHeldTextGone]);
 
-  return texts.map(({ arrow, points, text, look, width }) => {
-    const place =
-      held && arrow.id === held.arrowId ? held.place : getTextPlace(points, width, takenRects, viewTop, viewBottom);
-    if (arrow.id !== held?.arrowId) takenRects.push(getTextRect(place, width));
-    return (
-      <ArrowText
-        key={arrow.id}
-        arrow={arrow}
-        text={text}
-        look={look}
-        place={place}
-        onClick={(clickedArrow, click) => {
-          end(false);
-          onClick(clickedArrow, click);
-        }}
-        onPointerEnter={(enteredArrow, enteredPlace) => {
-          setHeld({ arrowId: enteredArrow.id, place: enteredPlace });
-          onHover(enteredArrow);
-        }}
-        onPointerLeave={() => {
-          end(false);
-          setHeld(undefined);
-          onHover(undefined);
-        }}
-        onWheelNotch={isEditable && look === "delay" ? turn : undefined}
-      />
-    );
-  });
+  return placedTexts.map(({ arrow, text, look, place }) => (
+    <ArrowText
+      key={arrow.id}
+      ref={(element) => {
+        if (element) elementsRef.current.set(arrow.id, element);
+        return () => {
+          elementsRef.current.delete(arrow.id);
+        };
+      }}
+      arrow={arrow}
+      text={text}
+      look={look}
+      place={place}
+      onClick={(clickedArrow, click) => {
+        end(false);
+        onClick(clickedArrow, click);
+      }}
+      onHover={onHover}
+    />
+  ));
 });
 
 /** The texts over the arrows: how each arrow is set, without a click. */

@@ -511,6 +511,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   operation={operation}
                   // during a gesture the wheel over a text changes nothing
                   isEditable={isEditable && !drag && !link}
+                  scroll={scroll}
                   onClick={handleArrowClick}
                   onHover={handleArrowHover}
                 />
