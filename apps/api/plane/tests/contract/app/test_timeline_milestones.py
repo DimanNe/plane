@@ -74,10 +74,10 @@ def get_relations() -> t.Set[t.Tuple[str, uuid.UUID, uuid.UUID]]:
 
 
 def create_relation(
-    issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue
+    issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue, delay: int = 0
 ) -> db_models.IssueRelation:
     return db_models.IssueRelation.objects.create(
-        project=issue.project, issue=issue, relation_type=relation_type, related_issue=related_issue
+        project=issue.project, issue=issue, relation_type=relation_type, related_issue=related_issue, delay=delay
     )
 
 
@@ -276,10 +276,10 @@ def test_timeline_dependencies_lists_dependencies_touching_the_project(
     project: db_models.Project, other_project: db_models.Project, session_client: api_test.APIClient
 ) -> None:
     a: db_models.Issue = create_issue(project, "A", "2026-01-01..2026-01-03")
-    b: db_models.Issue = create_issue(project, "B")
+    b: db_models.Issue = create_issue(project, "B", is_start_fixed=False)
     c: db_models.Issue = create_issue(other_project, "C")
     d: db_models.Issue = create_issue(other_project, "D")
-    blocked_by: db_models.IssueRelation = create_relation(b, "blocked_by", a)
+    blocked_by: db_models.IssueRelation = create_relation(b, "blocked_by", a, delay=2)
     start_before: db_models.IssueRelation = create_relation(b, "start_before", c)
     create_relation(c, "finish_before", d)
     create_relation(a, "relates_to", d)
@@ -296,12 +296,14 @@ def test_timeline_dependencies_lists_dependencies_touching_the_project(
                     "predecessor_id": str(a.id),
                     "dependent_id": str(b.id),
                     "relation_type": "blocking",
+                    "delay": 2,
                 },
                 {
                     "id": str(start_before.id),
                     "predecessor_id": str(b.id),
                     "dependent_id": str(c.id),
                     "relation_type": "start_before",
+                    "delay": 0,
                 },
             ]
         ),
@@ -315,6 +317,7 @@ def test_timeline_dependencies_lists_dependencies_touching_the_project(
                     "project__identifier": "TL",
                     "start_date": "2026-01-01",
                     "target_date": "2026-01-03",
+                    "is_start_fixed": True,
                 },
                 {
                     "id": str(b.id),
@@ -324,6 +327,7 @@ def test_timeline_dependencies_lists_dependencies_touching_the_project(
                     "project__identifier": "TL",
                     "start_date": None,
                     "target_date": None,
+                    "is_start_fixed": False,
                 },
                 {
                     "id": str(c.id),
@@ -333,22 +337,21 @@ def test_timeline_dependencies_lists_dependencies_touching_the_project(
                     "project__identifier": "OTH",
                     "start_date": None,
                     "target_date": None,
+                    "is_start_fixed": True,
                 },
             ]
         ),
     }
 
 
-def post_issue_dates(
-    client: api_test.APIClient,
+def create_issues_and_relations(
     project: db_models.Project,
     other_project: db_models.Project,
     dates: t.Dict[str, str],
-    relations: t.List[t.Tuple[str, str, str]],
-    updates: t.Dict[str, JsonObject],
-) -> api_response.Response:
-    """Create the named work items (in the other project or archived when the name says so) and their relations,
-    then post the updates of the named work items to the project."""
+    relations: t.Sequence[t.Tuple[t.Any, ...]],
+) -> t.Dict[str, db_models.Issue]:
+    """Create the named work items (in the other project or archived when the name says so) and their relations:
+    work item, relation type, related work item and, when it is not 0, the delay."""
     issues: t.Dict[str, db_models.Issue] = {
         name: create_issue(
             other_project if name.startswith("Other") else project,
@@ -361,8 +364,425 @@ def post_issue_dates(
     issue_name: str
     relation_type: str
     related_issue_name: str
-    for issue_name, relation_type, related_issue_name in relations:
-        create_relation(issues[issue_name], relation_type, issues[related_issue_name])
+    delay: t.List[int]
+    for issue_name, relation_type, related_issue_name, *delay in relations:
+        create_relation(issues[issue_name], relation_type, issues[related_issue_name], *delay)
+    return issues
+
+
+def get_stored_relations() -> t.Set[t.Tuple[str, str, str, int]]:
+    """Relation type, names of the work item and the related work item, and delay of every relation, as stored."""
+    return set(
+        db_models.IssueRelation.objects.values_list("relation_type", "issue__name", "related_issue__name", "delay")
+    )
+
+
+def get_issue_starts() -> t.Dict[str, t.Tuple[str, bool]]:
+    """Dates of every work item as `get_issue_dates` reports them, and whether its start is fixed."""
+    return {
+        name: (f"{start_date}..{target_date}", is_start_fixed)
+        for name, start_date, target_date, is_start_fixed in db_models.Issue.objects.values_list(
+            "name", "start_date", "target_date", "is_start_fixed"
+        )
+    }
+
+
+def post_timeline_changes(
+    client: api_test.APIClient,
+    project: db_models.Project,
+    issues: t.Dict[str, db_models.Issue],
+    dependencies: t.List[t.Tuple[str, str, str, int]],
+    removed: t.List[t.Tuple[str, str]],
+    updates: t.Dict[str, JsonObject],
+) -> api_response.Response:
+    """Post to the project: dependencies as predecessor, relation type read from it, dependent and delay; the
+    stored relations to remove as work item and related work item; and the updates of the named work items."""
+    return client.post(
+        get_url(project, "timeline-dependencies/"),
+        {
+            "dependencies": [
+                {
+                    "predecessor_id": str(issues[predecessor_name].id),
+                    "dependent_id": str(issues[dependent_name].id),
+                    "relation_type": relation_type,
+                    "delay": delay,
+                }
+                for predecessor_name, relation_type, dependent_name, delay in dependencies
+            ],
+            "removed_dependencies": [
+                str(db_models.IssueRelation.objects.get(issue=issues[name], related_issue=issues[related_name]).id)
+                for name, related_name in removed
+            ],
+            "issues": [{"id": str(issues[name].id), **updates[name]} for name in updates],
+        },
+        format="json",
+    )
+
+
+@pytest.mark.parametrize(
+    "relations, dependencies, removed, expected_relations",
+    [
+        pytest.param(
+            [],
+            [("A", "blocking", "B", 2)],
+            [],
+            {("blocked_by", "B", "A", 2)},
+            id="new-dependency-is-stored-with-its-delay",
+        ),
+        pytest.param(
+            [],
+            [("A", "start_before", "B", 0), ("A", "finish_before", "C", 1)],
+            [],
+            {("start_before", "A", "B", 0), ("finish_before", "A", "C", 1)},
+            id="types-other-than-blocking-are-stored-from-the-predecessor",
+        ),
+        pytest.param(
+            [("B", "blocked_by", "A", 1), ("A", "start_before", "C", 1)],
+            [("A", "blocking", "B", 3)],
+            [],
+            {("blocked_by", "B", "A", 3), ("start_before", "A", "C", 1)},
+            id="existing-dependency-gets-the-given-delay",
+        ),
+        pytest.param(
+            [("B", "blocked_by", "A"), ("C", "blocked_by", "A")],
+            [],
+            [("B", "A")],
+            {("blocked_by", "C", "A", 0)},
+            id="removed-dependency-is-removed",
+        ),
+        pytest.param(
+            [("B", "blocked_by", "A", 1)],
+            [("A", "start_before", "B", 1)],
+            [("B", "A")],
+            {("start_before", "A", "B", 1)},
+            id="type-changes-by-removing-the-dependency-and-giving-the-new-one",
+        ),
+        pytest.param(
+            [("A", "relates_to", "B")],
+            [],
+            [("A", "B")],
+            {("relates_to", "A", "B", 0)},
+            id="relation-that-is-not-a-dependency-is-not-removed",
+        ),
+    ],
+)
+def test_save_timeline_changes_saves_the_given_dependencies(
+    project: db_models.Project,
+    other_project: db_models.Project,
+    session_client: api_test.APIClient,
+    relations: t.List[t.Tuple[t.Any, ...]],
+    dependencies: t.List[t.Tuple[str, str, str, int]],
+    removed: t.List[t.Tuple[str, str]],
+    expected_relations: t.Set[t.Tuple[str, str, str, int]],
+) -> None:
+    issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(
+        project, other_project, {name: "None..None" for name in "ABC"}, relations
+    )
+
+    response: api_response.Response = post_timeline_changes(session_client, project, issues, dependencies, removed, {})
+
+    assert response.status_code == 200, response.content
+    assert get_stored_relations() == expected_relations
+
+
+@pytest.mark.parametrize(
+    "dates, relations, updates, expected_starts",
+    [
+        pytest.param(
+            {"A": "2026-01-01..2026-01-03", "B": "2026-01-03..2026-01-05"},
+            [("B", "blocked_by", "A")],
+            {"A": {"start_date": "2026-01-06", "target_date": "2026-01-08", "is_start_fixed": True}},
+            {"A": ("2026-01-06..2026-01-08", True), "B": ("2026-01-03..2026-01-05", True)},
+            id="dependent-that-is-not-given-stays",
+        ),
+        pytest.param(
+            {"A": "2026-01-01..2026-01-03", "Other B": "2026-01-03..2026-01-05"},
+            [("Other B", "blocked_by", "A")],
+            {"Other B": {"start_date": "2026-01-04", "target_date": "2026-01-06", "is_start_fixed": False}},
+            {"A": ("2026-01-01..2026-01-03", True), "Other B": ("2026-01-04..2026-01-06", False)},
+            id="work-item-of-another-project-is-saved",
+        ),
+        pytest.param(
+            {"A": "2026-01-01..2026-01-03"},
+            [],
+            {"A": {"is_start_fixed": False}},
+            {"A": ("2026-01-01..2026-01-03", False)},
+            id="field-left-out-stays",
+        ),
+        pytest.param(
+            {"Archived A": "2026-01-01..2026-01-03"},
+            [],
+            {"Archived A": {"start_date": "2026-01-02", "is_start_fixed": False}},
+            {"Archived A": ("2026-01-01..2026-01-03", True)},
+            id="archived-work-item-is-skipped",
+        ),
+    ],
+)
+def test_save_timeline_changes_sets_what_is_given_on_the_given_work_items(
+    project: db_models.Project,
+    other_project: db_models.Project,
+    session_client: api_test.APIClient,
+    dates: t.Dict[str, str],
+    relations: t.List[t.Tuple[t.Any, ...]],
+    updates: t.Dict[str, JsonObject],
+    expected_starts: t.Dict[str, t.Tuple[str, bool]],
+) -> None:
+    issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(project, other_project, dates, relations)
+
+    response: api_response.Response = post_timeline_changes(session_client, project, issues, [], [], updates)
+
+    assert response.status_code == 200, response.content
+    assert get_issue_starts() == expected_starts
+
+
+@pytest.mark.parametrize(
+    "dependencies, updates, expected_error",
+    [
+        pytest.param(
+            [("B", "blocking", "A", 0)],
+            {"C": {"start_date": "2026-01-02"}},
+            {"error": "This dependency would create a cycle"},
+            id="dependency-that-closes-a-cycle",
+        ),
+        pytest.param(
+            [("A", "finish_before", "B", 0)],
+            {"C": {"start_date": "2026-01-02"}},
+            {"error": "These work items already have a dependency"},
+            id="another-type-between-work-items-whose-dependency-is-not-removed",
+        ),
+        pytest.param(
+            [("B", "blocking", "Archived D", 0)],
+            {"C": {"start_date": "2026-01-02"}},
+            {"error": "A dependency needs two work items of the workspace that are not archived"},
+            id="dependency-to-an-archived-work-item",
+        ),
+        pytest.param(
+            [("Archived D", "blocking", "B", 0)],
+            {"C": {"start_date": "2026-01-02"}},
+            {"error": "A dependency needs two work items of the workspace that are not archived"},
+            id="dependency-from-an-archived-work-item",
+        ),
+        pytest.param(
+            [("A", "start_before", "E", 0)],
+            {"C": {"start_date": "2026-01-02"}},
+            {"error": "These work items already have a relation in this direction"},
+            id="dependency-beside-another-relation-stored-in-the-same-order",
+        ),
+        pytest.param(
+            [("B", "blocking", "E", 0)],
+            {"C": {"start_date": "2026-01-02"}, "B": {"start_date": "2026-01-04"}},
+            {"message": "Start date cannot exceed target date"},
+            id="start-date-after-target-date",
+        ),
+    ],
+)
+def test_save_timeline_changes_that_are_refused_change_nothing(
+    project: db_models.Project,
+    other_project: db_models.Project,
+    session_client: api_test.APIClient,
+    dependencies: t.List[t.Tuple[str, str, str, int]],
+    updates: t.Dict[str, JsonObject],
+    expected_error: JsonObject,
+) -> None:
+    issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(
+        project,
+        other_project,
+        {name: "2026-01-01..2026-01-03" for name in ("A", "B", "C", "Archived D", "E")},
+        [("B", "blocked_by", "A"), ("C", "blocked_by", "A"), ("A", "relates_to", "E")],
+    )
+    relations: t.Set[t.Tuple[str, str, str, int]] = get_stored_relations()
+
+    response: api_response.Response = post_timeline_changes(
+        session_client, project, issues, dependencies, [("C", "A")], updates
+    )
+
+    assert (response.status_code, response.json()) == (400, expected_error)
+    assert (get_stored_relations(), get_issue_dates()) == (
+        relations,
+        {name: "2026-01-01..2026-01-03" for name in issues},
+    )
+
+
+def test_save_timeline_changes_answers_with_the_given_dependencies_and_work_items_as_stored(
+    project: db_models.Project, other_project: db_models.Project, session_client: api_test.APIClient
+) -> None:
+    issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(
+        project,
+        other_project,
+        {"A": "2026-01-01..2026-01-03", "B": "2026-01-01..2026-01-02", "C": "2026-01-01..2026-01-02"},
+        [("C", "blocked_by", "A"), ("A", "start_before", "B")],
+    )
+
+    response: api_response.Response = post_timeline_changes(
+        session_client,
+        project,
+        issues,
+        [("A", "blocking", "B", 1), ("A", "blocking", "C", 2)],
+        [("A", "B")],
+        {"B": {"start_date": "2026-01-05", "target_date": "2026-01-06", "is_start_fixed": False}},
+    )
+
+    assert (response.status_code, response.json()) == (
+        200,
+        {
+            "dependencies": [
+                {
+                    "id": str(db_models.IssueRelation.objects.get(issue=issues[name], related_issue=issues["A"]).id),
+                    "predecessor_id": str(issues["A"].id),
+                    "dependent_id": str(issues[name].id),
+                    "relation_type": "blocking",
+                    "delay": delay,
+                }
+                for name, delay in (("B", 1), ("C", 2))
+            ],
+            "issues": [
+                {
+                    "id": str(issues["B"].id),
+                    "name": "B",
+                    "sequence_id": issues["B"].sequence_id,
+                    "project_id": str(project.id),
+                    "project__identifier": "TL",
+                    "start_date": "2026-01-05",
+                    "target_date": "2026-01-06",
+                    "is_start_fixed": False,
+                }
+            ],
+        },
+    )
+
+
+@pytest.mark.usefixtures("inline_issue_activity")
+def test_save_timeline_changes_records_activity_of_dependencies_and_dates(
+    project: db_models.Project, other_project: db_models.Project, session_client: api_test.APIClient
+) -> None:
+    issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(
+        project,
+        other_project,
+        {"A": "2026-01-01..2026-01-03", "B": "2026-01-01..2026-01-02", "C": "2026-01-01..2026-01-02"},
+        [("C", "blocked_by", "A")],
+    )
+
+    post_timeline_changes(
+        session_client,
+        project,
+        issues,
+        [("A", "start_before", "B", 1)],
+        [("C", "A")],
+        {"B": {"start_date": "2026-01-02", "target_date": "2026-01-03", "is_start_fixed": False}},
+    )
+
+    assert get_activities() == {
+        ("A", "blocking", "TL-3", ""),
+        ("C", "blocked_by", "TL-1", ""),
+        ("A", "start_before", "", "TL-2"),
+        ("B", "start_after", "", "TL-1"),
+        ("B", "start_date", "2026-01-01", "2026-01-02"),
+        ("B", "target_date", "2026-01-02", "2026-01-03"),
+    }
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        pytest.param({"dependencies": [], "issues": []}, id="list-left-out"),
+        pytest.param(
+            {
+                "dependencies": [
+                    {"predecessor_id": "{A}", "dependent_id": "{B}", "relation_type": "blocked_by", "delay": 0}
+                ],
+                "removed_dependencies": [],
+                "issues": [],
+            },
+            id="relation-type-not-read-from-the-predecessor",
+        ),
+        pytest.param(
+            {
+                "dependencies": [
+                    {"predecessor_id": "{A}", "dependent_id": "{B}", "relation_type": "blocking", "delay": -1}
+                ],
+                "removed_dependencies": [],
+                "issues": [],
+            },
+            id="negative-delay",
+        ),
+        pytest.param(
+            {
+                "dependencies": [{"predecessor_id": "{A}", "dependent_id": "{B}", "relation_type": "blocking"}],
+                "removed_dependencies": [],
+                "issues": [],
+            },
+            id="dependency-without-delay",
+        ),
+        pytest.param(
+            {"dependencies": [], "removed_dependencies": [], "issues": [{"id": "{A}", "start_date": "tomorrow"}]},
+            id="invalid-date",
+        ),
+    ],
+)
+def test_save_timeline_changes_that_are_malformed_are_rejected(
+    project: db_models.Project, session_client: api_test.APIClient, changes: JsonObject
+) -> None:
+    a: db_models.Issue = create_issue(project, "A", "2026-01-01..2026-01-03")
+    b: db_models.Issue = create_issue(project, "B")
+
+    response: api_response.Response = session_client.post(
+        get_url(project, "timeline-dependencies/"),
+        json.loads(json.dumps(changes).replace("{A}", str(a.id)).replace("{B}", str(b.id))),
+        format="json",
+    )
+
+    assert response.status_code == 400, response.content
+    assert (get_stored_relations(), get_issue_dates()) == (set(), {"A": "2026-01-01..2026-01-03", "B": "None..None"})
+
+
+def test_save_timeline_changes_neither_saves_nor_shows_a_work_item_of_another_workspace(
+    project: db_models.Project, create_user: db_models.User, session_client: api_test.APIClient
+) -> None:
+    other_workspace: db_models.Workspace = db_models.Workspace.objects.create(
+        name="Other", owner=create_user, slug="other-workspace"
+    )
+    a: db_models.Issue = create_issue(
+        db_models.Project.objects.create(name="Elsewhere", identifier="ELS", workspace=other_workspace),
+        "A",
+        "2026-01-01..2026-01-03",
+    )
+
+    response: api_response.Response = session_client.post(
+        get_url(project, "timeline-dependencies/"),
+        {"dependencies": [], "removed_dependencies": [], "issues": [{"id": str(a.id), "start_date": "2026-01-02"}]},
+        format="json",
+    )
+
+    assert (response.status_code, response.json()) == (200, {"dependencies": [], "issues": []})
+    assert get_issue_dates() == {"A": "2026-01-01..2026-01-03"}
+
+
+def test_save_timeline_changes_is_refused_to_a_guest_of_the_project(
+    project: db_models.Project, session_client: api_test.APIClient
+) -> None:
+    a: db_models.Issue = create_issue(project, "A", "2026-01-01..2026-01-03")
+    db_models.ProjectMember.objects.filter(project=project).update(role=5)
+
+    response: api_response.Response = session_client.post(
+        get_url(project, "timeline-dependencies/"),
+        {"dependencies": [], "removed_dependencies": [], "issues": [{"id": str(a.id), "start_date": "2026-01-02"}]},
+        format="json",
+    )
+
+    assert response.status_code == 403, response.content
+    assert get_issue_dates() == {"A": "2026-01-01..2026-01-03"}
+
+
+def post_issue_dates(
+    client: api_test.APIClient,
+    project: db_models.Project,
+    other_project: db_models.Project,
+    dates: t.Dict[str, str],
+    relations: t.List[t.Tuple[str, str, str]],
+    updates: t.Dict[str, JsonObject],
+) -> api_response.Response:
+    """Create the work items and relations, then post the updates of the named work items to the project."""
+    issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(project, other_project, dates, relations)
     return client.post(
         get_url(project, "issue-dates/"),
         {"updates": [{"id": str(issues[name].id), **updates[name]} for name in updates]},
@@ -374,54 +794,11 @@ def post_issue_dates(
     "dates, relations, updates, expected_dates",
     [
         pytest.param(
-            {"A": "2026-01-01..2026-01-03", "Other B": "2026-01-03..2026-01-05", "Other C": "2026-01-05..2026-01-08"},
-            [("Other B", "blocked_by", "A"), ("Other C", "blocked_by", "Other B")],
+            {"A": "2026-01-01..2026-01-03", "B": "2026-01-03..2026-01-05", "C": "2026-01-05..2026-01-08"},
+            [("B", "blocked_by", "A"), ("A", "start_before", "C")],
             {"A": {"start_date": "2026-01-06", "target_date": "2026-01-08"}},
-            {"A": "2026-01-06..2026-01-08", "Other B": "2026-01-08..2026-01-10", "Other C": "2026-01-10..2026-01-13"},
-            id="dependents-in-other-projects-move-and-keep-their-duration",
-        ),
-        pytest.param(
-            {
-                "A": "2026-01-01..2026-01-05",
-                "B": "2026-01-01..2026-01-03",
-                "C": "2026-01-01..2026-01-02",
-                "D": "2026-01-01..2026-01-03",
-            },
-            [
-                ("A", "start_before", "B"),
-                ("A", "finish_before", "C"),
-                ("D", "blocked_by", "B"),
-                ("D", "blocked_by", "C"),
-            ],
-            {"A": {"start_date": "2026-01-10", "target_date": "2026-01-14"}},
-            {
-                "A": "2026-01-10..2026-01-14",
-                "B": "2026-01-10..2026-01-12",
-                "C": "2026-01-13..2026-01-14",
-                "D": "2026-01-14..2026-01-16",
-            },
-            id="dependent-moves-by-its-most-violated-dependency",
-        ),
-        pytest.param(
-            {"A": "2026-01-10..2026-01-14", "B": "2026-01-14..2026-01-16"},
-            [("B", "blocked_by", "A")],
-            {"A": {"start_date": "2026-01-01", "target_date": "2026-01-05"}},
-            {"A": "2026-01-01..2026-01-05", "B": "2026-01-14..2026-01-16"},
-            id="dependent-does-not-move-earlier",
-        ),
-        pytest.param(
-            {"A": "2026-01-01..2026-01-03", "B": "2026-01-02..None"},
-            [("B", "blocked_by", "A")],
-            {"A": {"target_date": "2026-01-09"}},
-            {"A": "2026-01-01..2026-01-09", "B": "2026-01-02..None"},
-            id="dependent-without-both-dates-does-not-move",
-        ),
-        pytest.param(
-            {"A": "2026-01-01..2026-01-03", "B": "2026-01-03..2026-01-05"},
-            [("B", "blocked_by", "A")],
-            {"A": {"target_date": "2026-01-09"}, "B": {"start_date": "2026-01-04"}},
-            {"A": "2026-01-01..2026-01-09", "B": "2026-01-04..2026-01-05"},
-            id="requested-dates-are-kept-even-when-they-violate-a-dependency",
+            {"A": "2026-01-06..2026-01-08", "B": "2026-01-03..2026-01-05", "C": "2026-01-05..2026-01-08"},
+            id="dependents-of-a-moved-work-item-stay",
         ),
         pytest.param(
             {"A": "2026-01-01..2026-01-03"},
@@ -431,46 +808,15 @@ def post_issue_dates(
             id="null-clears-a-date-and-a-date-left-out-stays",
         ),
         pytest.param(
-            {"A": "2026-01-01..2026-01-03", "B": "2026-01-01..2026-01-03", "C": "2026-01-01..2026-01-03"},
-            [("B", "start_before", "C"), ("C", "start_before", "B")],
-            {"A": {"target_date": "2026-01-09"}},
-            {"A": "2026-01-01..2026-01-09", "B": "2026-01-01..2026-01-03", "C": "2026-01-01..2026-01-03"},
-            id="cycle-among-work-items-that-do-not-depend-on-the-moved-one-is-ignored",
-        ),
-        pytest.param(
             {"Other A": "2026-01-01..2026-01-03"},
             [],
             {"Other A": {"target_date": "2026-01-09"}},
             {"Other A": "2026-01-01..2026-01-03"},
             id="work-item-of-another-project-is-skipped",
         ),
-        pytest.param(
-            {
-                "A": "2026-01-01..2026-01-03",
-                "Archived B": "2026-01-03..2026-01-05",
-                "C": "2026-01-05..2026-01-07",
-                "D": "2026-01-01..2026-01-08",
-            },
-            [("Archived B", "blocked_by", "A"), ("C", "blocked_by", "Archived B"), ("C", "blocked_by", "D")],
-            {"A": {"target_date": "2026-01-09"}},
-            {
-                "A": "2026-01-01..2026-01-09",
-                "Archived B": "2026-01-03..2026-01-05",
-                "C": "2026-01-08..2026-01-10",
-                "D": "2026-01-01..2026-01-08",
-            },
-            id="archived-dependent-stays-and-its-own-dependents-are-still-checked",
-        ),
-        pytest.param(
-            {"A": "2026-01-10..2026-01-14", "B": "2026-01-12..2026-01-16"},
-            [("B", "blocked_by", "A")],
-            {"A": {"start_date": "2026-01-09", "target_date": "2026-01-13"}},
-            {"A": "2026-01-09..2026-01-13", "B": "2026-01-13..2026-01-17"},
-            id="dependent-that-already-violated-its-dependency-moves-behind-a-predecessor-moved-earlier",
-        ),
     ],
 )
-def test_issue_dates_schedule_work_items(
+def test_issue_dates_set_only_the_requested_dates(
     project: db_models.Project,
     other_project: db_models.Project,
     session_client: api_test.APIClient,
@@ -487,39 +833,21 @@ def test_issue_dates_schedule_work_items(
     assert get_issue_dates() == expected_dates
 
 
-@pytest.mark.parametrize(
-    "dates, relations, updates, expected_error",
-    [
-        pytest.param(
-            {"A": "2026-01-01..2026-01-03", "B": "2026-01-01..2026-01-03"},
-            [],
-            {"A": {"target_date": "2026-02-01"}, "B": {"start_date": "2026-01-04"}},
-            {"message": "Start date cannot exceed target date"},
-            id="start-date-after-target-date",
-        ),
-        pytest.param(
-            {"A": "2026-01-01..2026-01-03", "B": "2026-01-03..2026-01-05", "C": "2026-01-05..2026-01-07"},
-            [("B", "blocked_by", "A"), ("C", "blocked_by", "B"), ("B", "blocked_by", "C")],
-            {"A": {"target_date": "2026-01-09"}},
-            {"message": "The dependencies of these work items form a cycle"},
-            id="cycle-among-dependents",
-        ),
-    ],
-)
-def test_issue_dates_that_cannot_be_scheduled_change_nothing(
-    project: db_models.Project,
-    other_project: db_models.Project,
-    session_client: api_test.APIClient,
-    dates: t.Dict[str, str],
-    relations: t.List[t.Tuple[str, str, str]],
-    updates: t.Dict[str, JsonObject],
-    expected_error: JsonObject,
+def test_issue_dates_with_a_start_after_the_target_change_nothing(
+    project: db_models.Project, other_project: db_models.Project, session_client: api_test.APIClient
 ) -> None:
+    dates: t.Dict[str, str] = {"A": "2026-01-01..2026-01-03", "B": "2026-01-01..2026-01-03"}
+
     response: api_response.Response = post_issue_dates(
-        session_client, project, other_project, dates, relations, updates
+        session_client,
+        project,
+        other_project,
+        dates,
+        [],
+        {"A": {"target_date": "2026-02-01"}, "B": {"start_date": "2026-01-04"}},
     )
 
-    assert (response.status_code, response.json()) == (400, expected_error)
+    assert (response.status_code, response.json()) == (400, {"message": "Start date cannot exceed target date"})
     assert get_issue_dates() == dates
 
 
@@ -548,37 +876,40 @@ def test_issue_dates_with_malformed_updates_are_rejected(
     assert get_issue_dates() == {"A": "2026-01-01..2026-01-03"}
 
 
-def test_issue_dates_return_every_changed_work_item(
+def test_issue_dates_return_the_changed_work_items(
     project: db_models.Project, session_client: api_test.APIClient
 ) -> None:
     a: db_models.Issue = create_issue(project, "A", "2026-01-01..2026-01-03")
     b: db_models.Issue = create_issue(project, "B", "2026-01-03..2026-01-05")
-    create_issue(project, "C", "2026-01-03..2026-01-05")
-    create_relation(b, "blocked_by", a)
 
     response: api_response.Response = session_client.post(
-        get_url(project, "issue-dates/"), {"updates": [{"id": str(a.id), "target_date": "2026-01-04"}]}, format="json"
+        get_url(project, "issue-dates/"),
+        {"updates": [{"id": str(a.id), "target_date": "2026-01-04"}, {"id": str(b.id), "target_date": "2026-01-05"}]},
+        format="json",
     )
 
-    assert response.status_code == 200, response.content
-    assert sort_by_id(response.json()["updates"]) == sort_by_id(
-        [
-            {"id": str(a.id), "start_date": "2026-01-01", "target_date": "2026-01-04"},
-            {"id": str(b.id), "start_date": "2026-01-04", "target_date": "2026-01-06"},
-        ]
+    assert (response.status_code, response.json()) == (
+        200,
+        {"updates": [{"id": str(a.id), "start_date": "2026-01-01", "target_date": "2026-01-04"}]},
     )
 
 
 @pytest.mark.usefixtures("inline_issue_activity")
-def test_issue_dates_record_activity_on_every_moved_work_item(
+def test_issue_dates_record_activity_on_every_changed_work_item(
     project: db_models.Project, session_client: api_test.APIClient
 ) -> None:
     a: db_models.Issue = create_issue(project, "A", "2026-01-01..2026-01-03")
     b: db_models.Issue = create_issue(project, "B", "2026-01-03..2026-01-05")
-    create_relation(b, "blocked_by", a)
 
     session_client.post(
-        get_url(project, "issue-dates/"), {"updates": [{"id": str(a.id), "target_date": "2026-01-04"}]}, format="json"
+        get_url(project, "issue-dates/"),
+        {
+            "updates": [
+                {"id": str(a.id), "target_date": "2026-01-04"},
+                {"id": str(b.id), "start_date": "2026-01-04", "target_date": "2026-01-06"},
+            ]
+        },
+        format="json",
     )
 
     assert get_activities() == {

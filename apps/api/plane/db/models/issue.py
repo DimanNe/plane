@@ -150,6 +150,8 @@ class Issue(ChangeTrackerMixin, ProjectBaseModel):
     )
     start_date = models.DateField(null=True, blank=True)
     target_date = models.DateField(null=True, blank=True)
+    # False when the timeline computes the start from the dependencies that lead to the work item.
+    is_start_fixed = models.BooleanField(default=True)
     assignees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
@@ -305,6 +307,8 @@ class IssueRelation(ProjectBaseModel):
         verbose_name="Issue Relation Type",
         default=IssueRelationChoices.BLOCKED_BY,
     )
+    # Days a dependency keeps between its two work items on the timeline, 0 for none.
+    delay = models.PositiveIntegerField(default=0)
 
     class Meta:
         unique_together = ["issue", "related_issue", "deleted_at"]

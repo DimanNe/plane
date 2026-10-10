@@ -45,9 +45,9 @@ def create_issue(project: db_models.Project, name: str) -> db_models.Issue:
     return issue
 
 
-def create_relation(issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue) -> None:
+def create_relation(issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue, delay: int = 0) -> None:
     db_models.IssueRelation.objects.create(
-        project=issue.project, issue=issue, relation_type=relation_type, related_issue=related_issue
+        project=issue.project, issue=issue, relation_type=relation_type, related_issue=related_issue, delay=delay
     )
 
 
@@ -64,7 +64,8 @@ def format_timestamp(value: datetime.datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def get_work_item_body(issue: db_models.Issue, relation_type: str) -> JsonObject:
+def get_work_item_body(issue: db_models.Issue, relation_type: str, **fields: t.Any) -> JsonObject:
+    """A dependency also shows its `delay`, which the test states."""
     return {
         "id": str(issue.id),
         "name": issue.name,
@@ -79,6 +80,7 @@ def get_work_item_body(issue: db_models.Issue, relation_type: str) -> JsonObject
         "created_by": None,
         "updated_by": None,
         "relation_type": relation_type,
+        **fields,
     }
 
 
@@ -86,11 +88,11 @@ def test_list_dependencies_groups_work_items_by_relation_read_from_the_work_item
     project: db_models.Project, api_key_client: api_test.APIClient
 ) -> None:
     issues: t.Dict[str, db_models.Issue] = {name: create_issue(project, name) for name in "ABCDEFGH"}
-    create_relation(issues["B"], "blocked_by", issues["A"])
-    create_relation(issues["A"], "blocked_by", issues["C"])
-    create_relation(issues["A"], "start_before", issues["D"])
-    create_relation(issues["E"], "start_before", issues["A"])
-    create_relation(issues["A"], "finish_before", issues["F"])
+    create_relation(issues["B"], "blocked_by", issues["A"], delay=1)
+    create_relation(issues["A"], "blocked_by", issues["C"], delay=2)
+    create_relation(issues["A"], "start_before", issues["D"], delay=3)
+    create_relation(issues["E"], "start_before", issues["A"], delay=4)
+    create_relation(issues["A"], "finish_before", issues["F"], delay=5)
     create_relation(issues["G"], "finish_before", issues["A"])
     create_relation(issues["A"], "relates_to", issues["H"])
 
@@ -99,12 +101,12 @@ def test_list_dependencies_groups_work_items_by_relation_read_from_the_work_item
     assert (response.status_code, response.json()) == (
         200,
         {
-            "blocking": [get_work_item_body(issues["B"], "blocking")],
-            "blocked_by": [get_work_item_body(issues["C"], "blocked_by")],
-            "start_before": [get_work_item_body(issues["D"], "start_before")],
-            "start_after": [get_work_item_body(issues["E"], "start_after")],
-            "finish_before": [get_work_item_body(issues["F"], "finish_before")],
-            "finish_after": [get_work_item_body(issues["G"], "finish_after")],
+            "blocking": [get_work_item_body(issues["B"], "blocking", delay=1)],
+            "blocked_by": [get_work_item_body(issues["C"], "blocked_by", delay=2)],
+            "start_before": [get_work_item_body(issues["D"], "start_before", delay=3)],
+            "start_after": [get_work_item_body(issues["E"], "start_after", delay=4)],
+            "finish_before": [get_work_item_body(issues["F"], "finish_before", delay=5)],
+            "finish_after": [get_work_item_body(issues["G"], "finish_after", delay=0)],
         },
     )
 
@@ -119,8 +121,62 @@ def test_create_dependency(project: db_models.Project, api_key_client: api_test.
         format="json",
     )
 
-    assert (response.status_code, response.json()) == (201, [get_work_item_body(b, "blocking")])
+    assert (response.status_code, response.json()) == (201, [get_work_item_body(b, "blocking", delay=0)])
     assert get_relations() == {("blocked_by", b.id, a.id)}
+
+
+def test_create_dependency_with_a_delay(project: db_models.Project, api_key_client: api_test.APIClient) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    b: db_models.Issue = create_issue(project, "B")
+
+    response: api_response.Response = api_key_client.post(
+        get_url(project, f"work-items/{a.id}/dependencies/"),
+        {"relation_type": "start_after", "work_item_ids": [str(b.id)], "delay": 3},
+        format="json",
+    )
+
+    assert (response.status_code, response.json()) == (201, [get_work_item_body(b, "start_after", delay=3)])
+    assert list(
+        db_models.IssueRelation.objects.values_list("relation_type", "issue_id", "related_issue_id", "delay")
+    ) == [("start_before", b.id, a.id, 3)]
+
+
+def test_create_dependency_with_a_negative_delay_is_rejected(
+    project: db_models.Project, api_key_client: api_test.APIClient
+) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    b: db_models.Issue = create_issue(project, "B")
+
+    response: api_response.Response = api_key_client.post(
+        get_url(project, f"work-items/{a.id}/dependencies/"),
+        {"relation_type": "blocking", "work_item_ids": [str(b.id)], "delay": -1},
+        format="json",
+    )
+
+    assert (response.status_code, response.json()) == (
+        400,
+        {"delay": ["Ensure this value is greater than or equal to 0."]},
+    )
+    assert get_relations() == set()
+
+
+def test_work_item_shows_and_accepts_whether_its_start_is_fixed(
+    project: db_models.Project, api_key_client: api_test.APIClient
+) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    url: str = get_url(project, f"work-items/{a.id}/")
+
+    responses: t.List[api_response.Response] = [
+        api_key_client.get(url),
+        api_key_client.patch(url, {"is_start_fixed": False}, format="json"),
+        api_key_client.get(url),
+    ]
+
+    assert [(response.status_code, response.json()["is_start_fixed"]) for response in responses] == [
+        (200, True),
+        (200, False),
+        (200, False),
+    ]
 
 
 def test_create_dependency_that_closes_a_cycle_is_rejected(

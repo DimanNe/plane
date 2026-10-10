@@ -4,16 +4,18 @@
 
 import collections
 import datetime
-import graphlib
 import typing as t
 import uuid
 
+import django.db.models as django_models
 import rest_framework.serializers as api_serializers
 
 import plane.db.models as db_models
 import plane.utils.issue_relation_mapper as issue_relation_mapper
 
 DEPENDENCY_TYPES: t.Tuple[str, ...] = ("blocked_by", "start_before", "finish_before")
+# The same types as the timeline states them: read from the predecessor.
+PREDECESSOR_RELATION_TYPES: t.Tuple[str, ...] = ("blocking", "start_before", "finish_before")
 
 
 class IssueDates(t.TypedDict):
@@ -25,12 +27,31 @@ class IssueDateUpdateSerializer(api_serializers.Serializer):
     id = api_serializers.UUIDField()
     start_date = api_serializers.DateField(required=False, allow_null=True)
     target_date = api_serializers.DateField(required=False, allow_null=True)
+    is_start_fixed = api_serializers.BooleanField(required=False)
+
+
+class DependencySerializer(api_serializers.ModelSerializer):
+    predecessor_id = api_serializers.UUIDField()
+    dependent_id = api_serializers.UUIDField()
+    relation_type = api_serializers.ChoiceField(choices=PREDECESSOR_RELATION_TYPES)
+
+    class Meta:
+        model = db_models.IssueRelation
+        fields = ["predecessor_id", "dependent_id", "relation_type", "delay"]
+        extra_kwargs = {"delay": {"required": True}}
+
+
+class TimelineChangesSerializer(api_serializers.Serializer):
+    dependencies = DependencySerializer(many=True)
+    removed_dependencies = api_serializers.ListField(child=api_serializers.UUIDField())
+    issues = IssueDateUpdateSerializer(many=True)
 
 
 def get_dependency_direction(
     relation_type: str, issue_id: uuid.UUID, related_issue_id: uuid.UUID
 ) -> t.Tuple[uuid.UUID, uuid.UUID]:
-    """Predecessor and dependent of a stored relation: only `blocked_by` names the dependent first."""
+    """Predecessor and dependent of a stored relation: only `blocked_by` names the dependent first.
+    The other way round it gives the work items as the relation stores them."""
     return (related_issue_id, issue_id) if relation_type == "blocked_by" else (issue_id, related_issue_id)
 
 
@@ -64,6 +85,7 @@ def create_issue_relations(
     related_issue_ids: t.Iterable[t.Union[str, uuid.UUID]],
     relation_type: str,
     actor: db_models.User,
+    delay: int = 0,
 ) -> t.List[db_models.IssueRelation]:
     actual_relation: str = issue_relation_mapper.get_actual_relation(relation_type)
     is_reverse: bool = relation_type in ("blocking", "start_after", "finish_after")
@@ -102,6 +124,7 @@ def create_issue_relations(
                 issue_id=pair[0],
                 related_issue_id=pair[1],
                 relation_type=actual_relation,
+                delay=delay,
                 project_id=project.id,
                 workspace_id=project.workspace_id,
                 created_by=actor,
@@ -114,94 +137,103 @@ def create_issue_relations(
     )
 
 
-def get_date_deficit(predecessor: db_models.Issue, dependent: db_models.Issue, relation_type: str) -> int:
-    """Days the dependent starts or finishes too early; a dependency constrains only work items with both dates."""
-    if None in (predecessor.start_date, predecessor.target_date, dependent.start_date, dependent.target_date):
-        return 0
-    predecessor_date: datetime.date = (
-        predecessor.start_date if relation_type == "start_before" else predecessor.target_date
-    )
-    dependent_date: datetime.date = dependent.target_date if relation_type == "finish_before" else dependent.start_date
-    return (predecessor_date - dependent_date).days
-
-
-def schedule_issue_dates(
-    project: db_models.Project, updates: t.List[t.Dict[str, t.Optional[str]]]
+def save_issue_updates(
+    issues: django_models.QuerySet[db_models.Issue], updates: t.List[t.Dict[str, t.Any]]
 ) -> t.List[t.Tuple[db_models.Issue, IssueDates]]:
-    """Set the requested dates on the project's work items and move their dependents later where a dependency
-    would otherwise be violated. Returns each changed work item with its previous dates."""
-    serializer: IssueDateUpdateSerializer = IssueDateUpdateSerializer(data=updates, many=True)
-    serializer.is_valid(raise_exception=True)
-    requested: t.Dict[uuid.UUID, t.Dict[str, t.Union[uuid.UUID, datetime.date, None]]] = {
-        update["id"]: update for update in serializer.validated_data
-    }
-    requested_issue_ids: t.Set[uuid.UUID] = set(
-        db_models.Issue.issue_objects.filter(project_id=project.id, pk__in=requested).values_list("id", flat=True)
-    )
-
-    successors: t.DefaultDict[uuid.UUID, t.List[uuid.UUID]] = collections.defaultdict(list)
-    predecessors: t.DefaultDict[uuid.UUID, t.List[t.Tuple[uuid.UUID, str]]] = collections.defaultdict(list)
-    predecessor_id: uuid.UUID
-    dependent_id: uuid.UUID
-    relation_type: str
-    for predecessor_id, dependent_id, relation_type in get_dependencies(project.workspace_id):
-        successors[predecessor_id].append(dependent_id)
-        predecessors[dependent_id].append((predecessor_id, relation_type))
-    affected: t.Set[uuid.UUID] = collect_dependents(successors, requested_issue_ids)
-
+    """Set the requested dates, and whether the start is fixed, on those of the given work items that the
+    updates name. Nothing is derived from dependencies: the timeline computes the dates it saves.
+    Returns each changed work item with its previous dates."""
+    requested: t.Dict[uuid.UUID, t.Dict[str, t.Any]] = {update["id"]: update for update in updates}
+    changed: t.List[t.Tuple[db_models.Issue, IssueDates]] = []
     issue: db_models.Issue
-    issue_id: uuid.UUID
-    issues: t.Dict[uuid.UUID, db_models.Issue] = {
-        issue.id: issue
-        for issue in db_models.Issue.issue_objects.filter(
-            workspace_id=project.workspace_id,
-            pk__in=affected | {predecessor_id for issue_id in affected for predecessor_id, _ in predecessors[issue_id]},
-        )
-    }
-    previous_dates: t.Dict[uuid.UUID, IssueDates] = {
-        issue.id: {"start_date": issue.start_date, "target_date": issue.target_date} for issue in issues.values()
-    }
-
-    for issue_id in requested_issue_ids:
-        issue = issues[issue_id]
-        issue.start_date = requested[issue_id].get("start_date", issue.start_date)
-        issue.target_date = requested[issue_id].get("target_date", issue.target_date)
+    for issue in issues.filter(pk__in=requested):
+        previous_dates: IssueDates = {"start_date": issue.start_date, "target_date": issue.target_date}
+        was_start_fixed: bool = issue.is_start_fixed
+        field: str
+        for field in ("start_date", "target_date", "is_start_fixed"):
+            setattr(issue, field, requested[issue.id].get(field, getattr(issue, field)))
         if issue.start_date and issue.target_date and issue.start_date > issue.target_date:
             raise api_serializers.ValidationError({"message": "Start date cannot exceed target date"})
-
-    try:
-        dependency_order: t.List[uuid.UUID] = list(
-            graphlib.TopologicalSorter(
-                {
-                    issue_id: [
-                        predecessor_id for predecessor_id, _ in predecessors[issue_id] if predecessor_id in affected
-                    ]
-                    for issue_id in affected
-                }
-            ).static_order()
-        )
-    except graphlib.CycleError:
-        raise api_serializers.ValidationError({"message": "The dependencies of these work items form a cycle"})
-    for issue_id in dependency_order:
-        if issue_id in requested_issue_ids or issue_id not in issues:
-            continue
-        issue = issues[issue_id]
-        deficit: int = max(
-            (
-                get_date_deficit(issues[predecessor_id], issue, relation_type)
-                for predecessor_id, relation_type in predecessors[issue_id]
-                if predecessor_id in issues
-            ),
-            default=0,
-        )
-        if deficit > 0:
-            issue.start_date += datetime.timedelta(days=deficit)
-            issue.target_date += datetime.timedelta(days=deficit)
-
-    changed: t.List[t.Tuple[db_models.Issue, IssueDates]] = [
-        (issue, previous_dates[issue.id])
-        for issue in issues.values()
-        if previous_dates[issue.id] != {"start_date": issue.start_date, "target_date": issue.target_date}
-    ]
-    db_models.Issue.objects.bulk_update([issue for issue, _ in changed], ["start_date", "target_date"])
+        if (previous_dates, was_start_fixed) != (
+            {"start_date": issue.start_date, "target_date": issue.target_date},
+            issue.is_start_fixed,
+        ):
+            changed.append((issue, previous_dates))
+    db_models.Issue.objects.bulk_update(
+        [issue for issue, _ in changed], ["start_date", "target_date", "is_start_fixed"]
+    )
     return changed
+
+
+def set_issue_dates(
+    project: db_models.Project, updates: t.List[t.Dict[str, t.Optional[str]]]
+) -> t.List[t.Tuple[db_models.Issue, IssueDates]]:
+    """Set the requested dates on the project's work items. Returns each changed work item with its
+    previous dates."""
+    serializer: IssueDateUpdateSerializer = IssueDateUpdateSerializer(data=updates, many=True)
+    serializer.is_valid(raise_exception=True)
+    return save_issue_updates(db_models.Issue.issue_objects.filter(project_id=project.id), serializer.validated_data)
+
+
+def remove_dependencies(workspace_id: uuid.UUID, relation_ids: t.List[uuid.UUID]) -> t.List[db_models.IssueRelation]:
+    """Remove those of the given relations that are dependencies of the workspace, and return them."""
+    removed: t.List[db_models.IssueRelation] = list(
+        db_models.IssueRelation.objects.filter(
+            workspace_id=workspace_id, pk__in=relation_ids, relation_type__in=DEPENDENCY_TYPES
+        )
+    )
+    relation: db_models.IssueRelation
+    for relation in removed:
+        relation.delete()
+    return removed
+
+
+def save_dependencies(
+    project: db_models.Project, dependencies: t.List[t.Dict[str, t.Any]], actor: db_models.User
+) -> t.Tuple[t.List[db_models.IssueRelation], t.List[db_models.IssueRelation]]:
+    """Create each given dependency or, where one of its type exists between its work items, set its delay.
+    Returns the created ones and all of them."""
+    created: t.List[db_models.IssueRelation] = []
+    saved: t.List[db_models.IssueRelation] = []
+    dependency: t.Dict[str, t.Any]
+    for dependency in dependencies:
+        actual_relation: str = issue_relation_mapper.get_actual_relation(dependency["relation_type"])
+        issue_id: uuid.UUID
+        related_issue_id: uuid.UUID
+        issue_id, related_issue_id = get_dependency_direction(
+            actual_relation, dependency["predecessor_id"], dependency["dependent_id"]
+        )
+        stored: django_models.QuerySet[db_models.IssueRelation] = db_models.IssueRelation.objects.filter(
+            workspace_id=project.workspace_id,
+            issue_id=issue_id,
+            related_issue_id=related_issue_id,
+            relation_type=actual_relation,
+        )
+        relation: t.Optional[db_models.IssueRelation] = stored.first()
+        if relation is None:
+            ends: t.Set[uuid.UUID] = {issue_id, related_issue_id}
+            if db_models.Issue.issue_objects.filter(workspace_id=project.workspace_id, pk__in=ends).count() != 2:
+                raise api_serializers.ValidationError(
+                    {"error": "A dependency needs two work items of the workspace that are not archived"}
+                )
+            create_issue_relations(
+                project,
+                dependency["predecessor_id"],
+                [dependency["dependent_id"]],
+                dependency["relation_type"],
+                actor,
+                dependency["delay"],
+            )
+            relation = stored.first()
+            # A relation of another kind that is stored between the same work items in the same order keeps
+            # the dependency from being stored, without an error.
+            if relation is None:
+                raise api_serializers.ValidationError(
+                    {"error": "These work items already have a relation in this direction"}
+                )
+            created.append(relation)
+        elif relation.delay != dependency["delay"]:
+            relation.delay = dependency["delay"]
+            relation.save()
+        saved.append(relation)
+    return created, saved

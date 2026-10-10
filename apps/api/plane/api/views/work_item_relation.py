@@ -34,21 +34,23 @@ def read_relation_type(relation_type: str, source_id: uuid.UUID, issue_id: uuid.
 def get_related_work_items(
     slug: str, issue_id: uuid.UUID, relation_types: t.Iterable[str]
 ) -> t.Dict[str, t.List[t.Dict[str, object]]]:
-    """Work items related to the given one, grouped by the relation type as read from the given one."""
-    related_ids: t.Dict[str, t.List[uuid.UUID]] = {relation_type: [] for relation_type in relation_types}
+    """Work items related to the given one, grouped by the relation type as read from the given one.
+    A dependency also shows its delay."""
+    related_ids: t.Dict[str, t.List[t.Tuple[uuid.UUID, int]]] = {relation_type: [] for relation_type in relation_types}
     relation_type: str
     source_id: uuid.UUID
     related_id: uuid.UUID
-    for relation_type, source_id, related_id in db_models.IssueRelation.objects.filter(
+    delay: int
+    for relation_type, source_id, related_id, delay in db_models.IssueRelation.objects.filter(
         django_models.Q(issue_id=issue_id) | django_models.Q(related_issue_id=issue_id), workspace__slug=slug
-    ).values_list("relation_type", "issue_id", "related_issue_id"):
+    ).values_list("relation_type", "issue_id", "related_issue_id", "delay"):
         relation_type = read_relation_type(relation_type, source_id, issue_id)
         if relation_type in related_ids:
-            related_ids[relation_type].append(related_id if source_id == issue_id else source_id)
+            related_ids[relation_type].append((related_id if source_id == issue_id else source_id, delay))
     work_items: t.Dict[uuid.UUID, t.Dict[str, object]] = {
         work_item["id"]: work_item
         for work_item in db_models.Issue.issue_objects.filter(
-            pk__in=[related_id for ids in related_ids.values() for related_id in ids]
+            pk__in=[related_id for ids in related_ids.values() for related_id, _ in ids]
         ).values(
             "id",
             "name",
@@ -66,7 +68,13 @@ def get_related_work_items(
     }
     return {
         relation_type: [
-            {**work_items[related_id], "relation_type": relation_type} for related_id in ids if related_id in work_items
+            {
+                **work_items[related_id],
+                "relation_type": relation_type,
+                **({"delay": delay} if relation_type in relation_serializers.DEPENDENCY_RELATION_TYPES else {}),
+            }
+            for related_id, delay in ids
+            if related_id in work_items
         ]
         for relation_type, ids in related_ids.items()
     }
@@ -98,7 +106,9 @@ class WorkItemDependencyListCreateAPIEndpoint(base_views.BaseAPIView):
                 {"work_item_ids": "Every work item must be in the workspace and not archived"}
             )
         project: db_models.Project = db_models.Project.objects.get(pk=project_id, workspace__slug=slug)
-        timeline_dependencies.create_issue_relations(project, issue_id, work_item_ids, relation_type, request.user)
+        timeline_dependencies.create_issue_relations(
+            project, issue_id, work_item_ids, relation_type, request.user, serializer.validated_data.get("delay", 0)
+        )
         issue_activities_task.issue_activity.delay(
             type="issue_relation.activity.created",
             requested_data=json.dumps(

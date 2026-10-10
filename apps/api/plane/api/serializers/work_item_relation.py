@@ -6,6 +6,8 @@ import typing as t
 
 import rest_framework.serializers as api_serializers
 
+import plane.db.models as db_models
+
 DEPENDENCY_RELATION_TYPES: t.Tuple[str, ...] = (
     "blocking",
     "blocked_by",
@@ -16,6 +18,10 @@ DEPENDENCY_RELATION_TYPES: t.Tuple[str, ...] = (
 )
 
 
-class WorkItemDependencyCreateSerializer(api_serializers.Serializer):
+class WorkItemDependencyCreateSerializer(api_serializers.ModelSerializer):
     relation_type = api_serializers.ChoiceField(choices=DEPENDENCY_RELATION_TYPES)
     work_item_ids = api_serializers.ListField(child=api_serializers.UUIDField(), allow_empty=False)
+
+    class Meta:
+        model = db_models.IssueRelation
+        fields = ["relation_type", "work_item_ids", "delay"]

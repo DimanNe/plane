@@ -74,7 +74,7 @@ from plane.utils.host import base_host
 from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
-from plane.utils.timeline_dependencies import schedule_issue_dates
+from plane.utils.timeline_dependencies import set_issue_dates
 from plane.utils.timezone_converter import user_timezone_converter
 
 from .. import BaseAPIView, BaseViewSet
@@ -1124,8 +1124,7 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
         epoch = int(timezone.now().timestamp())
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
 
-        # Dependent issues move together with the requested ones
-        updated_issues = schedule_issue_dates(project, updates)
+        updated_issues = set_issue_dates(project, updates)
 
         for issue, previous_dates in updated_issues:
             issue_activity.delay(
