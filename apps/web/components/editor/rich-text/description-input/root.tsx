@@ -140,7 +140,7 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
   // translation
   const { t } = useTranslation();
   // form info
-  const { handleSubmit, reset, control, setValue } = useForm<TFormData>({
+  const { handleSubmit, reset, control, setValue, getValues } = useForm<TFormData>({
     defaultValues: {
       id: entityId,
       description_html: initialValue?.trim() ?? "",
@@ -168,6 +168,9 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
   useEffect(() => {
     if (!entityId) return;
     const normalizedValue = initialValue?.trim() === "" ? "<p></p>" : (initialValue ?? "<p></p>");
+    // A description that was changed elsewhere is not what the editor has made or shows
+    if (normalizedValue !== lastSavedContent.current && normalizedValue !== getValues("description_html"))
+      editorRef?.current?.setEditorValue(normalizedValue);
     // Update last saved content when entity/initialValue changes
     lastSavedContent.current = normalizedValue;
     reset({
@@ -182,7 +185,7 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
     });
     // Reset unsaved changes flag when form is reset
     hasUnsavedChanges.current = false;
-  }, [entityId, initialValue, reset]);
+  }, [entityId, initialValue, reset, getValues, editorRef]);
 
   // ADDING handleDescriptionFormSubmit TO DEPENDENCY ARRAY PRODUCES ADVERSE EFFECTS
   // TODO: Verify the exhaustive-deps warning

@@ -4,10 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { compact, isEqual, keyBy, omit, uniq } from "lodash-es";
+import { compact, isEqual, keyBy, omit, pick, uniq } from "lodash-es";
 import { runInAction, when } from "mobx";
+import { mutate } from "swr";
 // plane imports
 import { LIVE_BASE_PATH, LIVE_BASE_URL } from "@plane/constants";
+import type { TIssue } from "@plane/types";
 // store
 import { rootStore } from "@/lib/store-context";
 // services
@@ -18,6 +20,7 @@ import { fetchAroundOwnWrites } from "@/services/own-writes";
 type TChange = { t: string; id: string; p: string | null; i: string | null };
 type TMessage = TChange | { resync: true } | { heartbeat: true };
 type TList = NonNullable<ReturnType<typeof getListOnScreen>>;
+type TOpenIssue = ReturnType<typeof getOpenIssues>[number];
 
 // One change of a work item writes several rows, some of them a moment later in a background task. Changes are
 // collected until none has come for the quiet time, and for the maximum time when they keep coming.
@@ -29,6 +32,8 @@ const RECONNECT_DELAY_MIN = 1000;
 const RECONNECT_DELAY_MAX = 10_000;
 // as many ids as fit the address of one request, beside the filter of the list
 const MAX_ISSUES_BY_ID = 30;
+// The title and the description of a work item are saved 1.5 seconds after the last key press.
+const TYPED_TEXT_SAVE_TIME = 2000;
 
 const issueService = new IssueService();
 
@@ -66,6 +71,34 @@ const isStillOnScreen = (list: TList) => {
 };
 
 /**
+ * The work items that are open: in the view beside a list, and on a page of their own. `close` is for one that
+ * exists no more.
+ */
+const getOpenIssues = () => {
+  const { router, issue } = rootStore;
+  const { peekIssue } = issue.issueDetail;
+  const issueOfPage = issue.issues.getIssueById(
+    issue.issues.getIssueIdByIdentifier(String(router.query.workItem)) ?? ""
+  );
+  return compact([
+    peekIssue && !peekIssue.isArchived && { ...peekIssue, close: () => issue.issueDetail.setPeekIssue(undefined) },
+    router.workspaceSlug &&
+      issueOfPage?.project_id && {
+        workspaceSlug: router.workspaceSlug,
+        projectId: issueOfPage.project_id,
+        issueId: issueOfPage.id,
+        // the page fetches the work item itself then, and says that it does not exist
+        close: () => void mutate((key) => typeof key === "string" && key.startsWith("ISSUE_DETAIL_")),
+      },
+  ]);
+};
+
+const isTextFieldFocused = () => {
+  const element = document.activeElement;
+  return element instanceof HTMLElement && (element.isContentEditable || element.matches("input, textarea"));
+};
+
+/**
  * Keeps an open page in step with what others change: another person, an agent through the API, a background
  * task. The live server sends the ids of every changed row of the workspace. The page fetches what it shows of
  * them and merges it into its stores; a row it has no rule for is ignored.
@@ -77,16 +110,20 @@ export class LiveUpdates {
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private batchQuietTimer: ReturnType<typeof setTimeout> | undefined;
   private batchMaxTimer: ReturnType<typeof setTimeout> | undefined;
+  private typedTextTimer: ReturnType<typeof setTimeout> | undefined;
+  private isTypedTextKept = false;
   private changes: TChange[] = [];
   private isResyncPending = false;
   private applying = Promise.resolve();
 
   constructor(private readonly workspaceSlug: string) {
     this.connect();
+    document.addEventListener("focusout", this.refetchAfterTyping);
   }
 
   stop() {
-    [this.connectTimer, this.batchQuietTimer, this.batchMaxTimer].forEach(clearTimeout);
+    document.removeEventListener("focusout", this.refetchAfterTyping);
+    [this.connectTimer, this.batchQuietTimer, this.batchMaxTimer, this.typedTextTimer].forEach(clearTimeout);
     const socket = this.socket;
     this.socket = undefined;
     socket?.close();
@@ -151,6 +188,7 @@ export class LiveUpdates {
   private async refetch() {
     const list = getListOnScreen();
     if (list) await this.refetchList(list);
+    await Promise.all(getOpenIssues().map((openIssue) => this.refetchOpenIssue(openIssue)));
   }
 
   private async applyChanges(changes: TChange[]) {
@@ -166,6 +204,9 @@ export class LiveUpdates {
     const list = getListOnScreen();
     const listIssueIds = list ? getIssueIds(list.projectId) : [];
     if (list && listIssueIds.length > 0) await this.applyToList(list, listIssueIds);
+    await Promise.all(
+      getOpenIssues().map((openIssue) => this.applyToOpenIssue(openIssue, getIssueIds(openIssue.projectId)))
+    );
   }
 
   /**
@@ -193,8 +234,13 @@ export class LiveUpdates {
       for (const issueId of issueIds) {
         const parentIdBefore = issuesMap[issueId]?.parent_id;
         const parentId = issuesById[issueId]?.parent_id;
+        if (this.isRowTitleTyped(projectId, issueId)) continue;
         if (parentIdBefore !== parentId) parentIds.push(...compact([parentIdBefore, parentId]));
-        store.applyIssueFromServer(issueId, issuesById[issueId]);
+        const issue = issuesById[issueId];
+        store.applyIssueFromServer(
+          issueId,
+          issue && { ...issue, ...pick(issuesMap[issueId], this.getKeptFields(issueId)) }
+        );
       }
     });
     // A work item got or lost a parent: the number of sub-work items of a parent is the server's to count.
@@ -212,4 +258,71 @@ export class LiveUpdates {
     const response = await fetchAroundOwnWrites(() => issueService.getIssues(workspaceSlug, projectId, params));
     if (isStillOnScreen(list)) store.onfetchIssues(response, options, workspaceSlug, projectId, undefined, false);
   }
+
+  /**
+   * Rule for an open work item: a change that names it fetches all of it again, its fields and description, its
+   * comments, activity, sub-work items and relations. A change of another work item of its project fetches its
+   * sub-work items: the other one may be one of them, have become one, or have stopped being one.
+   */
+  private async applyToOpenIssue(openIssue: TOpenIssue, issueIds: string[]) {
+    const { workspaceSlug, projectId, issueId } = openIssue;
+    if (issueIds.includes(issueId)) await this.refetchOpenIssue(openIssue);
+    else if (issueIds.length > 0)
+      await rootStore.issue.issueDetail.subIssues.fetchSubIssues(workspaceSlug, projectId, issueId);
+  }
+
+  private async refetchOpenIssue({ workspaceSlug, projectId, issueId, close }: TOpenIssue) {
+    const { issueDetail } = rootStore.issue;
+    try {
+      // The store applies the answer itself, also one that crossed a write of the page: it is fetched again then.
+      await fetchAroundOwnWrites(() =>
+        issueDetail.issue.fetchIssue(workspaceSlug, projectId, issueId, this.getKeptFields(issueId))
+      );
+    } catch {
+      // It was deleted or archived when the server does not list it either. Any other failure leaves it open.
+      const issues = await issueService.retrieveIssues(workspaceSlug, projectId, [issueId]);
+      if (issues.length === 0) close();
+    }
+  }
+
+  /**
+   * Rule for typed text: while a text field has the focus, the name and the description of an open work item
+   * stay as they are on the page, and everything else of it follows. The typed text is saved over what was
+   * changed elsewhere.
+   */
+  private getKeptFields(issueId: string): (keyof TIssue)[] {
+    if (!isTextFieldFocused() || !getOpenIssues().some((openIssue) => openIssue.issueId === issueId)) return [];
+    this.isTypedTextKept = true;
+    return ["name", "description_html"];
+  }
+
+  /**
+   * Typed text in a row of the list: a row that moves to another group is made anew there and would lose the
+   * title being typed in it. The work item is left as it is on the page until the typing has ended.
+   */
+  private isRowTitleTyped(projectId: string, issueId: string) {
+    const { issueListView } = rootStore.issue;
+    if (!issueListView.selectedRow?.isEditing || issueListView.selectedRow.issueId !== issueId) return false;
+    void when(() => !issueListView.selectedRow?.isEditing).then(() => {
+      this.changes.push({ t: "issues", id: issueId, p: projectId, i: null });
+      return this.apply();
+    });
+    return true;
+  }
+
+  // The focus has left the text field: once the typed text is saved, what was kept back is fetched.
+  private refetchAfterTyping = () => {
+    if (!this.isTypedTextKept) return;
+    this.typedTextTimer = this.restart(
+      this.typedTextTimer,
+      () => {
+        this.isTypedTextKept = false;
+        this.changes.push(
+          ...getOpenIssues().map(({ projectId, issueId }) => ({ t: "issues", id: issueId, p: projectId, i: null }))
+        );
+        this.apply();
+      },
+      TYPED_TEXT_SAVE_TIME
+    );
+  };
 }

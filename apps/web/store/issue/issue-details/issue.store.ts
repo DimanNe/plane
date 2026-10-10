@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { pick } from "lodash-es";
 import { makeObservable, observable } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
@@ -16,7 +17,12 @@ import type { IIssueDetail } from "./root.store";
 
 export interface IIssueStoreActions {
   // actions
-  fetchIssue: (workspaceSlug: string, projectId: string, issueId: string) => Promise<TIssue>;
+  fetchIssue: (
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    keptFields?: (keyof TIssue)[]
+  ) => Promise<TIssue>;
   updateIssue: (workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>) => Promise<void>;
   removeIssue: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
   archiveIssue: (workspaceSlug: string, projectId: string, issueId: string) => Promise<void>;
@@ -84,7 +90,7 @@ export class IssueStore implements IIssueStore {
   });
 
   // actions
-  fetchIssue = async (workspaceSlug: string, projectId: string, issueId: string) => {
+  fetchIssue = async (workspaceSlug: string, projectId: string, issueId: string, keptFields: (keyof TIssue)[] = []) => {
     const query = {
       expand: "issue_reactions,issue_attachments,issue_link,parent",
     };
@@ -94,7 +100,7 @@ export class IssueStore implements IIssueStore {
 
     if (!issue) throw new Error("Work item not found");
 
-    const issuePayload = this.addIssueToStore(issue);
+    const issuePayload = this.addIssueToStore({ ...issue, ...pick(this.getIssueById(issueId), keptFields) });
 
     this.rootIssueDetailStore.rootIssueStore.issues.addIssue([issuePayload]);
 
