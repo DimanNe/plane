@@ -126,8 +126,8 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
 
   return (
     <div
-      // the scroll margin keeps a row that is scrolled to clear of the group header and the quick add row
-      className={cn("relative scroll-my-12", {
+      // the scroll margin keeps a row that is scrolled to clear of the group header
+      className={cn("relative scroll-mt-12", {
         "z-[1] bg-accent-primary/10 outline-2 -outline-offset-2 outline-accent-strong": instruction === "make-child",
       })}
       ref={issueBlockRef}

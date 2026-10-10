@@ -38,6 +38,7 @@ interface IHeaderGroupByCard {
   selectionHelpers: TSelectionHelper;
   handleCollapsedGroups: (value: string) => void;
   isEpic?: boolean;
+  quickAddChip?: React.ReactNode;
 }
 
 export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHeaderGroupByCard) {
@@ -53,6 +54,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
     selectionHelpers,
     handleCollapsedGroups,
     isEpic = false,
+    quickAddChip,
   } = props;
   // plane hooks
   const { t } = useTranslation();
@@ -120,6 +122,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
         >
           <div className="line-clamp-1 inline-block truncate font-medium text-primary">{title}</div>
           <div className="pl-2 text-13 font-medium text-tertiary">{count || 0}</div>
+          {quickAddChip}
           <div className="px-2.5"></div>
         </div>
 

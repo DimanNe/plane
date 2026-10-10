@@ -5,7 +5,7 @@
  */
 
 import type { MutableRefObject } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { observer } from "mobx-react";
@@ -35,11 +35,12 @@ import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 // local imports
 import { GroupDragOverlay } from "../group-drag-overlay";
-import { ListQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
+import { QuickAddIssueRoot } from "../quick-add";
 import type { GroupDropLocation } from "../utils";
 import { getIssueBlockId, getSourceFromDropPayload, highlightIssueOnDrop } from "../utils";
 import { IssueBlocksList } from "./blocks-list";
 import { HeaderGroupByCard } from "./headers/group-by-card";
+import { ListGroupQuickAddChip } from "./headers/quick-add-chip";
 import type { TRenderQuickActions } from "./list-view-types";
 import { getListDropLocation } from "./utils";
 
@@ -98,6 +99,12 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
   const [isDraggingOverColumn, setIsDraggingOverColumn] = useState(false);
   const [dragColumnOrientation, setDragColumnOrientation] = useState<"justify-start" | "justify-end">("justify-start");
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  // a header at the lower edge of the list would open the input below that edge
+  const showQuickAdd = useCallback(
+    (element: HTMLDivElement | null) => element?.scrollIntoView({ block: "nearest" }),
+    []
+  );
   const isExpanded = !collapsedGroups?.group_by.includes(group.id);
   const groupRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
@@ -252,6 +259,12 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
   const isGroupByCreatedBy = group_by === "created_by";
   const shouldExpand = (!!groupIssueCount && isExpanded) || !group_by;
+  const isQuickAddAllowed =
+    enableIssueQuickAdd &&
+    !disableIssueCreation &&
+    !isGroupByCreatedBy &&
+    !isCompletedCycle &&
+    !isWorkflowIssueCreationDisabled;
 
   return validateEmptyIssueGroups(groupIssueCount) ? (
     <div
@@ -261,28 +274,51 @@ export const ListGroup = observer(function ListGroup(props: Props) {
         "border-danger-subtle": isDraggingOverColumn && isDropDisabled,
       })}
     >
-      <Row
-        className={cn("w-full flex-shrink-0 border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
-          "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0,
-        })}
-      >
-        <HeaderGroupByCard
-          groupID={group.id}
-          groupBy={group_by}
-          icon={group.icon}
-          title={group.name}
-          count={groupIssueCount}
-          issuePayload={group.payload}
-          canEditProperties={canEditProperties}
-          disableIssueCreation={
-            disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
-          }
-          addIssuesToView={addIssuesToView}
-          selectionHelpers={selectionHelpers}
-          handleCollapsedGroups={handleCollapsedGroups}
-          isEpic={isEpic}
-        />
-      </Row>
+      {/* The header and the input under it stay at the top of the list together while their group scrolls. */}
+      <div className={cn("w-full flex-shrink-0", { "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0 })}>
+        <Row className="border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover">
+          <HeaderGroupByCard
+            groupID={group.id}
+            groupBy={group_by}
+            icon={group.icon}
+            title={group.name}
+            count={groupIssueCount}
+            issuePayload={group.payload}
+            canEditProperties={canEditProperties}
+            disableIssueCreation={
+              disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
+            }
+            addIssuesToView={addIssuesToView}
+            selectionHelpers={selectionHelpers}
+            handleCollapsedGroups={handleCollapsedGroups}
+            isEpic={isEpic}
+            quickAddChip={
+              isQuickAddAllowed && (
+                <ListGroupQuickAddChip
+                  isEpic={isEpic}
+                  onClick={() => {
+                    if (!isExpanded) handleCollapsedGroups(group.id);
+                    setIsQuickAddOpen(true);
+                  }}
+                />
+              )
+            }
+          />
+        </Row>
+        {isQuickAddAllowed && isQuickAddOpen && (
+          <div ref={showQuickAdd}>
+            <QuickAddIssueRoot
+              isQuickAddOpen
+              setIsQuickAddOpen={setIsQuickAddOpen}
+              layout={EIssueLayoutTypes.LIST}
+              prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
+              containerClassName="border-b border-subtle bg-surface-1"
+              quickAddCallback={quickAddCallback}
+              isEpic={isEpic}
+            />
+          </div>
+        )}
+      </div>
       {shouldExpand && (
         <div className="relative">
           <GroupDragOverlay
@@ -324,23 +360,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
                 <ListLoaderItemRow ref={setIntersectionElement} />
               </>
             ))}
-
-          {enableIssueQuickAdd &&
-            !disableIssueCreation &&
-            !isGroupByCreatedBy &&
-            !isCompletedCycle &&
-            !isWorkflowIssueCreationDisabled && (
-              <div className="sticky bottom-0 z-[1] w-full flex-shrink-0">
-                <QuickAddIssueRoot
-                  layout={EIssueLayoutTypes.LIST}
-                  QuickAddButton={ListQuickAddIssueButton}
-                  prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
-                  containerClassName="border-b border-t border-subtle bg-surface-1 "
-                  quickAddCallback={quickAddCallback}
-                  isEpic={isEpic}
-                />
-              </div>
-            )}
         </div>
       )}
     </div>
