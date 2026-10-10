@@ -15,11 +15,15 @@ import { TimelineService } from "@/services/timeline.service";
 import type { RootStore } from "@/store/root.store";
 import type { IBaseTimelineStore } from "@/store/timeline/base-timeline.store";
 import { BaseTimeLineStore } from "@/store/timeline/base-timeline.store";
+import type { ITimelineScheduleStore } from "@/store/timeline/schedule.store";
+import { TimelineScheduleStore } from "@/store/timeline/schedule.store";
 
 export interface IIssuesTimeLineStore extends IBaseTimelineStore {
   isDependencyEnabled: boolean;
   // observables
   dependencyMap: Record<string, TTimelineDependency[]>;
+  // the computed plan of a project's timeline and the operations on it
+  schedule: ITimelineScheduleStore;
   // computed functions
   getProjectDependencies: (projectId: string) => TTimelineDependency[];
   getIsDependencyViolated: (dependency: TTimelineDependency) => boolean;
@@ -31,6 +35,7 @@ export class IssuesTimeLineStore extends BaseTimeLineStore implements IIssuesTim
   isDependencyEnabled = true;
   // observables
   dependencyMap: Record<string, TTimelineDependency[]> = {};
+  schedule: ITimelineScheduleStore;
   // services
   timelineService;
 
@@ -45,6 +50,7 @@ export class IssuesTimeLineStore extends BaseTimeLineStore implements IIssuesTim
     });
 
     this.timelineService = new TimelineService();
+    this.schedule = new TimelineScheduleStore(_rootStore, this);
 
     autorun(() => {
       const getIssueById = this.rootStore.issue.issues.getIssueById;
@@ -56,23 +62,19 @@ export class IssuesTimeLineStore extends BaseTimeLineStore implements IIssuesTim
     (projectId: string): TTimelineDependency[] => this.dependencyMap[projectId] ?? []
   );
 
-  // the dependent work item starts or finishes before the date its predecessor allows;
-  // a dependency constrains only work items that have both dates
+  // the scheduling engine finds the conflicts of the timeline that is on the page
   getIsDependencyViolated = computedFn((dependency: TTimelineDependency): boolean => {
-    const predecessor = this.rootStore.issue.issues.getIssueById(dependency.predecessor_id);
-    const dependent = this.rootStore.issue.issues.getIssueById(dependency.dependent_id);
-    if (!predecessor?.start_date || !predecessor.target_date || !dependent?.start_date || !dependent.target_date)
-      return false;
-    const predecessorDate =
-      dependency.relation_type === "start_before" ? predecessor.start_date : predecessor.target_date;
-    const dependentDate = dependency.relation_type === "finish_before" ? dependent.target_date : dependent.start_date;
-    return dependentDate < predecessorDate;
+    const { projectId } = this.rootStore.router;
+    return (
+      !!projectId && this.schedule.getSchedule(projectId).conflicts.some(({ arrowId }) => arrowId === dependency.id)
+    );
   });
 
   fetchDependencies = async (workspaceSlug: string, projectId: string) =>
     await this.timelineService.getDependencies(workspaceSlug, projectId).then((response) => {
       runInAction(() => {
         set(this.dependencyMap, [projectId], response.dependencies);
+        this.schedule.setFetchedIssues(workspaceSlug, projectId, response.issues);
       });
       return response.dependencies;
     });
