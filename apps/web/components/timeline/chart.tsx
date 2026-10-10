@@ -41,11 +41,11 @@ import useSize from "@/hooks/use-window-size";
 // local imports
 import { TimelineArrowControl } from "./arrow-control";
 import { TimelineArrowTexts } from "./arrow-texts";
-import { TimelineArrowControls, TimelineArrows, TimelineDrawnArrow } from "./arrows";
+import { getDrawnArrows, TimelineArrowControls, TimelineArrows, TimelineDrawnArrow } from "./arrows";
 import { TimelineBackdrop } from "./backdrop";
 import { TimelineConflict } from "./conflict";
 import { TimelineHeader } from "./header";
-import { TimelineLine } from "./line";
+import { TimelineDaysContext, TimelineLine } from "./line";
 import type { TTimelineOperation } from "./operation";
 import { trackPointer } from "./pointer";
 import { getDateOfDay, getDayOfDate, getDayOfTime, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
@@ -330,7 +330,14 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   // the lines in view, in pixels from the top of the first line
   const viewTop = (firstLineInView + 1) * BLOCK_HEIGHT;
   const viewBottom = (firstLineInView - 1) * BLOCK_HEIGHT + (scroll?.clientHeight ?? 0) - HEADER_HEIGHT;
-  const waysProps = { days, lineIndexes: arrowLineIndexes, firstLine, lastLine };
+  const pxPerDay = view?.pxPerDay;
+  const drawnArrows = useMemo(
+    () =>
+      pxPerDay === undefined
+        ? []
+        : getDrawnArrows({ arrows, days, lineIndexes: arrowLineIndexes, firstLine, lastLine, pxPerDay }),
+    [arrows, days, arrowLineIndexes, firstLine, lastLine, pxPerDay]
+  );
 
   /** The middle of a handle, in pixels from the left edge of the timeline and the top of the first line. */
   const getHandlePoint = ({ taskId, edge }: THandle): [number, number] | undefined => {
@@ -436,30 +443,30 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
           </div>
           {view && (
             <TimelineViewContext.Provider value={view}>
-              {taskIds.slice(firstLine, lastLine).map((taskId, index) => (
-                <TimelineLine
-                  key={taskId}
-                  taskId={taskId}
-                  lineIndex={firstLine + index}
-                  start={days[taskId]?.start}
-                  end={days[taskId]?.end}
-                  slack={schedule.slack[taskId] ?? 0}
-                  isFixed={!followingTaskIds.has(taskId)}
-                  isCritical={schedule.criticalTaskIds.includes(taskId)}
-                  isConflictCause={cause.taskIds.includes(taskId)}
-                  isEditable={isEditable}
-                  isDragged={draggedTaskId === taskId}
-                  isStartDated={datedTaskIds.has(taskId)}
-                  moveOffset={drag?.taskId === taskId ? drag.lineOffset : undefined}
-                  areHandlesShown={!!link && (!link.ownTaskId || link.ownTaskId === taskId)}
-                  linkedEdge={link?.target?.taskId === taskId ? link.target.edge : undefined}
-                  isLinkRefused={!!link?.refusal}
-                  onBarPress={handleBarPress}
-                  onHandlePress={handleHandlePress}
-                  onEntryPress={handleEntryPress}
-                  onClick={handleTaskClick}
-                />
-              ))}
+              <TimelineDaysContext.Provider value={days}>
+                {taskIds.slice(firstLine, lastLine).map((taskId, index) => (
+                  <TimelineLine
+                    key={taskId}
+                    taskId={taskId}
+                    lineIndex={firstLine + index}
+                    slack={schedule.slack[taskId] ?? 0}
+                    isFixed={!followingTaskIds.has(taskId)}
+                    isCritical={schedule.criticalTaskIds.includes(taskId)}
+                    isConflictCause={cause.taskIds.includes(taskId)}
+                    isEditable={isEditable}
+                    isDragged={draggedTaskId === taskId}
+                    isStartDated={datedTaskIds.has(taskId)}
+                    moveOffset={drag?.taskId === taskId ? drag.lineOffset : undefined}
+                    areHandlesShown={!!link && (!link.ownTaskId || link.ownTaskId === taskId)}
+                    linkedEdge={link?.target?.taskId === taskId ? link.target.edge : undefined}
+                    isLinkRefused={!!link?.refusal}
+                    onBarPress={handleBarPress}
+                    onHandlePress={handleHandlePress}
+                    onEntryPress={handleEntryPress}
+                    onClick={handleTaskClick}
+                  />
+                ))}
+              </TimelineDaysContext.Provider>
               {/* above the lines and below the bars; what can be pressed here is not empty space */}
               <div
                 className={cn(overlayClassName, "z-[1]")}
@@ -468,9 +475,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
               >
                 <MilestoneTimelineMarkers />
                 <TimelineArrows
-                  {...waysProps}
                   view={view}
-                  arrows={arrows}
+                  drawnArrows={drawnArrows}
                   schedule={schedule}
                   selectedArrowId={selectedArrowId}
                   causeArrowIds={cause.arrowIds}
@@ -488,9 +494,12 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                 onPointerDown={(e) => e.stopPropagation()}
               >
                 <TimelineArrowTexts
-                  {...waysProps}
                   view={view}
-                  arrows={arrows}
+                  drawnArrows={drawnArrows}
+                  days={days}
+                  lineIndexes={arrowLineIndexes}
+                  firstLine={firstLine}
+                  lastLine={lastLine}
                   schedule={schedule}
                   followingTaskIds={followingTaskIds}
                   datedTaskIds={datedTaskIds}
@@ -500,9 +509,10 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   onHover={handleArrowHover}
                 />
                 <TimelineArrowControls
-                  {...waysProps}
                   view={view}
-                  arrows={arrows.filter((arrow) => arrow.id === shownArrowId && (selectedArrowId || conflict))}
+                  drawnArrows={drawnArrows.filter(
+                    ({ arrow }) => arrow.id === shownArrowId && (selectedArrowId || conflict)
+                  )}
                   viewTop={viewTop}
                   viewBottom={viewBottom}
                   renderControl={(arrow, nextTaskSide) =>

@@ -100,7 +100,7 @@ const BarHandles = memo(function BarHandles(
  * The bar of a task. It is drawn again at every change of the view, so it holds no more than its place: its text
  * comes ready from the line of the task, which a change of the view leaves alone.
  */
-export function TimelineBar(props: Props) {
+export const TimelineBar = memo(function TimelineBar(props: Props) {
   const {
     taskId,
     href,
@@ -205,7 +205,7 @@ export function TimelineBar(props: Props) {
       )}
     </div>
   );
-}
+});
 
 /** The loaded work items a work item is under, the topmost first. */
 export const getParents = (issue: TIssue, getIssueById: (issueId: string) => TIssue | undefined) => {

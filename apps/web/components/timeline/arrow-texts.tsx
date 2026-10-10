@@ -12,8 +12,8 @@ import { cn } from "@plane/utils";
 // components
 import { BLOCK_HEIGHT } from "@/components/gantt-chart/constants";
 // local imports
-import type { TArrowWaysProps, TPoint } from "./arrows";
-import { getArrowLayerStyle, getDrawnArrows, STUB } from "./arrows";
+import type { TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
+import { getArrowLayerStyle, STUB } from "./arrows";
 import { BAR_HEIGHT, BAR_TOP, DATE_DISTANCE, DATE_WIDTH } from "./bar";
 import type { TTimelineView } from "./scale";
 import { getDayDistance, MIN_BAR_WIDTH } from "./scale";
@@ -22,7 +22,8 @@ type TRect = { left: number; top: number; right: number; bottom: number };
 
 type TArrowText = { look: "set" | "gap" | "conflict"; days: number };
 
-type Props = TArrowWaysProps & {
+type Props = Omit<TArrowWaysProps, "arrows"> & {
+  drawnArrows: TDrawnArrow[];
   schedule: TSchedule;
   // the tasks that follow their arrows; the others are fixed on a day
   followingTaskIds: Set<string>;
@@ -126,13 +127,13 @@ const getTextPlace = (points: TPoint[], width: number, takenRects: TRect[], view
 };
 
 const ArrowTexts = memo(function ArrowTexts(props: Props) {
-  const { schedule, followingTaskIds, viewTop, viewBottom, onClick, onHover } = props;
+  const { drawnArrows, schedule, followingTaskIds, viewTop, viewBottom, onClick, onHover } = props;
   // translation
   const { t } = useTranslation();
   // a text that has its place is in the way of the next ones
   const takenRects = getTakenRects(props);
 
-  return getDrawnArrows(props).map(({ arrow, points }) => {
+  return drawnArrows.map(({ arrow, points }) => {
     const arrowText = getArrowText(arrow, schedule, !followingTaskIds.has(arrow.nextId));
     if (!arrowText) return null;
     const text = t(`timeline.arrow.${arrowText.look === "conflict" ? "too_early" : "in_days"}`, {

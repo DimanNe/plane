@@ -6,13 +6,14 @@
 
 import type { ReactNode } from "react";
 import { memo } from "react";
-import { clamp } from "lodash-es";
+import { clamp, groupBy, sortBy } from "lodash-es";
 // plane imports
 import type { TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { cn } from "@plane/utils";
 // components
 import { BLOCK_HEIGHT } from "@/components/gantt-chart/constants";
 // local imports
+import { BAR_HEIGHT } from "./bar";
 import type { TTimelineView } from "./scale";
 import { BASE_DAY, getDayDistance, getDayX, MIN_BAR_WIDTH } from "./scale";
 
@@ -20,6 +21,9 @@ export type TPoint = [x: number, y: number];
 
 /** An end of an arrow: its tail is at the previous task, its head at the next one. */
 export type TArrowEnd = "tail" | "head";
+
+/** An arrow that is drawn: the corners of its way, and the width of the strip along it that takes the pointer. */
+export type TDrawnArrow = { arrow: TScheduleArrow; points: TPoint[]; hitWidth: number };
 
 // what the way of an arrow depends on
 export type TArrowWaysProps = {
@@ -33,7 +37,8 @@ export type TArrowWaysProps = {
   pxPerDay: number;
 };
 
-type TPathsProps = TArrowWaysProps & {
+type TPathsProps = {
+  drawnArrows: TDrawnArrow[];
   schedule: TSchedule;
   selectedArrowId: string | undefined;
   // the arrows that produce the conflict the pointer is over
@@ -50,16 +55,27 @@ type TPathsProps = TArrowWaysProps & {
  */
 export type TNextTaskSide = { isRight: boolean; isBelow: boolean };
 
-type TControlsProps = TArrowWaysProps & {
+type TControlsProps = {
+  drawnArrows: TDrawnArrow[];
   // the lines in view, in pixels from the top of the first line
   viewTop: number;
   viewBottom: number;
   renderControl: (arrow: TScheduleArrow, nextTaskSide: TNextTaskSide) => ReactNode;
 };
 
-// how far an arrow runs straight out of a bar and into one: past the handle at that end of the bar
-export const STUB = 18;
-const CORNER_RADIUS = 5;
+// how far an arrow runs out of a bar and into one before it turns: past the handle at that end of the bar
+export const STUB = 22;
+// Of the arrows at one edge of a bar each turns this much farther from the bar than the one before it, so that
+// they run beside each other.
+const STUB_STEP = 8;
+// how round a turn of an arrow is where its stretches are long enough
+const CORNER_RADIUS = 14;
+// An arrow leaves a bar straight for this long, and comes into one straight for the length of its head.
+const TAIL_LENGTH = 4;
+const HEAD_LENGTH = 8;
+// the widest and the narrowest strip along an arrow that takes the pointer
+const HIT_WIDTH = 12;
+const MIN_HIT_WIDTH = 6;
 // the colour of an arrow: of a conflict and of what produces it, of a critical or a selected arrow, of the others
 const CLASS_NAMES = {
   normal: "text-placeholder",
@@ -67,27 +83,105 @@ const CLASS_NAMES = {
   danger: "text-danger-primary",
 };
 
-/** A line through the points with its corners rounded. */
-const getPath = (points: TPoint[]) => {
-  const getPointTowards = ([x, y]: TPoint, [toX, toY]: TPoint) => {
-    const length = Math.abs(toX - x) + Math.abs(toY - y) || 1;
-    const radius = Math.min(CORNER_RADIUS, length / 2);
-    return [x + ((toX - x) / length) * radius, y + ((toY - y) / length) * radius];
+// Where an arrow ends on the edge of a bar: how far under the middle of the bar, how far the next end on that edge
+// is, and how many of the other arrows of the edge turn nearer to the bar.
+type TEndPlace = { offset: number; spacing: number; turnsBefore: number };
+
+/**
+ * The ends of the arrows at each edge of each bar, heads and tails alike, spread evenly over the height of the
+ * bar, so that each arrow can be pointed at by itself right up to the bar. An arrow whose other task is on a
+ * higher line ends higher and, going up, turns nearer to the bar; so the arrows of one edge do not cross. Only
+ * the lines decide the order: it stays as it is while a bar is dragged sideways.
+ */
+const getEndPlaces = ({ arrows, days, lineIndexes }: TArrowWaysProps) => {
+  const ends = arrows.flatMap((arrow) => {
+    const previousLine = lineIndexes.get(arrow.previousId);
+    const nextLine = lineIndexes.get(arrow.nextId);
+    if (previousLine === undefined || nextLine === undefined || !days[arrow.previousId] || !days[arrow.nextId])
+      return [];
+    const [tailEdge, headEdge] = arrow.kind.split("-");
+    return [
+      { arrow, end: "tail" as const, edge: `${arrow.previousId} ${tailEdge}`, line: previousLine, otherLine: nextLine },
+      { arrow, end: "head" as const, edge: `${arrow.nextId} ${headEdge}`, line: nextLine, otherLine: previousLine },
+    ];
+  });
+  const places: Record<string, Record<TArrowEnd, TEndPlace>> = {};
+  for (const endsOfEdge of Object.values(groupBy(ends, "edge"))) {
+    const spacing = BAR_HEIGHT / (endsOfEdge.length + 1);
+    sortBy(endsOfEdge, "otherLine").forEach(({ arrow, end, line, otherLine }, index) => {
+      places[arrow.id] = {
+        ...places[arrow.id],
+        [end]: {
+          offset: (index + 1) * spacing - BAR_HEIGHT / 2,
+          spacing: endsOfEdge.length > 1 ? spacing : Infinity,
+          // of the arrows that go up the highest turns first, of those that go down the lowest
+          turnsBefore: otherLine < line ? index : endsOfEdge.length - 1 - index,
+        },
+      };
+    });
+  }
+  return places;
+};
+
+const getDistance = ([x, y]: TPoint, [toX, toY]: TPoint) => Math.abs(toX - x) + Math.abs(toY - y);
+
+/** The point on the way from a point straight to another, a distance from the first. */
+const getPointTowards = (from: TPoint, to: TPoint, distance: number): TPoint => {
+  const length = getDistance(from, to) || 1;
+  return [from[0] + ((to[0] - from[0]) * distance) / length, from[1] + ((to[1] - from[1]) * distance) / length];
+};
+
+/**
+ * How round each turn of a way through the points is: as round as the two stretches it joins leave room for. A
+ * stretch between two turns gives each of them half of its length; the stretch at a bar gives its turn all of
+ * its length but the piece that stays straight at the bar.
+ */
+const getRadii = (points: TPoint[]) => {
+  const lastStretch = points.length - 2;
+  const getRoom = (stretch: number) => {
+    const length = getDistance(points[stretch], points[stretch + 1]);
+    return stretch === 0 ? length - TAIL_LENGTH : stretch === lastStretch ? length - HEAD_LENGTH : length / 2;
   };
-  const corners = points
+  return points
     .slice(1, -1)
-    .map(
-      (corner, index) =>
-        `L ${getPointTowards(corner, points[index])} Q ${corner} ${getPointTowards(corner, points[index + 2])}`
-    );
-  return `M ${points[0]} ${corners.join(" ")} L ${points[points.length - 1]}`;
+    .map((_, index) => Math.max(0, Math.min(CORNER_RADIUS, getRoom(index), getRoom(index + 1))));
+};
+
+/** A line through the points with its turns rounded. */
+const getPath = (points: TPoint[]) => {
+  const radii = getRadii(points);
+  const turns = radii.map((radius, index) => {
+    const corner = points[index + 1];
+    return `L ${getPointTowards(corner, points[index], radius)} Q ${corner} ${getPointTowards(corner, points[index + 2], radius)}`;
+  });
+  return `M ${points[0]} ${turns.join(" ")} L ${points[points.length - 1]}`;
+};
+
+/**
+ * Where an end of an arrow is taken: on the arrow, past the handle of the bar it is at. That is on the stretch
+ * at the bar where it is straight that far, else in the middle of the turn there.
+ */
+const getEndPoint = (points: TPoint[], end: TArrowEnd): TPoint => {
+  const radii = getRadii(points);
+  const [edge, corner, beyond, radius] =
+    end === "tail"
+      ? [points[0], points[1], points[2], radii[0]]
+      : [points[points.length - 1], points[points.length - 2], points[points.length - 3], radii[radii.length - 1]];
+  if (getDistance(edge, corner) - radius >= STUB) return getPointTowards(edge, corner, STUB);
+  const [fromX, fromY] = getPointTowards(corner, edge, radius);
+  const [toX, toY] = getPointTowards(corner, beyond, radius);
+  return [fromX / 4 + corner[0] / 2 + toX / 4, fromY / 4 + corner[1] / 2 + toY / 4];
 };
 
 /**
  * The way of an arrow from the bar of the previous task to the bar of the next one: out of the end or the start
  * it constrains by, along the lines, into the start or the end it constrains.
  */
-const getPoints = (arrow: TScheduleArrow, props: TArrowWaysProps): TPoint[] | undefined => {
+const getPoints = (
+  arrow: TScheduleArrow,
+  props: TArrowWaysProps,
+  ends: Record<TArrowEnd, TEndPlace>
+): TPoint[] | undefined => {
   const { days, lineIndexes, firstLine, lastLine, pxPerDay } = props;
   const previous = days[arrow.previousId];
   const next = days[arrow.nextId];
@@ -102,12 +196,17 @@ const getPoints = (arrow: TScheduleArrow, props: TArrowWaysProps): TPoint[] | un
     Math.max(getDayDistance(pxPerDay, task.end + 1), getStartX(task) + MIN_BAR_WIDTH);
   const fromX = arrow.kind === "start-start" ? getStartX(previous) : getEndX(previous);
   const toX = arrow.kind === "end-end" ? getEndX(next) : getStartX(next);
-  const fromY = (previousLine + 0.5) * BLOCK_HEIGHT;
-  const toY = (nextLine + 0.5) * BLOCK_HEIGHT;
+  const fromY = (previousLine + 0.5) * BLOCK_HEIGHT + ends.tail.offset;
+  const toY = (nextLine + 0.5) * BLOCK_HEIGHT + ends.head.offset;
+  const tailStub = STUB + ends.tail.turnsBefore * STUB_STEP;
+  const headStub = STUB + ends.head.turnsBefore * STUB_STEP;
 
   if (arrow.kind !== "end-start") {
     // around the starts on their left, around the ends on their right
-    const turnX = arrow.kind === "start-start" ? Math.min(fromX, toX) - STUB : Math.max(fromX, toX) + STUB;
+    const turnX =
+      arrow.kind === "start-start"
+        ? Math.min(fromX - tailStub, toX - headStub)
+        : Math.max(fromX + tailStub, toX + headStub);
     return [
       [fromX, fromY],
       [turnX, fromY],
@@ -115,37 +214,42 @@ const getPoints = (arrow: TScheduleArrow, props: TArrowWaysProps): TPoint[] | un
       [toX, toY],
     ];
   }
-  if (toX - fromX >= 2 * STUB)
+  if (toX - fromX >= tailStub + STUB)
     return [
       [fromX, fromY],
-      [fromX + STUB, fromY],
-      [fromX + STUB, toY],
+      [fromX + tailStub, fromY],
+      [fromX + tailStub, toY],
       [toX, toY],
     ];
   // the next task starts before the arrow has room to turn: back between the two lines
-  const betweenY = fromY + (Math.sign(toY - fromY) * BLOCK_HEIGHT) / 2;
+  const betweenY = (previousLine + 0.5 + Math.sign(nextLine - previousLine) / 2) * BLOCK_HEIGHT;
   return [
     [fromX, fromY],
-    [fromX + STUB, fromY],
-    [fromX + STUB, betweenY],
-    [toX - STUB, betweenY],
-    [toX - STUB, toY],
+    [fromX + tailStub, fromY],
+    [fromX + tailStub, betweenY],
+    [toX - headStub, betweenY],
+    [toX - headStub, toY],
     [toX, toY],
   ];
 };
 
-/** Where an end of an arrow is taken: on the arrow, clear of the bar it is at and of the handle there. */
-const getEndPoint = ([x, y]: TPoint, [nextX]: TPoint): TPoint => [x + Math.sign(nextX - x) * STUB, y];
-
-/** The arrows that have a way through the lines that are drawn, each with the corners of its way. */
-export const getDrawnArrows = (props: TArrowWaysProps) =>
-  props.arrows.flatMap((arrow) => {
-    const points = getPoints(arrow, props);
-    return points ? [{ arrow, points }] : [];
+/**
+ * The arrows that have a way through the lines that are drawn, each with the corners of its way and with the
+ * width of the strip along it that takes the pointer: narrower where its ends are close to those of other arrows.
+ * Found once for all that is drawn of the arrows: their lines, their texts and their controls.
+ */
+export const getDrawnArrows = (props: TArrowWaysProps): TDrawnArrow[] => {
+  const endPlaces = getEndPlaces(props);
+  return props.arrows.flatMap((arrow) => {
+    const ends = endPlaces[arrow.id];
+    const points = ends && getPoints(arrow, props, ends);
+    const hitWidth = ends && clamp(Math.min(ends.tail.spacing, ends.head.spacing), MIN_HIT_WIDTH, HIT_WIDTH);
+    return points ? [{ arrow, points, hitWidth }] : [];
   });
+};
 
 const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
-  const { schedule, selectedArrowId, causeArrowIds, isEditable, onClick, onHover, onEndPress } = props;
+  const { drawnArrows, schedule, selectedArrowId, causeArrowIds, isEditable, onClick, onHover, onEndPress } = props;
 
   return (
     <svg className="absolute top-0 left-0 h-full w-px overflow-visible">
@@ -165,7 +269,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
           <path d="M 0 0 L 7 4 L 0 8 z" fill="currentColor" />
         </marker>
       ))}
-      {getDrawnArrows(props).map(({ arrow, points }) => {
+      {drawnArrows.map(({ arrow, points, hitWidth }) => {
         const path = getPath(points);
         const isSelected = arrow.id === selectedArrowId;
         const isConflictCause = causeArrowIds.includes(arrow.id);
@@ -175,10 +279,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
             : isSelected || schedule.criticalArrowIds.includes(arrow.id)
               ? "accent"
               : "normal";
-        const ends: [TArrowEnd, TPoint][] = [
-          ["tail", getEndPoint(points[0], points[1])],
-          ["head", getEndPoint(points[points.length - 1], points[points.length - 2])],
-        ];
+        const ends = (["tail", "head"] as const).map((end) => [end, getEndPoint(points, end)] as const);
         return (
           <g key={arrow.id} className={cn("group/arrow", CLASS_NAMES[state])}>
             <path
@@ -192,7 +293,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
               d={path}
               fill="none"
               stroke="transparent"
-              strokeWidth={12}
+              strokeWidth={hitWidth}
               className="[pointer-events:stroke] cursor-pointer"
               onClick={() => onClick(arrow)}
               onPointerEnter={() => onHover(arrow)}
@@ -200,6 +301,8 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
             />
             {isEditable &&
               ends.map(([end, [x, y]]) => (
+                // An end is taken by the small circle on the arrow near its bar. It is there for the pointer while
+                // the pointer is on its arrow: the circles of the other arrows at that edge are not in the way.
                 <circle
                   key={end}
                   cx={x}
@@ -207,8 +310,9 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
                   r={4.5}
                   stroke="currentColor"
                   strokeWidth={1.5}
-                  className="[pointer-events:all] cursor-grab fill-(--background-color-surface-1) opacity-0 group-hover/arrow:opacity-100"
+                  className="pointer-events-none cursor-grab fill-(--background-color-surface-1) opacity-0 group-hover/arrow:pointer-events-auto group-hover/arrow:opacity-100"
                   onPointerDown={(e) => onEndPress(e, arrow, end)}
+                  onClick={() => onClick(arrow)}
                   onPointerEnter={() => onHover(arrow)}
                   onPointerLeave={() => onHover(undefined)}
                 />
@@ -221,9 +325,9 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
 });
 
 const ArrowControls = memo(function ArrowControls(props: TControlsProps) {
-  const { viewTop, viewBottom, renderControl } = props;
+  const { drawnArrows, viewTop, viewBottom, renderControl } = props;
 
-  return getDrawnArrows(props).map(({ arrow, points }) => {
+  return drawnArrows.map(({ arrow, points }) => {
     // on the last stretch of the arrow between the lines: in its middle, or as near to it as is in view
     const [x, fromY] = points[points.length - 3];
     const [, toY] = points[points.length - 2];
@@ -247,23 +351,23 @@ const ArrowControls = memo(function ArrowControls(props: TControlsProps) {
 export const getArrowLayerStyle = (view: TTimelineView) => ({ transform: `translateX(${getDayX(view, BASE_DAY)}px)` });
 
 /** The arrows between the bars. */
-export function TimelineArrows(props: Omit<TPathsProps, "pxPerDay"> & { view: TTimelineView }) {
+export function TimelineArrows(props: TPathsProps & { view: TTimelineView }) {
   const { view, ...pathsProps } = props;
 
   return (
     <div className="absolute inset-y-0 left-0" style={getArrowLayerStyle(view)}>
-      <ArrowPaths pxPerDay={view.pxPerDay} {...pathsProps} />
+      <ArrowPaths {...pathsProps} />
     </div>
   );
 }
 
 /** What `renderControl` gives for each of the arrows, at a place on the arrow. */
-export function TimelineArrowControls(props: Omit<TControlsProps, "pxPerDay"> & { view: TTimelineView }) {
+export function TimelineArrowControls(props: TControlsProps & { view: TTimelineView }) {
   const { view, ...controlsProps } = props;
 
   return (
     <div className="absolute inset-y-0 left-0" style={getArrowLayerStyle(view)}>
-      <ArrowControls pxPerDay={view.pxPerDay} {...controlsProps} />
+      <ArrowControls {...controlsProps} />
     </div>
   );
 }

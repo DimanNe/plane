@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import type { ComponentProps } from "react";
+import { createContext, memo, useContext } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
@@ -28,9 +30,6 @@ import { TimelineBar, TimelineBarText } from "./bar";
 type Props = {
   taskId: string;
   lineIndex: number;
-  // the first and the last day of the task; none for a task that is not on the timeline
-  start: number | undefined;
-  end: number | undefined;
   slack: number;
   isFixed: boolean;
   isCritical: boolean;
@@ -49,9 +48,35 @@ type Props = {
   onClick: (click: React.MouseEvent, taskId: string) => void;
 };
 
+/**
+ * The first and the last day of every task that has a bar; a task that is not on the timeline has none. The bar
+ * of a line and the days it lasts are drawn from here, not from what the line is given: a preview that moves
+ * bars then draws nothing else of their lines again.
+ */
+export const TimelineDaysContext = createContext<Record<string, { start: number; end: number } | undefined>>({});
+
+const DurationText = memo(function DurationText(props: { days: number }) {
+  // translation
+  const { t } = useTranslation();
+
+  return <span className="shrink-0 text-13 text-secondary">{t("workspace_projects.common.days_count", props)}</span>;
+});
+
+function LineDuration(props: { taskId: string }) {
+  const task = useContext(TimelineDaysContext)[props.taskId];
+
+  return task ? <DurationText days={task.end - task.start + 1} /> : null;
+}
+
+function LineBar(props: Omit<ComponentProps<typeof TimelineBar>, "start" | "end">) {
+  const task = useContext(TimelineDaysContext)[props.taskId];
+
+  return task ? <TimelineBar start={task.start} end={task.end} {...props} /> : null;
+}
+
 /** The line of a task: its entry in the list at the left, and its bar on the timeline when it has dates. */
 export const TimelineLine = observer(function TimelineLine(props: Props) {
-  const { taskId, lineIndex, start, end, moveOffset, onBarPress, onEntryPress, onClick, ...barProps } = props;
+  const { taskId, lineIndex, moveOffset, onBarPress, onEntryPress, onClick, ...barProps } = props;
   // router
   const { workspaceSlug } = useParams();
   // store hooks
@@ -63,8 +88,6 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
   const { getProjectIdentifierById } = useProject();
   const { getStateById } = useProjectState();
   const { issuesFilter } = useIssuesStore();
-  // translation
-  const { t } = useTranslation();
   // derived values
   const issue = getIssueById(taskId);
   const isSelected = getIsRowSelected(taskId, ALL_ISSUES);
@@ -115,31 +138,23 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
           displayProperties={issuesFilter?.issueFilters?.displayProperties}
         />
         <span className="grow truncate text-13 font-medium text-primary">{issue.name}</span>
-        {start !== undefined && end !== undefined && (
-          <span className="shrink-0 text-13 text-secondary">
-            {t("workspace_projects.common.days_count", { days: end - start + 1 })}
-          </span>
-        )}
+        <LineDuration taskId={taskId} />
       </ControlLink>
       <div className={cn("relative min-w-0 grow overflow-hidden", cellClassName)}>
-        {start !== undefined && end !== undefined && (
-          <TimelineBar
-            taskId={taskId}
-            href={workItemLink}
-            start={start}
-            end={end}
-            color={stateColor}
-            // a work item with one date fades towards the side of the date it lacks
-            style={getBlockViewDetails(issue, stateColor).blockStyle}
-            isSelected={isSelected}
-            isDisabled={!!issue.tempId}
-            onPress={onBarPress}
-            onClick={onClick}
-            {...barProps}
-          >
-            <TimelineBarText taskId={taskId} />
-          </TimelineBar>
-        )}
+        <LineBar
+          taskId={taskId}
+          href={workItemLink}
+          color={stateColor}
+          // a work item with one date fades towards the side of the date it lacks
+          style={getBlockViewDetails(issue, stateColor).blockStyle}
+          isSelected={isSelected}
+          isDisabled={!!issue.tempId}
+          onPress={onBarPress}
+          onClick={onClick}
+          {...barProps}
+        >
+          <TimelineBarText taskId={taskId} />
+        </LineBar>
       </div>
     </div>
   );
