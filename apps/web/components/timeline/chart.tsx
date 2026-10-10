@@ -44,6 +44,7 @@ import { TimelineArrowTexts } from "./arrow-texts";
 import { getDrawnArrows, TimelineArrowControls, TimelineArrows, TimelineDrawnArrow } from "./arrows";
 import { TimelineBackdrop } from "./backdrop";
 import { TimelineConflict } from "./conflict";
+import { TimelineBarDimension } from "./dimension";
 import { TimelineHeader } from "./header";
 import { TimelineDaysContext, TimelineLine } from "./line";
 import type { TTimelineOperation } from "./operation";
@@ -127,9 +128,9 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
   const [canvas, setCanvas] = useState<HTMLDivElement | null>(null);
   const [firstLineInView, setFirstLineInView] = useState(0);
-  // The task that is dragged. When it is its line that moves: the line before which it would land, and how far
-  // it is from its place, in pixels.
-  const [drag, setDrag] = useState<{ taskId: string; lineIndex?: number; lineOffset?: number }>();
+  // The task that is dragged, and its edge when that is what is held. When it is its line that moves: the line
+  // before which it would land, and how far it is from its place, in pixels.
+  const [drag, setDrag] = useState<{ taskId: string; edge?: TTaskEdge; lineIndex?: number; lineOffset?: number }>();
   // the arrow the pointer is over; and the selected arrow, whose control is open, with the place of the window
   // where it was clicked
   const [hoveredArrowId, setHoveredArrowId] = useState<string>();
@@ -185,19 +186,24 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
    * A drag of a task, in the direction of its first movement. Sideways it is an operation on the plan: `change`
    * gives the plan for the day `getDay` reads at the pointer, and no day means the plan as it was. Up or down it
    * moves the line of the task: the line goes with the pointer and lands before the line nearest to it.
+   * A held edge shows the dates of the bar and the days it lasts from the press on, before any movement: a press
+   * is enough to read them.
    */
   const dragTask = (
     press: TPosition,
     taskId: string,
     getDay: (position: TPosition) => string | undefined,
-    change: (plan: TPlan, day: string) => TPlan
+    change: (plan: TPlan, day: string) => TPlan,
+    options: { edge?: TTaskEdge } = {}
   ) => {
+    const { edge } = options;
     // the operation begins at the first movement sideways, and once: when it cannot begin, the drag changes nothing
     const begin = once(operation.begin);
     const pressedLine = getLineAt(press);
     let lineIndex: number | undefined;
     let plan: TPlan | undefined;
     let shownDay: string | undefined;
+    if (edge) setDrag({ taskId, edge });
     trackPointer(press, {
       onMove: (position, axis) => {
         if (axis === "y") {
@@ -213,7 +219,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
         if (!plan || day === shownDay) return;
         shownDay = day;
         operation.preview(day ? change(plan, day) : plan);
-        setDrag({ taskId });
+        setDrag({ taskId, edge });
       },
       onEnd: ({ isAborted }) => {
         setDrag(undefined);
@@ -235,7 +241,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
         press,
         taskId,
         ({ clientX }) => getDateOfDay(Math.round(getDayAt(clientX)) - (edge === "end" ? 1 : 0)),
-        (plan, day) => resizeTask(plan, taskId, edge, day)
+        (plan, day) => resizeTask(plan, taskId, edge, day),
+        { edge }
       );
     else
       dragTask(
@@ -351,6 +358,9 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     const endX = Math.max(getDayX(view, task.end + 1), startX + MIN_BAR_WIDTH);
     return [edge === "start" ? startX - HANDLE_DISTANCE : endX + HANDLE_DISTANCE, (lineIndex + 0.5) * BLOCK_HEIGHT];
   };
+  // the bar whose edge is held
+  const resizedTask = drag?.edge && days[drag.taskId];
+  const resizedLineIndex = drag?.edge && lineIndexes.get(drag.taskId);
   // the end of the arrow that is being dragged runs to the pointer until a handle takes it
   const drawnFrom = link && (!link.target || link.refusal) ? getHandlePoint(link.from) : undefined;
 
@@ -548,6 +558,15 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                       setSelectedArrow(undefined);
                       setHoveredArrowId(undefined);
                     }}
+                  />
+                )}
+                {resizedTask && resizedLineIndex !== undefined && (
+                  <TimelineBarDimension
+                    view={view}
+                    start={resizedTask.start}
+                    end={resizedTask.end}
+                    lineIndex={resizedLineIndex}
+                    isBelow={resizedLineIndex <= firstLineInView}
                   />
                 )}
                 {link && drawnFrom && (

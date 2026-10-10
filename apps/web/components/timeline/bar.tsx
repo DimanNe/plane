@@ -63,8 +63,10 @@ export const BAR_HEIGHT = 32;
 export const DATE_DISTANCE = 28;
 export const DATE_WIDTH = 86;
 const TEXT_PADDING = 10;
-const DATE_CLASS_NAME =
-  "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-sm bg-accent-subtle px-2 py-1 text-11 whitespace-nowrap text-tertiary";
+// the look of what stands around a bar while it is dragged: its dates, and the days it lasts
+export const MARKER_CLASS_NAME =
+  "pointer-events-none rounded-sm bg-accent-subtle px-2 py-1 text-11 whitespace-nowrap text-tertiary";
+const DATE_CLASS_NAME = cn(MARKER_CLASS_NAME, "absolute top-1/2 -translate-y-1/2");
 
 /**
  * The handles at the start and the end of a bar: an arrow is drawn from one to one of another bar. They show

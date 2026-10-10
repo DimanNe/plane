@@ -432,6 +432,7 @@
   "timeline": {
     "leaves": "Leaves",
     "leaves_description": "Work items without sub-work items",
+    "duration": "{days} d",
     "handle": {
       "start": "Draw an arrow from the start",
       "end": "Draw an arrow from the end"
