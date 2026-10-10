@@ -29,6 +29,7 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueParentDetail } from "../issue-detail/parent";
 import { IssueReaction } from "../issue-detail/reactions";
 import { IssueTitleInput } from "../title-input";
+import { ISSUE_TITLE_SURFACE_CLASSNAME } from "../title-surface";
 // services init
 const workItemVersionService = new WorkItemVersionService();
 
@@ -103,6 +104,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         issueOperations={issueOperations}
         disabled={disabled || isArchived}
         value={issue.name}
+        containerClassName={ISSUE_TITLE_SURFACE_CLASSNAME}
       />
 
       <DescriptionInput
