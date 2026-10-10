@@ -45,6 +45,7 @@ import {
   IssueProjectSelect,
   IssueTitleInput,
 } from "@/components/issues/issue-modal/components";
+import { useSaveShortcut } from "@/components/issues/issue-modal/use-save-shortcut";
 import { WorkItemModalProperties } from "@/components/work-item-types/modal-properties";
 import { WorkItemTypeSelect } from "@/components/work-item-types/type-select";
 // helpers
@@ -292,6 +293,13 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
         console.error(error);
       });
   };
+
+  useSaveShortcut({
+    formRef,
+    editorRef,
+    submitButtonRef: submitBtnRef,
+    submit: () => handleSubmit((formData) => handleFormSubmit(formData))(),
+  });
 
   const handleMoveToProjects = async () => {
     if (!data?.id || !data?.project_id || !data) return;
