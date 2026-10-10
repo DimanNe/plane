@@ -33,8 +33,8 @@ const toArrow = (dependency: TTimelineDependency): TScheduleArrow => ({
 
 /**
  * The plan of stored work items and dependencies. A work item without both dates, or with a start after its due
- * date, is not on the timeline, and its arrows take no part. A work item stored as following its arrows is fixed
- * on its stored start when no arrow leads to it from a task of the timeline.
+ * date, is not on the timeline, and its arrows take no part. A work item stored as following its arrows, to which
+ * no arrow leads from a task of the timeline, stands fixed in the plan on its stored start.
  */
 export function getPlan(issues: TStoredTask[], dependencies: TTimelineDependency[]): TPlan {
   const arrows = dependencies.map(toArrow);
@@ -54,12 +54,22 @@ export function getPlan(issues: TStoredTask[], dependencies: TTimelineDependency
 }
 
 /**
- * Everything in which a plan and its computed dates differ from what is stored: what one request has to save.
+ * What one request has to save of a plan: the arrows that differ from the stored dependencies, and the tasks
+ * whose computed dates differ from the stored ones or whose start an operation changed.
+ *
+ * Whether a start is fixed is saved only when an operation changed that start: a plan says so by starting the
+ * task otherwise than the plan of what is stored does. The stored field alone does not count. A work item stored
+ * as following its arrows, to which no arrow leads, stands where it is and nothing is saved for it; somebody may
+ * be replacing its arrow elsewhere in two steps, and it has to follow the new one.
+ *
  * An arrow of another kind than its stored dependency is saved by removing the dependency and giving the new one.
  */
 export function getChanges(issues: TStoredTask[], dependencies: TTimelineDependency[], plan: TPlan): TTimelineChanges {
   const { dates } = computeSchedule(plan.tasks, plan.arrows);
   const storedTasks = new Map(issues.map((issue) => [issue.id, issue]));
+  const followingAsStored = new Set(
+    getPlan(issues, dependencies).tasks.flatMap((task) => (task.start === "anchor" ? [task.id] : []))
+  );
   const storedArrows = new Map(dependencies.map((dependency) => [dependency.id, toArrow(dependency)]));
   const kindInPlan = new Map(plan.arrows.map((arrow) => [arrow.id, arrow.kind]));
   return {
@@ -81,7 +91,8 @@ export function getChanges(issues: TStoredTask[], dependencies: TTimelineDepende
       const stored = storedTasks.get(task.id);
       const { start, end } = dates[task.id];
       const isStartFixed = task.start !== "anchor";
-      return stored?.start_date === start && stored.target_date === end && stored.is_start_fixed === isStartFixed
+      const isStartChanged = followingAsStored.has(task.id) === isStartFixed;
+      return stored?.start_date === start && stored.target_date === end && !isStartChanged
         ? []
         : [{ id: task.id, start_date: start, target_date: end, is_start_fixed: isStartFixed }];
     }),

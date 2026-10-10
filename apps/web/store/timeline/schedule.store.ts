@@ -104,26 +104,10 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     });
   };
 
-  /**
-   * What the page holds as stored. A task says that it follows its arrows only when the plan computes it: one
-   * to which no arrow leads from the timeline stands fixed in the plan, and counts as fixed here. So a save
-   * writes whether a start is fixed only for a task whose start an operation changed, and what the page saves on
-   * its own are computed dates, never a parameter that somebody may be changing elsewhere in several steps.
-   */
-  private getStored = (projectId: string) => {
-    const tasks = this.getStoredTasks(projectId);
-    const dependencies = this.timeline.dependencyMap[projectId] ?? [];
-    const computedIds = new Set(
-      getPlan(tasks, dependencies).tasks.flatMap((task) => (task.start === "anchor" ? [task.id] : []))
-    );
-    const held = tasks.map(({ id, start_date, target_date }) => ({
-      id,
-      start_date,
-      target_date,
-      is_start_fixed: !computedIds.has(id),
-    }));
-    return { tasks: held, dependencies };
-  };
+  private getStored = (projectId: string) => ({
+    tasks: this.getStoredTasks(projectId),
+    dependencies: this.timeline.dependencyMap[projectId] ?? [],
+  });
 
   private getStoredPlan = computedFn((projectId: string): TPlan => {
     const { tasks, dependencies } = this.getStored(projectId);

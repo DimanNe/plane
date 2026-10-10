@@ -79,6 +79,8 @@ describe("getChanges", () => {
   const dependencies = [dependency("A>B", "blocking"), dependency("D>C", "blocking")];
   const plan = getPlan(issues, dependencies);
   const nothing: TTimelineChanges = { dependencies: [], removed_dependencies: [], issues: [] };
+  // C is stored as following its arrows, and its only arrow comes from D, which has no dates
+  const withLoneFollower = [issue("A", 1, 3), issue("B", 4, 5, false), issue("C", 1, 2, false), issue("D", null, null)];
   const cases: { name: string; stored?: TStoredTask[]; changed: TPlan; expected: TTimelineChanges }[] = [
     {
       name: "a plan that says what is stored changes nothing",
@@ -95,12 +97,30 @@ describe("getChanges", () => {
       },
     },
     {
-      name: "a work item stored as following its arrows that the plan holds fixed is saved as fixed",
-      stored: [issue("A", 1, 3), issue("B", 4, 5, false), issue("C", 1, 2, false), issue("D", null, null)],
+      name: "nothing is saved for a work item stored as following its arrows to which no arrow leads",
+      stored: withLoneFollower,
       changed: plan,
+      expected: nothing,
+    },
+    {
+      name: "an operation that changed another task saves nothing for such a work item either",
+      stored: withLoneFollower,
+      changed: moveTask(plan, "A", day(3)),
       expected: {
         ...nothing,
-        issues: [{ id: "C", start_date: day(1), target_date: day(2), is_start_fixed: true }],
+        issues: [
+          { id: "A", start_date: day(3), target_date: day(5), is_start_fixed: true },
+          { id: "B", start_date: day(6), target_date: day(7), is_start_fixed: false },
+        ],
+      },
+    },
+    {
+      name: "whether a start is fixed is saved when an operation changed that start: moved to a day, it is fixed there",
+      stored: withLoneFollower,
+      changed: moveTask(plan, "C", day(6)),
+      expected: {
+        ...nothing,
+        issues: [{ id: "C", start_date: day(6), target_date: day(7), is_start_fixed: true }],
       },
     },
     {
