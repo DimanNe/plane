@@ -175,7 +175,9 @@ export class LiveUpdates {
     this.applying = this.applying
       .then(async () => {
         // A list that the page is loading itself may come back older than these changes: they are applied to it.
-        await when(() => !rootStore.issue.projectIssues.getIssueLoader());
+        // An operation on a timeline works on a copy of the plan: what changed elsewhere waits until it has ended.
+        const { schedule } = rootStore.timelineStore.issuesTimeLineStore;
+        await when(() => !rootStore.issue.projectIssues.getIssueLoader() && !schedule.operation);
         const changes = this.changes.splice(0);
         const isResync = this.isResyncPending;
         this.isResyncPending = false;
@@ -189,6 +191,7 @@ export class LiveUpdates {
     const list = getListOnScreen();
     if (list) await this.refetchList(list);
     await Promise.all(getOpenIssues().map((openIssue) => this.refetchOpenIssue(openIssue)));
+    await this.refetchPlans();
   }
 
   private async applyChanges(changes: TChange[]) {
@@ -207,6 +210,25 @@ export class LiveUpdates {
     await Promise.all(
       getOpenIssues().map((openIssue) => this.applyToOpenIssue(openIssue, getIssueIds(openIssue.projectId)))
     );
+    await this.refetchPlans(changes);
+  }
+
+  /**
+   * Rule for the plan of a timeline: a change of a record that the plan of a project is computed from fetches
+   * the project's dependencies and the work items at their ends again, whatever it was that changed of them.
+   * This goes for every project whose timeline the page has loaded, on screen or not: a timeline that is shown
+   * again does not ask the server again. The store then saves computed dates that differ from the stored ones,
+   * as when a timeline loads; that save comes back as a change, whose fetch finds nothing left to save.
+   * Without `changes` every plan is fetched: nobody knows what was missed.
+   */
+  private async refetchPlans(changes?: TChange[]) {
+    const { schedule, fetchDependencies } = rootStore.timelineStore.issuesTimeLineStore;
+    const projectIds = schedule
+      .getHeldProjectIds(this.workspaceSlug)
+      .filter(
+        (projectId) => !changes || changes.some((change) => schedule.isPlanComputedFrom(projectId, change.t, change.id))
+      );
+    await Promise.all(projectIds.map((projectId) => fetchDependencies(this.workspaceSlug, projectId)));
   }
 
   /**

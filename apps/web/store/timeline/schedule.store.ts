@@ -5,14 +5,14 @@
  */
 
 import { set } from "lodash-es";
-import { action, makeObservable, observable, runInAction } from "mobx";
+import { action, makeObservable, observable, runInAction, when } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
 import { computeSchedule, getChanges, getPlan } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TStoredTask } from "@plane/blocks/timeline-schedule";
 import { setToast } from "@plane/blocks/toast";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
-import type { TTimelineDependency, TTimelineIssue } from "@plane/types";
+import type { TTimelineDependencies, TTimelineDependency, TTimelineIssue } from "@plane/types";
 // services
 import { TimelineService } from "@/services/timeline.service";
 // store
@@ -37,7 +37,10 @@ export interface ITimelineScheduleStore {
   // computed functions
   getPlan: (projectId: string) => TPlan;
   getSchedule: (projectId: string) => TSchedule;
+  getHeldProjectIds: (workspaceSlug: string) => string[];
+  isPlanComputedFrom: (projectId: string, table: string, id: string) => boolean;
   // actions
+  fetchStored: (workspaceSlug: string, projectId: string) => Promise<TTimelineDependencies>;
   setFetchedIssues: (workspaceSlug: string, projectId: string, issues: TTimelineIssue[]) => void;
   beginOperation: (workspaceSlug: string, projectId: string) => TPlan | undefined;
   previewOperation: (plan: TPlan) => TSchedule;
@@ -59,6 +62,8 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
   // the work items at the ends of each project's dependencies, as the server listed them
   issueMap: Record<string, Record<string, TTimelineIssue>> = {};
   operation: TTimelineOperation | undefined = undefined;
+  // the workspace of each project whose plan the page holds
+  workspaceSlugs: Record<string, string> = {};
   // services
   timelineService = new TimelineService();
 
@@ -82,6 +87,11 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
    * The work items of the project that the page holds, and those at the other end of its dependencies. The dates
    * are the ones every other view shows; whether a start is fixed is known only for an end of a dependency, and
    * matters only there.
+   *
+   * A work item of another project is fixed here on its stored dates: the page does not hold the arrows that
+   * lead to it inside its own project, so only a timeline of that project can compute it. Computed here from
+   * some of its arrows, it would be saved with other dates than there, and two open pages would save it in turn
+   * without end.
    */
   private getStoredTasks = (projectId: string): TStoredTask[] => {
     const issuesMap = this.rootStore.issue.issues.issuesMap;
@@ -89,14 +99,31 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     const issueIds = Object.keys(issuesMap).filter((id) => !fetched[id] && issuesMap[id].project_id === projectId);
     return [...Object.keys(fetched), ...issueIds].map((id) => {
       const { start_date, target_date } = issuesMap[id] ?? fetched[id];
-      return { id, start_date, target_date, is_start_fixed: fetched[id]?.is_start_fixed ?? true };
+      const isFollowing = fetched[id]?.project_id === projectId && !fetched[id].is_start_fixed;
+      return { id, start_date, target_date, is_start_fixed: !isFollowing };
     });
   };
 
-  private getStored = (projectId: string) => ({
-    tasks: this.getStoredTasks(projectId),
-    dependencies: this.timeline.dependencyMap[projectId] ?? [],
-  });
+  /**
+   * What the page holds as stored. A task says that it follows its arrows only when the plan computes it: one
+   * to which no arrow leads from the timeline stands fixed in the plan, and counts as fixed here. So a save
+   * writes whether a start is fixed only for a task whose start an operation changed, and what the page saves on
+   * its own are computed dates, never a parameter that somebody may be changing elsewhere in several steps.
+   */
+  private getStored = (projectId: string) => {
+    const tasks = this.getStoredTasks(projectId);
+    const dependencies = this.timeline.dependencyMap[projectId] ?? [];
+    const computedIds = new Set(
+      getPlan(tasks, dependencies).tasks.flatMap((task) => (task.start === "anchor" ? [task.id] : []))
+    );
+    const held = tasks.map(({ id, start_date, target_date }) => ({
+      id,
+      start_date,
+      target_date,
+      is_start_fixed: !computedIds.has(id),
+    }));
+    return { tasks: held, dependencies };
+  };
 
   private getStoredPlan = computedFn((projectId: string): TPlan => {
     const { tasks, dependencies } = this.getStored(projectId);
@@ -123,6 +150,29 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     }
   });
 
+  /** The projects of the workspace whose timeline the page has loaded: it holds their plans from then on. */
+  getHeldProjectIds = (workspaceSlug: string): string[] =>
+    Object.keys(this.workspaceSlugs).filter((projectId) => this.workspaceSlugs[projectId] === workspaceSlug);
+
+  /**
+   * Whether a changed record is one that the plan of the project is computed from: a relation, wherever it was
+   * made (a new one can lead to the project from another), and a work item at an end of the project's
+   * dependencies. The dates of the project's other work items reach the plan with the list that shows them.
+   */
+  isPlanComputedFrom = (projectId: string, table: string, id: string): boolean =>
+    table === "issue_relations" || (table === "issues" && !!this.issueMap[projectId]?.[id]);
+
+  /**
+   * Asks the server for what the plan of the project is computed from. An operation works on a copy of the plan,
+   * so no answer is taken while one is going on. An answer that came during one is asked for again when it has
+   * ended: the operation may have saved since.
+   */
+  fetchStored = async (workspaceSlug: string, projectId: string): Promise<TTimelineDependencies> => {
+    await when(() => !this.operation);
+    const fetched = await this.timelineService.getDependencies(workspaceSlug, projectId);
+    return this.operation ? this.fetchStored(workspaceSlug, projectId) : fetched;
+  };
+
   private mergeIssues = (projectId: string, issues: TTimelineIssue[]) => {
     const { getIssueById, updateIssue } = this.rootStore.issue.issues;
     for (const issue of issues) {
@@ -140,6 +190,7 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
    * computed dates are saved as an operation is.
    */
   setFetchedIssues = (workspaceSlug: string, projectId: string, issues: TTimelineIssue[]) => {
+    this.workspaceSlugs[projectId] = workspaceSlug;
     set(this.issueMap, [projectId], {});
     this.mergeIssues(projectId, issues);
     const canEdit = this.rootStore.user.permission.allowPermissions(

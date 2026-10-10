@@ -9,8 +9,6 @@ import { action, autorun, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
 import type { TTimelineDependency } from "@plane/types";
-// services
-import { TimelineService } from "@/services/timeline.service";
 // store
 import type { RootStore } from "@/store/root.store";
 import type { IBaseTimelineStore } from "@/store/timeline/base-timeline.store";
@@ -36,8 +34,6 @@ export class IssuesTimeLineStore extends BaseTimeLineStore implements IIssuesTim
   // observables
   dependencyMap: Record<string, TTimelineDependency[]> = {};
   schedule: ITimelineScheduleStore;
-  // services
-  timelineService;
 
   constructor(_rootStore: RootStore) {
     super(_rootStore);
@@ -49,7 +45,6 @@ export class IssuesTimeLineStore extends BaseTimeLineStore implements IIssuesTim
       fetchDependencies: action,
     });
 
-    this.timelineService = new TimelineService();
     this.schedule = new TimelineScheduleStore(_rootStore, this);
 
     autorun(() => {
@@ -71,7 +66,7 @@ export class IssuesTimeLineStore extends BaseTimeLineStore implements IIssuesTim
   });
 
   fetchDependencies = async (workspaceSlug: string, projectId: string) =>
-    await this.timelineService.getDependencies(workspaceSlug, projectId).then((response) => {
+    await this.schedule.fetchStored(workspaceSlug, projectId).then((response) => {
       runInAction(() => {
         set(this.dependencyMap, [projectId], response.dependencies);
         this.schedule.setFetchedIssues(workspaceSlug, projectId, response.issues);
