@@ -68,6 +68,21 @@ function LineDuration(props: { taskId: string }) {
   return task ? <DurationText days={task.end - task.start + 1} /> : null;
 }
 
+/**
+ * The name of a task in the list. A long list holds tasks that are on the timeline and tasks that are not, and
+ * which is which is asked of the whole list at once, not line by line: the name of a task that is not placed is
+ * muted. It is read from the days of the bars, so it follows a preview as the bar of the task does.
+ */
+function LineName(props: { taskId: string; name: string }) {
+  const isPlaced = !!useContext(TimelineDaysContext)[props.taskId];
+
+  return (
+    <span className={cn("grow truncate text-13 font-medium", isPlaced ? "text-primary" : "text-tertiary")}>
+      {props.name}
+    </span>
+  );
+}
+
 function LineBar(props: Omit<ComponentProps<typeof TimelineBar>, "start" | "end">) {
   const task = useContext(TimelineDaysContext)[props.taskId];
 
@@ -137,7 +152,7 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
           variant="tertiary"
           displayProperties={issuesFilter?.issueFilters?.displayProperties}
         />
-        <span className="grow truncate text-13 font-medium text-primary">{issue.name}</span>
+        <LineName taskId={taskId} name={issue.name} />
         <LineDuration taskId={taskId} />
       </ControlLink>
       <div className={cn("relative min-w-0 grow overflow-hidden", cellClassName)}>
