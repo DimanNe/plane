@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { EStartOfTheWeek } from "@plane/types";
@@ -50,8 +50,9 @@ const getLabels = (locale: string) => {
 
 /**
  * The two lines above the timeline: the unit it is divided by at the present scale, and the larger unit above it.
+ * They change with the view only, not with the plan that a drag previews.
  */
-export function TimelineHeader(props: Props) {
+export const TimelineHeader = memo(function TimelineHeader(props: Props) {
   const { view, today, startOfWeek } = props;
   // translation
   const { currentLocale } = useTranslation();
@@ -101,4 +102,4 @@ export function TimelineHeader(props: Props) {
       })}
     </>
   );
-}
+});

@@ -6,7 +6,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clamp, mapValues } from "lodash-es";
+import { clamp, mapValues, once } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -15,6 +15,8 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { AddOutline, ArrowCollapseOutline, FullScreenOutline } from "@makeplane/propel/icons";
 import { DropIndicator } from "@plane/blocks/common";
 import { Row } from "@plane/blocks/layout";
+import { getConflictCause, moveTask, placeTask, resizeTask } from "@plane/blocks/timeline-schedule";
+import type { TPlan, TSchedule, TScheduleArrow, TTaskEdge } from "@plane/blocks/timeline-schedule";
 import { setToast } from "@plane/blocks/toast";
 import { ALL_ISSUES } from "@plane/constants";
 import { useLatestCallback } from "@plane/hooks";
@@ -38,20 +40,24 @@ import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-red
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import useSize from "@/hooks/use-window-size";
 // local imports
-import { TimelineArrowControls, TimelineArrows } from "./arrows";
+import { TimelineArrowChip, TimelineArrowControl } from "./arrow-control";
+import { TimelineArrowControls, TimelineArrows, TimelineDrawnArrow } from "./arrows";
 import { TimelineBackdrop } from "./backdrop";
-import type { TBarEdge } from "./bar";
 import { TimelineHeader } from "./header";
 import { TimelineLine } from "./line";
+import type { TTimelineOperation } from "./operation";
+import { runOperation } from "./operation";
 import { trackPointer } from "./pointer";
 import { getDateOfDay, getDayOfDate, getDayOfTime, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
-import type { TSchedule, TScheduleArrow, TTimelineChange, TTimelineOperation } from "./types";
+import type { THandle } from "./use-arrow-link";
+import { useArrowLink } from "./use-arrow-link";
 import { useTimelineView } from "./use-timeline-view";
 
 type Props = {
   // the tasks of the list, a line each, in the order of the list
   taskIds: string[];
-  arrows: TScheduleArrow[];
+  // the plan and its schedule: of what is stored, or of the operation that is going on
+  plan: TPlan;
   schedule: TSchedule;
   operation: TTimelineOperation;
   // a day the timeline shows when it opens, besides its bars and today
@@ -62,9 +68,6 @@ type Props = {
   // A line was dropped before the line that has `lineIndex` now, or after the last one. Not given when the
   // lines are in an order that a move cannot change.
   onLineMove?: (taskId: string, lineIndex: number) => void;
-  onArrowClick: (arrow: TScheduleArrow) => void;
-  renderArrowControl?: (arrow: TScheduleArrow) => ReactNode;
-  renderBarHandle?: (taskId: string, edge: TBarEdge) => ReactNode;
   quickAdd?: ReactNode;
   loadMore?: () => void;
 };
@@ -76,15 +79,22 @@ const LINES_BEYOND_VIEW = 5;
 // the widest and the narrowest day the timeline opens with
 const MAX_INITIAL_PX_PER_DAY = 40;
 const MIN_INITIAL_PX_PER_DAY = 2;
+// the middle of a handle is this far outside its end of the bar
+const HANDLE_DISTANCE = 9;
+// the control of an arrow shows a moment after the pointer came over the arrow, and goes a moment after it left
+const HOVER_DELAY = 150;
+const LEAVE_DELAY = 300;
+const NO_CAUSE: ReturnType<typeof getConflictCause> = { taskIds: [], arrowIds: [] };
 
 /**
  * The timeline of tasks: the list at the left, a line with a bar per task, the arrows between the bars. It draws
- * the dates, arrows, slack and critical tasks it is given and reports what the pointer does to them.
+ * the plan it is given, and every gesture on it is an operation: begun at the first movement, shown at every
+ * further one as the engine computes it, saved on release and dropped on Escape.
  */
 export const TimelineChart = observer(function TimelineChart(props: Props) {
   const {
     taskIds,
-    arrows,
+    plan: { tasks, arrows },
     schedule,
     operation,
     focusDate,
@@ -92,9 +102,6 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     showOnlyLeaves,
     onShowOnlyLeavesChange,
     onLineMove,
-    onArrowClick,
-    renderArrowControl,
-    renderBarHandle,
     quickAdd,
     loadMore,
   } = props;
@@ -102,6 +109,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const { workspaceSlug } = useParams();
   // refs
   const isPeekOpenOnPressRef = useRef(false);
+  const hoverTimerRef = useRef<number>(undefined);
   // states
   // the element that scrolls the lines, and the one as wide as the timeline; full screen draws both anew
   const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
@@ -109,6 +117,9 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const [firstLineInView, setFirstLineInView] = useState(0);
   const [drag, setDrag] = useState<{ taskId: string; lineIndex?: number }>();
   const [placeHint, setPlaceHint] = useState<{ lineIndex: number; day: number }>();
+  // the arrow the pointer is over, and the arrow whose control is open
+  const [hoveredArrowId, setHoveredArrowId] = useState<string>();
+  const [openArrowId, setOpenArrowId] = useState<string>();
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
   // store hooks
@@ -130,6 +141,10 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     [schedule.dates]
   );
   const lineIndexes = useMemo(() => new Map(taskIds.map((taskId, index) => [taskId, index])), [taskIds]);
+  const followingTaskIds = useMemo(
+    () => new Set(tasks.flatMap((task) => (task.start === "anchor" ? [task.id] : []))),
+    [tasks]
+  );
   const now = getDayOfTime(currentTime);
   const startOfWeek = userProfile.start_of_the_week;
 
@@ -164,9 +179,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   // a click on the empty line of a task that is not on the timeline places it on the day under the pointer
   const handleEmptyClick = (position: TPosition) => {
     const line = getEmptyLineAt(position);
-    if (!line) return;
-    operation.preview({ taskId: line.taskId, day: getDateOfDay(Math.floor(getDayAt(position.clientX))) });
-    operation.commit();
+    const day = getDateOfDay(Math.floor(getDayAt(position.clientX)));
+    if (line) runOperation(operation, (plan) => placeTask(plan, line.taskId, day));
   };
 
   const { view, isPanning, showView, getDayAt, handlePointerDown } = useTimelineView(
@@ -186,15 +200,20 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   };
 
   /**
-   * A drag of a task, in the direction of its first movement: sideways it changes dates, to what `getChange`
-   * says for the place of the pointer, and up or down it moves the line of the task.
+   * A drag of a task, in the direction of its first movement. Sideways it is an operation on the plan: `change`
+   * gives the plan for the day `getDay` reads at the pointer, and no day means the plan as it was. Up or down it
+   * moves the line of the task.
    */
   const dragTask = (
     press: TPosition,
     taskId: string,
-    getChange: (position: TPosition) => TTimelineChange | undefined
+    getDay: (position: TPosition) => string | undefined,
+    change: (plan: TPlan, day: string) => TPlan
   ) => {
+    // the operation begins at the first movement sideways, and once: when it cannot begin, the drag changes nothing
+    const begin = once(operation.begin);
     let lineIndex: number | undefined;
+    let plan: TPlan | undefined;
     let shownDay: string | undefined;
     let isWarned = false;
     trackPointer(press, {
@@ -210,44 +229,78 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
           isWarned = true;
           return;
         }
-        const change = getChange(position);
-        if (change?.day === shownDay) return;
-        if (change) operation.preview(change);
-        else operation.abort();
-        shownDay = change?.day;
+        plan = begin();
+        const day = getDay(position);
+        // the plan is the same for every place of the pointer in a day
+        if (!plan || day === shownDay) return;
+        shownDay = day;
+        operation.preview(day ? change(plan, day) : plan);
         setDrag({ taskId });
       },
       onEnd: ({ isAborted }) => {
         setDrag(undefined);
         if (shownDay && !isAborted) operation.commit();
-        else if (shownDay) operation.abort();
+        else if (plan) operation.abort();
         else if (lineIndex !== undefined && !isAborted) onLineMove?.(taskId, lineIndex);
       },
     });
   };
 
-  const handleBarPress = useLatestCallback((press: React.PointerEvent, taskId: string, edge?: TBarEdge) => {
+  const handleBarPress = useLatestCallback((press: React.PointerEvent, taskId: string, edge?: TTaskEdge) => {
     // a press on a bar is not a press on empty space
     press.stopPropagation();
     if (press.button !== 0 || !isEditable) return;
     const grabbedAt = getDayAt(press.clientX) - days[taskId].start;
-    dragTask(press, taskId, ({ clientX }) => {
+    if (edge)
       // an edge goes to the border between two days that is nearest to the pointer
-      if (edge === "start") return { taskId, edge, day: getDateOfDay(Math.round(getDayAt(clientX))) };
-      if (edge === "end") return { taskId, edge, day: getDateOfDay(Math.round(getDayAt(clientX)) - 1) };
-      return { taskId, day: getDateOfDay(Math.round(getDayAt(clientX) - grabbedAt)) };
-    });
+      dragTask(
+        press,
+        taskId,
+        ({ clientX }) => getDateOfDay(Math.round(getDayAt(clientX)) - (edge === "end" ? 1 : 0)),
+        (plan, day) => resizeTask(plan, taskId, edge, day)
+      );
+    else
+      dragTask(
+        press,
+        taskId,
+        ({ clientX }) => getDateOfDay(Math.round(getDayAt(clientX) - grabbedAt)),
+        (plan, day) => moveTask(plan, taskId, day)
+      );
   });
 
   // an entry of the list dragged onto the timeline puts its task on the day under the pointer
   const handleEntryPress = useLatestCallback((press: React.PointerEvent, taskId: string) => {
     if (press.button !== 0 || !isEditable) return;
-    dragTask(press, taskId, ({ clientX }) =>
-      canvas && clientX >= canvas.getBoundingClientRect().left
-        ? { taskId, day: getDateOfDay(Math.floor(getDayAt(clientX))) }
-        : undefined
+    dragTask(
+      press,
+      taskId,
+      ({ clientX }) =>
+        canvas && clientX >= canvas.getBoundingClientRect().left
+          ? getDateOfDay(Math.floor(getDayAt(clientX)))
+          : undefined,
+      (plan, day) => placeTask(plan, taskId, day)
     );
   });
+
+  const { link, handleHandlePress, handleArrowEndPress } = useArrowLink({
+    taskIds,
+    days,
+    view,
+    operation,
+    isEditable,
+    getPoint: (position) => [
+      position.clientX - (canvas?.getBoundingClientRect().left ?? 0),
+      getLineAt(position) * BLOCK_HEIGHT,
+    ],
+  });
+
+  const handleArrowHover = useLatestCallback((arrow: TScheduleArrow | undefined) => {
+    window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => setHoveredArrowId(arrow?.id), arrow ? HOVER_DELAY : LEAVE_DELAY);
+  });
+  useEffect(() => () => window.clearTimeout(hoverTimerRef.current), []);
+
+  const handleArrowClick = useLatestCallback((arrow: TScheduleArrow) => isEditable && setOpenArrowId(arrow.id));
 
   // as in the List layout: a click selects, a double click opens the work item beside the timeline, and an
   // open work item view follows the selection
@@ -265,6 +318,34 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const firstLine = Math.max(0, firstLineInView - LINES_BEYOND_VIEW);
   const lastLine = firstLineInView + Math.ceil(windowHeight / BLOCK_HEIGHT) + LINES_BEYOND_VIEW;
   const overlayClassName = "pointer-events-none absolute inset-y-0 right-0 overflow-hidden";
+
+  // While a bar is dragged or resized every arrow into and out of it shows its control. Else the arrow the
+  // pointer is over shows it, or the one whose control was opened; when that arrow is a conflict, so do the
+  // arrows that produce the conflict.
+  const draggedTaskId = drag && drag.lineIndex === undefined ? drag.taskId : undefined;
+  const controlledArrowId = drag || link ? undefined : (openArrowId ?? hoveredArrowId);
+  const conflict = schedule.conflicts.find((candidate) => candidate.arrowId === controlledArrowId);
+  const cause = useMemo(
+    () => (conflict ? getConflictCause(arrows, schedule, conflict) : NO_CAUSE),
+    [arrows, schedule, conflict]
+  );
+  const arrowsWithControl = arrows.filter((arrow) =>
+    draggedTaskId
+      ? arrow.previousId === draggedTaskId || arrow.nextId === draggedTaskId
+      : arrow.id === controlledArrowId || cause.arrowIds.includes(arrow.id)
+  );
+
+  /** The middle of a handle, in pixels from the left edge of the timeline and the top of the first line. */
+  const getHandlePoint = ({ taskId, edge }: THandle): [number, number] | undefined => {
+    const task = days[taskId];
+    const lineIndex = lineIndexes.get(taskId);
+    if (!view || !task || lineIndex === undefined) return;
+    const startX = getDayX(view, task.start);
+    const endX = Math.max(getDayX(view, task.end + 1), startX + MIN_BAR_WIDTH);
+    return [edge === "start" ? startX - HANDLE_DISTANCE : endX + HANDLE_DISTANCE, (lineIndex + 0.5) * BLOCK_HEIGHT];
+  };
+  // the end of the arrow that is being dragged runs to the pointer until a handle takes it
+  const drawnFrom = link && (!link.target || link.refusal) ? getHandlePoint(link.from) : undefined;
 
   const content = (
     <div className={cn("relative flex h-full flex-col bg-surface-1 select-none", { "inset-0 z-[25]": isFullScreen })}>
@@ -365,14 +446,19 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   start={days[taskId]?.start}
                   end={days[taskId]?.end}
                   slack={schedule.slack[taskId] ?? 0}
+                  isFixed={!followingTaskIds.has(taskId)}
                   isCritical={schedule.criticalTaskIds.includes(taskId)}
+                  isConflictCause={cause.taskIds.includes(taskId)}
                   isEditable={isEditable}
-                  isDragged={drag?.taskId === taskId && drag.lineIndex === undefined}
+                  isDragged={draggedTaskId === taskId}
                   isMoved={drag?.taskId === taskId && drag.lineIndex !== undefined}
+                  areHandlesShown={!!link && (!link.ownTaskId || link.ownTaskId === taskId)}
+                  linkedEdge={link?.target?.taskId === taskId ? link.target.edge : undefined}
+                  isLinkRefused={!!link?.refusal}
                   onBarPress={handleBarPress}
+                  onHandlePress={handleHandlePress}
                   onEntryPress={handleEntryPress}
                   onClick={handleTaskClick}
-                  renderBarHandle={renderBarHandle}
                 />
               ))}
               {/* above the lines and below the bars; what can be pressed here is not empty space */}
@@ -390,7 +476,12 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   firstLine={firstLine}
                   lastLine={lastLine}
                   view={view}
-                  onClick={onArrowClick}
+                  causeArrowIds={cause.arrowIds}
+                  // during a gesture no end of an arrow is taken
+                  isEditable={isEditable && !drag && !link}
+                  onClick={handleArrowClick}
+                  onHover={handleArrowHover}
+                  onEndPress={handleArrowEndPress}
                 />
                 {placeHint && (
                   <div
@@ -411,16 +502,56 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                 style={{ left: SIDEBAR_WIDTH }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                {renderArrowControl && (
-                  <TimelineArrowControls
-                    arrows={arrows}
-                    days={days}
-                    lineIndexes={lineIndexes}
-                    firstLine={firstLine}
-                    lastLine={lastLine}
-                    view={view}
-                    renderControl={renderArrowControl}
-                  />
+                <TimelineArrowControls
+                  arrows={arrowsWithControl}
+                  days={days}
+                  lineIndexes={lineIndexes}
+                  firstLine={firstLine}
+                  lastLine={lastLine}
+                  view={view}
+                  viewTop={(firstLineInView + 1) * BLOCK_HEIGHT}
+                  viewBottom={(firstLineInView - 1) * BLOCK_HEIGHT + (scroll?.clientHeight ?? 0) - HEADER_HEIGHT}
+                  renderControl={(arrow, openSide) =>
+                    arrow.id === controlledArrowId ? (
+                      <TimelineArrowControl
+                        arrow={arrow}
+                        schedule={schedule}
+                        isNextFixed={!followingTaskIds.has(arrow.nextId)}
+                        previousName={getIssueById(arrow.previousId)?.name ?? ""}
+                        conflict={conflict}
+                        operation={operation}
+                        weekStartsOn={startOfWeek}
+                        isEditable={isEditable}
+                        isOpen={arrow.id === openArrowId}
+                        openSide={openSide}
+                        onOpen={() => setOpenArrowId(arrow.id)}
+                        onClose={() => {
+                          setOpenArrowId(undefined);
+                          setHoveredArrowId(undefined);
+                        }}
+                        onPointerEnter={() => handleArrowHover(arrow)}
+                        onPointerLeave={() => handleArrowHover(undefined)}
+                      />
+                    ) : (
+                      <TimelineArrowChip
+                        arrow={arrow}
+                        schedule={schedule}
+                        isNextFixed={!followingTaskIds.has(arrow.nextId)}
+                        className="pointer-events-none"
+                      />
+                    )
+                  }
+                />
+                {link && drawnFrom && (
+                  <TimelineDrawnArrow from={drawnFrom} to={link.pointer} isRefused={!!link.refusal} />
+                )}
+                {link?.refusal && (
+                  <div
+                    className="absolute rounded-sm border border-danger-strong bg-surface-1 px-1.5 py-0.5 text-caption-md-regular whitespace-nowrap text-danger-primary shadow-raised-100"
+                    style={{ left: link.pointer[0] + 14, top: link.pointer[1] + 10 }}
+                  >
+                    {t(`timeline.arrow.refused.${link.refusal}`)}
+                  </div>
                 )}
                 <div className="absolute inset-y-0 w-px bg-accent-primary" style={{ left: getDayX(view, now) }} />
               </div>

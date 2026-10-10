@@ -9,8 +9,6 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
-import { useTranslation } from "@plane/i18n";
-import { setToast } from "@plane/blocks/toast";
 import type { EIssuesStoreType } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
 import { renderFormattedPayloadDate } from "@plane/utils";
@@ -40,9 +38,8 @@ export type GanttStoreType =
 
 export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRoot) {
   const { viewId, isCompletedCycle = false, isEpic = false } = props;
-  const { t } = useTranslation();
   // router
-  const { workspaceSlug, projectId } = useParams();
+  const { projectId } = useParams();
 
   const storeType = useIssueStoreType() as GanttStoreType;
   const { issues, issuesFilter } = useIssues(storeType);
@@ -69,24 +66,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
   }, [fetchNextIssues]);
 
   const isAllowed = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
-  const updateBlockDates = useCallback(
-    (
-      updates: {
-        id: string;
-        start_date?: string;
-        target_date?: string;
-      }[]
-    ) =>
-      issues.updateIssueDates(workspaceSlug.toString(), updates, projectId.toString()).catch(() => {
-        setToast({
-          type: "error",
-          title: t("toast.error"),
-          message: "Error while updating work item dates, Please try again Later",
-        });
-      }),
-    [issues, projectId, workspaceSlug]
-  );
-
   const quickAdd =
     enableIssueCreation && isAllowed && !isCompletedCycle ? (
       <QuickAddIssueRoot
@@ -117,7 +96,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
               ? (issue, sort_order) => updateIssue?.(issue.project_id, issue.id, { sort_order })
               : undefined
           }
-          updateDates={updateBlockDates}
           quickAdd={quickAdd}
           loadMore={nextPageResults && !issues.getIssueLoader() ? loadMoreIssues : undefined}
         />

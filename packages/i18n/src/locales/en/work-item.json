@@ -429,12 +429,52 @@
       "required": "Epic title is required."
     }
   },
-  "timeline_dependency": {
-    "title": "Timeline Relation"
-  },
   "timeline": {
     "leaves": "Leaves",
     "leaves_description": "Work items without sub-work items",
-    "manual_order_only": "A line can be moved when the work items are ordered manually."
+    "manual_order_only": "A line can be moved when the work items are ordered manually.",
+    "handle": {
+      "start": "Draw an arrow from the start",
+      "end": "Draw an arrow from the end"
+    },
+    "arrow": {
+      "starts": "starts",
+      "ends": "ends",
+      "immediately": "immediately",
+      "in_days": "in {days} d",
+      "on_day": "on {day}",
+      "asks": "asks {delay}",
+      "gap": "gap {days} d",
+      "in": "in",
+      "days": "d",
+      "on": "on",
+      "delay": "Delay in days",
+      "remove": "Remove the arrow",
+      "after": {
+        "end-start": "after the end of {task}",
+        "start-start": "after the start of {task}",
+        "end-end": "after the end of {task}"
+      },
+      "refused": {
+        "no-such-kind": "No arrow runs from a start to an end",
+        "same-task": "An arrow goes from one task to another",
+        "already-connected": "These tasks are connected already",
+        "loop": "This arrow would close a loop"
+      }
+    },
+    "conflict": {
+      "fixed": "{task} is fixed on {day}.",
+      "asks": {
+        "end-start": "This arrow asks it to start no earlier than {day}: {days, plural, =0 {immediately} one {# day} other {# days}} after {previous} ends on {anchor}.",
+        "start-start": "This arrow asks it to start no earlier than {day}: {days, plural, =0 {when} one {# day after} other {# days after}} {previous} starts on {anchor}.",
+        "end-end": "This arrow asks it to start no earlier than {day}, to end {days, plural, =0 {when} one {# day after} other {# days after}} {previous} ends on {anchor}."
+      },
+      "ways_out": {
+        "follow-arrows": "Let it follow its arrows",
+        "move-fixed-day": "Fix it on {day}",
+        "shorten-delay": "{days, plural, =0 {Make this arrow immediate} other {Shorten the delay to # d}}",
+        "remove-arrow": "Remove this arrow"
+      }
+    }
   }
 }

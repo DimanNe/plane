@@ -5,11 +5,13 @@
  */
 
 import type { CSSProperties, ReactNode } from "react";
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { ControlLink } from "@plane/blocks/layout";
 import { getPillButtonClassName } from "@plane/blocks/pill-button";
+import type { TTaskEdge } from "@plane/blocks/timeline-schedule";
+import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
 import { cn, getTextFromHTML, renderFormattedDate } from "@plane/utils";
 // hooks
@@ -17,8 +19,6 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useLabel } from "@/hooks/store/use-label";
 // local imports
 import { getDateOfDay, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
-
-export type TBarEdge = "start" | "end";
 
 type Props = {
   taskId: string;
@@ -32,14 +32,23 @@ type Props = {
   // the colour of the bar, and of the tail that shows the slack
   color: string;
   style: CSSProperties;
+  // its start is a day; else it follows its arrows
+  isFixed: boolean;
   isCritical: boolean;
+  // it is among the tasks that produce the conflict the pointer is over
+  isConflictCause: boolean;
   isSelected: boolean;
   isEditable: boolean;
   isDragged: boolean;
   isDisabled: boolean;
-  onPress: (press: React.PointerEvent, taskId: string, edge?: TBarEdge) => void;
+  // an arrow is being drawn, so every bar shows its handles
+  areHandlesShown: boolean;
+  // the handle the arrow that is being drawn is over, and whether it takes the arrow
+  linkedEdge: TTaskEdge | undefined;
+  isLinkRefused: boolean;
+  onPress: (press: React.PointerEvent, taskId: string, edge?: TTaskEdge) => void;
+  onHandlePress: (press: React.PointerEvent, taskId: string, edge: TTaskEdge) => void;
   onClick: (click: React.MouseEvent, taskId: string) => void;
-  renderHandle?: (taskId: string, edge: TBarEdge) => ReactNode;
   // the text of the bar
   children: ReactNode;
 };
@@ -47,6 +56,36 @@ type Props = {
 const TEXT_PADDING = 10;
 const DATE_CLASS_NAME =
   "absolute top-1/2 -translate-y-1/2 rounded-sm bg-accent-subtle px-2 py-1 text-11 whitespace-nowrap text-tertiary";
+
+/**
+ * The handles at the start and the end of a bar: an arrow is drawn from one to one of another bar. They show
+ * while the pointer is over the bar and while an arrow is drawn. A bar that moves does not draw them again.
+ */
+const BarHandles = memo(function BarHandles(
+  props: Pick<Props, "taskId" | "areHandlesShown" | "linkedEdge" | "isLinkRefused" | "onHandlePress">
+) {
+  const { taskId, areHandlesShown, linkedEdge, isLinkRefused, onHandlePress } = props;
+  // translation
+  const { t } = useTranslation();
+
+  return (["start", "end"] as const).map((edge) => (
+    <button
+      key={edge}
+      type="button"
+      aria-label={t(`timeline.handle.${edge}`)}
+      className={cn(
+        "absolute top-1/2 size-2.5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-accent-strong bg-surface-1 opacity-0 group-hover/bar:opacity-100",
+        edge === "start" ? "-left-3.5" : "-right-3.5",
+        {
+          "opacity-100": areHandlesShown,
+          "scale-150 bg-accent-primary": linkedEdge === edge && !isLinkRefused,
+          "scale-150 border-danger-strong bg-danger-primary": linkedEdge === edge && isLinkRefused,
+        }
+      )}
+      onPointerDown={(e) => onHandlePress(e, taskId, edge)}
+    />
+  ));
+});
 
 /**
  * The bar of a task. It is drawn again at every change of the view, so it holds no more than its place: its text
@@ -61,14 +100,19 @@ export function TimelineBar(props: Props) {
     slack,
     color,
     style,
+    isFixed,
     isCritical,
+    isConflictCause,
     isSelected,
     isEditable,
     isDragged,
     isDisabled,
+    areHandlesShown,
+    linkedEdge,
+    isLinkRefused,
     onPress,
+    onHandlePress,
     onClick,
-    renderHandle,
     children,
   } = props;
   // context
@@ -87,7 +131,8 @@ export function TimelineBar(props: Props) {
     >
       {slack > 0 && (
         <div
-          className="absolute top-1/2 left-full h-1.5 -translate-y-1/2 rounded-r-full opacity-40"
+          // a press on it goes to what is under it: the end of an arrow is taken there
+          className="pointer-events-none absolute top-1/2 left-full h-1.5 -translate-y-1/2 rounded-r-full opacity-40"
           style={{ width: slackWidth, backgroundColor: color }}
         />
       )}
@@ -95,6 +140,7 @@ export function TimelineBar(props: Props) {
         href={href}
         className={cn("relative block h-full w-full cursor-pointer overflow-hidden rounded-sm text-primary", {
           "ring-2 ring-accent-strong": isCritical,
+          "ring-2 ring-danger-strong": isConflictCause,
           "outline-2 outline-offset-1 outline-current": isSelected,
         })}
         style={style}
@@ -103,6 +149,8 @@ export function TimelineBar(props: Props) {
         onClick={(e) => onClick(e, taskId)}
       >
         <div className="absolute inset-0 bg-surface-1/50" />
+        {/* a fixed task has a firm start; the start of a task that follows its arrows is where an arrow puts it */}
+        {isFixed && <div className="absolute inset-y-0 left-0 w-[3px] bg-current opacity-60" />}
         <div
           className="relative flex h-full items-center whitespace-pre"
           style={{
@@ -126,11 +174,14 @@ export function TimelineBar(props: Props) {
           />
         </>
       )}
-      {renderHandle && (
-        <>
-          <div className="absolute top-1/2 right-full -translate-y-1/2">{renderHandle(taskId, "start")}</div>
-          <div className="absolute top-1/2 left-full -translate-y-1/2">{renderHandle(taskId, "end")}</div>
-        </>
+      {isEditable && (
+        <BarHandles
+          taskId={taskId}
+          areHandlesShown={areHandlesShown}
+          linkedEdge={linkedEdge}
+          isLinkRefused={isLinkRefused}
+          onHandlePress={onHandlePress}
+        />
       )}
       {isDragged && (
         <>

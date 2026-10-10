@@ -448,7 +448,6 @@
       "deleted": "Milestone deleted successfully.",
       "delete_failed": "The milestone could not be deleted. Please try again.",
       "link_failed": "The work items could not be linked to the milestone. Please try again.",
-      "dates_update_failed": "The dates of the work item could not be updated. Please try again.",
       "drop_disabled": {
         "title": "Work items cannot be moved between milestones",
         "message": "Change the milestone of the work item in its properties."

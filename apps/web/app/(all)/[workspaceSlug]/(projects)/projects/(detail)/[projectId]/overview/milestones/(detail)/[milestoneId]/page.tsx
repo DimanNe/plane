@@ -69,12 +69,7 @@ function MilestoneDetailPage({ params }: Route.ComponentProps) {
       <PageHead title={pageTitle} />
       <div className="h-full w-full overflow-hidden">
         {/* the timeline opens at the target date of the milestone it is mounted with */}
-        <MilestoneWorkItemsTimeline
-          key={milestoneId}
-          workspaceSlug={workspaceSlug}
-          projectId={projectId}
-          milestoneId={milestoneId}
-        />
+        <MilestoneWorkItemsTimeline key={milestoneId} milestoneId={milestoneId} />
       </div>
       <IssuePeekOverview />
     </>

@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { memo } from "react";
 // plane imports
 import { EStartOfTheWeek } from "@plane/types";
 // local imports
@@ -26,8 +27,9 @@ type Props = {
 /**
  * What lies behind the lines of the timeline: every other interval of the unit it is divided by in light grey,
  * the weekends shaded while days are wide enough to tell apart, and a line where an interval of the larger unit starts.
+ * It changes with the view only, not with the plan that a drag previews.
  */
-export function TimelineBackdrop(props: Props) {
+export const TimelineBackdrop = memo(function TimelineBackdrop(props: Props) {
   const { view, startOfWeek } = props;
   // derived values
   const unit = getPrimaryUnit(view.pxPerDay);
@@ -62,4 +64,4 @@ export function TimelineBackdrop(props: Props) {
       ))}
     </>
   );
-}
+});
