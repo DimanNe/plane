@@ -9,15 +9,7 @@ import { memo } from "react";
 import { EStartOfTheWeek } from "@plane/types";
 // local imports
 import type { TTimelineView } from "./scale";
-import {
-  BASE_DAY,
-  getDayX,
-  getIntervals,
-  getLastDay,
-  getPrimaryUnit,
-  LARGER_UNIT,
-  WEEKEND_MIN_PX_PER_DAY,
-} from "./scale";
+import { BASE_DAY, getDayX, getIntervals, getLastDay, getPrimaryUnit, LARGER_UNIT } from "./scale";
 
 type Props = {
   view: TTimelineView;
@@ -25,8 +17,12 @@ type Props = {
 };
 
 /**
- * What lies behind the lines of the timeline: every other interval of the unit it is divided by in light grey,
- * the weekends shaded while days are wide enough to tell apart, and a line where an interval of the larger unit starts.
+ * What lies behind the lines of the timeline: grey bands, and lines where intervals begin. There are two tones and
+ * no more, so that every change of the ground means one thing at a scale:
+ * - days: the weekends are grey, and a thin line parts the days;
+ * - weeks: every other month is grey, as the upper line of the header reads, and a thin line parts the weeks;
+ * - months, quarters, years: every other one is grey.
+ * At every scale a line stands where an interval of the header's upper line begins.
  * It changes with the view only, not with the plan that a drag previews.
  */
 export const TimelineBackdrop = memo(function TimelineBackdrop(props: Props) {
@@ -34,7 +30,20 @@ export const TimelineBackdrop = memo(function TimelineBackdrop(props: Props) {
   // derived values
   const unit = getPrimaryUnit(view.pxPerDay);
   const lastDay = getLastDay(view);
-  const getPlace = (start: number, end: number) => ({ left: start - BASE_DAY, width: end - start });
+  const bands =
+    unit === "day"
+      ? // a week that starts on Saturday starts with the weekend
+        getIntervals("week", view.originDay, lastDay, EStartOfTheWeek.SATURDAY).map(({ start }) => ({
+          start,
+          end: start + 2,
+        }))
+      : getIntervals(unit === "week" ? "month" : unit, view.originDay, lastDay, startOfWeek).filter(
+          ({ index }) => index % 2 !== 0
+        );
+  const thinLineDays =
+    unit === "day" || unit === "week"
+      ? getIntervals(unit, view.originDay, lastDay, startOfWeek).map(({ start }) => start)
+      : [];
 
   return (
     <>
@@ -43,18 +52,17 @@ export const TimelineBackdrop = memo(function TimelineBackdrop(props: Props) {
         className="absolute inset-y-0 left-0 origin-left"
         style={{ transform: `translateX(${getDayX(view, BASE_DAY)}px) scaleX(${view.pxPerDay})` }}
       >
-        {getIntervals(unit, view.originDay, lastDay, startOfWeek).map(
-          ({ start, end, index }) =>
-            index % 2 !== 0 && (
-              <div key={start} className="absolute inset-y-0 bg-layer-1-hover" style={getPlace(start, end)} />
-            )
-        )}
-        {view.pxPerDay >= WEEKEND_MIN_PX_PER_DAY &&
-          // a week that starts on Saturday starts with the weekend
-          getIntervals("week", view.originDay, lastDay, EStartOfTheWeek.SATURDAY).map(({ start }) => (
-            <div key={-start} className="absolute inset-y-0 bg-layer-1-active" style={getPlace(start, start + 2)} />
-          ))}
+        {bands.map(({ start, end }) => (
+          <div
+            key={start}
+            className="absolute inset-y-0 bg-layer-1-hover"
+            style={{ left: start - BASE_DAY, width: end - start }}
+          />
+        ))}
       </div>
+      {thinLineDays.map((day) => (
+        <div key={-day} className="absolute inset-y-0 border-l border-subtle" style={{ left: getDayX(view, day) }} />
+      ))}
       {getIntervals(LARGER_UNIT[unit], view.originDay, lastDay, startOfWeek).map(({ start }) => (
         <div
           key={start}

@@ -41,8 +41,6 @@ export const MIN_PX_PER_DAY = 0.1;
 export const MAX_PX_PER_DAY = 160;
 /** The least width of an interval of the unit the timeline is divided by. */
 const MIN_INTERVAL_WIDTH = 32;
-/** Weekends are told apart from this scale on. */
-export const WEEKEND_MIN_PX_PER_DAY = 5;
 /** A task shorter than this at the present scale is still drawn this wide. */
 export const MIN_BAR_WIDTH = 6;
 
