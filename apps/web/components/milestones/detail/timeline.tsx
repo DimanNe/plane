@@ -4,25 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { setToast } from "@plane/blocks/toast";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import type { IBlockUpdateData, IBlockUpdateDependencyData, TIssue } from "@plane/types";
-import { EIssuesStoreType, GANTT_TIMELINE_TYPE } from "@plane/types";
-import { getDate } from "@plane/utils";
+import type { IBlockUpdateDependencyData } from "@plane/types";
+import { EIssuesStoreType } from "@plane/types";
 // components
-import { TimeLineTypeContext } from "@/components/gantt-chart/contexts";
-import { GanttChartRoot } from "@/components/gantt-chart/root";
-import { IssueGanttSidebar } from "@/components/gantt-chart/sidebar/issues/sidebar";
-import { IssueGanttBlock } from "@/components/issues/issue-layouts/gantt/blocks";
+import { WorkItemsTimeline } from "@/components/timeline/root";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useMilestone } from "@/hooks/store/use-milestone";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useIssuesActions } from "@/hooks/use-issues-actions";
 
 type Props = {
   workspaceSlug: string;
@@ -32,10 +27,11 @@ type Props = {
 
 export const MilestoneWorkItemsTimeline = observer(function MilestoneWorkItemsTimeline(props: Props) {
   const { workspaceSlug, projectId, milestoneId } = props;
+  // states
+  const [showOnlyLeaves, setShowOnlyLeaves] = useState(false);
   // store hooks
   const { getMilestoneById, getMilestoneWorkItemIds } = useMilestone();
   const { issues } = useIssues(EIssuesStoreType.PROJECT);
-  const { updateIssue } = useIssuesActions(EIssuesStoreType.PROJECT);
   const { allowPermissions } = useUserPermissions();
   // translation
   const { t } = useTranslation();
@@ -46,9 +42,6 @@ export const MilestoneWorkItemsTimeline = observer(function MilestoneWorkItemsTi
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-
-  const updateBlockStructure = (issue: TIssue, { start_date, target_date }: IBlockUpdateData) =>
-    updateIssue?.(issue.project_id, issue.id, { start_date, target_date });
 
   const updateBlockDates = useCallback(
     (updates: IBlockUpdateDependencyData[]) =>
@@ -63,26 +56,15 @@ export const MilestoneWorkItemsTimeline = observer(function MilestoneWorkItemsTi
   );
 
   return (
-    <TimeLineTypeContext.Provider value={GANTT_TIMELINE_TYPE.ISSUE}>
-      <div className="h-full w-full">
-        <GanttChartRoot
-          border={false}
-          title={t("issue.label", { count: 2 })}
-          loaderTitle={t("issue.label", { count: 2 })}
-          blockIds={workItemIds}
-          initialDate={getDate(milestone?.target_date)}
-          blockUpdateHandler={updateBlockStructure}
-          blockToRender={(data: TIssue) => <IssueGanttBlock issueId={data.id} />}
-          sidebarToRender={(sidebarProps) => <IssueGanttSidebar {...sidebarProps} showAllBlocks />}
-          enableBlockLeftResize={isEditingAllowed}
-          enableBlockRightResize={isEditingAllowed}
-          enableBlockMove={isEditingAllowed}
-          enableAddBlock={isEditingAllowed}
-          updateBlockDates={updateBlockDates}
-          showAllBlocks
-          enableDependency
-        />
-      </div>
-    </TimeLineTypeContext.Provider>
+    <div className="h-full w-full">
+      <WorkItemsTimeline
+        workItemIds={workItemIds}
+        focusDate={milestone?.target_date}
+        isEditable={isEditingAllowed}
+        showOnlyLeaves={showOnlyLeaves}
+        onShowOnlyLeavesChange={setShowOnlyLeaves}
+        updateDates={updateBlockDates}
+      />
+    </div>
   );
 });

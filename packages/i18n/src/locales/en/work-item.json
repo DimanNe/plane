@@ -431,5 +431,10 @@
   },
   "timeline_dependency": {
     "title": "Timeline Relation"
+  },
+  "timeline": {
+    "leaves": "Leaves",
+    "leaves_description": "Work items without sub-work items",
+    "manual_order_only": "A line can be moved when the work items are ordered manually."
   }
 }

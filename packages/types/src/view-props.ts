@@ -162,6 +162,8 @@ export interface IIssueDisplayFilterOptions {
   order_by?: TIssueOrderByOptions;
   show_empty_groups?: boolean;
   sub_issue?: boolean;
+  // the Timeline layout lists only the work items without sub-work items
+  show_only_leaves?: boolean;
 }
 export interface IIssueDisplayProperties {
   description?: boolean;
