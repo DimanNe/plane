@@ -29,6 +29,8 @@ export interface IUserLite {
   first_name: string;
   id: string;
   is_bot: boolean;
+  // "SERVICE_USER" for a service user: a member that stands for an agent, and is not a bot
+  bot_type?: string | null;
   last_name: string;
   joining_date?: string;
 }

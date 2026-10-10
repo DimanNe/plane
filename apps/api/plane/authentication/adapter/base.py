@@ -336,7 +336,7 @@ class Adapter:
         # flow (email/password, magic code, or any OAuth provider). A brand-new
         # signup can never be a bot — bots are provisioned internally, never through
         # this path — so guarding on an existing `user` record is sufficient.
-        if user and user.is_bot:
+        if user and (user.is_bot or user.bot_type):
             raise AuthenticationException(
                 error_code=AUTHENTICATION_ERROR_CODES["BOT_USER_LOGIN_FORBIDDEN"],
                 error_message="BOT_USER_LOGIN_FORBIDDEN",

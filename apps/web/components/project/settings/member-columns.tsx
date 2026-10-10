@@ -19,6 +19,8 @@ import { ROLE, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { EUserProjectRoles, IUser, IWorkspaceMember, TProjectMembership } from "@plane/types";
 import { getFileURL } from "@plane/utils";
+// components
+import { ServiceUserMark } from "@/components/dropdowns/member/service-user-mark";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
@@ -76,6 +78,7 @@ export function NameColumn(props: NameProps) {
             </Link>
           )}
           {first_name} {last_name}
+          <ServiceUserMark user={rowData.member} />
         </div>
         {(isAdmin || id === currentUser?.id) && (
           <Menu>

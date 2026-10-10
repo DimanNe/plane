@@ -21,6 +21,8 @@ import type { IUser, IWorkspaceMember } from "@plane/types";
 import { Select } from "@plane/blocks/select";
 // helpers
 import { getFileURL } from "@plane/utils";
+// components
+import { ServiceUserMark } from "@/components/dropdowns/member/service-user-mark";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
@@ -87,6 +89,7 @@ export function NameColumn(props: NameProps) {
           <span className={isSuspended ? "text-placeholder" : ""}>
             {first_name} {last_name}
           </span>
+          <ServiceUserMark user={rowData.member} />
         </div>
 
         {!isSuspended && (isAdmin || id === currentUser?.id) && (

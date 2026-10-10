@@ -51,6 +51,9 @@ def get_default_product_tour():
 
 class BotTypeEnum(models.TextChoices):
     WORKSPACE_SEED = "WORKSPACE_SEED", "Workspace Seed"
+    # An agent that work items are assigned to. Members are listed without bots, so its `is_bot` is off;
+    # nobody signs in as a user that has a type.
+    SERVICE_USER = "SERVICE_USER", "Service User"
 
 
 class User(AbstractBaseUser, PermissionsMixin):

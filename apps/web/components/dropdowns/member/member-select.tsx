@@ -17,6 +17,9 @@ import { getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
+// local imports
+import { useAddServiceUserEntry } from "./add-service-user";
+import { isServiceUser, ServiceUserMark } from "./service-user-mark";
 
 type MemberSelectWebCommonProps = {
   /** value-agnostic e2e selector — forwarded to the block's trigger as data-testid */
@@ -116,6 +119,7 @@ export const MemberSelect = observer(function MemberSelect(props: MemberSelectWe
         name,
         avatar_url: getFileURL(member?.avatar_url ?? ""),
         suspended: !!slug && isUserSuspended(id, slug),
+        mark: isServiceUser(member) ? <ServiceUserMark user={member} /> : undefined,
       };
     },
     [getUserDetails, currentUser?.id, youLabel, slug, isUserSuspended]
@@ -156,6 +160,11 @@ export const MemberSelect = observer(function MemberSelect(props: MemberSelectWe
 
   const filterOption = useCallback((option: MemberOption) => !excludeSet?.has(option.id), [excludeSet]);
 
+  const addServiceUserEntry = useAddServiceUserEntry({
+    projectId: memberIds ? undefined : projectId,
+    onAdded: (userId) => (props.multiple ? props.onChange([...props.value, userId]) : props.onChange(userId)),
+  });
+
   if (props.multiple) {
     return (
       <MemberSelectBlock
@@ -174,6 +183,7 @@ export const MemberSelect = observer(function MemberSelect(props: MemberSelectWe
         tooltip={resolvedTooltip}
         filterOption={excludeSet ? filterOption : undefined}
         tabIndex={tabIndex}
+        emptyMessage={addServiceUserEntry}
       />
     );
   }
@@ -195,6 +205,7 @@ export const MemberSelect = observer(function MemberSelect(props: MemberSelectWe
       tooltip={resolvedTooltip}
       filterOption={excludeSet ? filterOption : undefined}
       tabIndex={tabIndex}
+      emptyMessage={addServiceUserEntry}
     />
   );
 });

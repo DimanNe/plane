@@ -5,6 +5,7 @@
  */
 
 import { useMemo } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { AvatarGroup } from "@makeplane/propel/components/avatar-group";
 import type { AvatarGroupSize } from "@makeplane/propel/components/avatar-group";
@@ -32,6 +33,8 @@ export type MemberOption = {
    * keeps an enabled row so the selection can still be removed, and the trigger shows them as usual.
    */
   suspended?: boolean;
+  /** Shown at the end of the member's option, to tell a member of another kind (a service user) from a person. */
+  mark?: ReactElement;
 };
 
 export type MemberSelectVariant = SelectVariant | `avatar-group-${SelectTriggerSize}`;
@@ -116,6 +119,8 @@ type MemberSelectCommonProps = {
   filterOption?: (member: MemberOption) => boolean;
   /** Badge text on a {@link MemberOption.suspended} row. Defaults to "Suspended". */
   suspendedLabel?: string;
+  /** Replaces "No results found" when the search matches nobody. */
+  emptyMessage?: (query: string) => ReactNode;
 };
 
 export type MemberSelectProps = MemberSelectCommonProps &
@@ -167,6 +172,7 @@ export function MemberSelect(props: MemberSelectProps) {
     testId,
     tabIndex,
     suspendedLabel = "Suspended",
+    emptyMessage,
   } = props;
   const clearable = !props.multiple && !!props.clearable;
 
@@ -222,6 +228,7 @@ export function MemberSelect(props: MemberSelectProps) {
     disabled,
     placeholder,
     searchPlaceholder,
+    emptyMessage,
     onClose,
     // `Combobox.Chips` can't survive the lazy-mount resting state.
     lazyMount: isSearchInput ? false : undefined,
@@ -246,7 +253,7 @@ export function MemberSelect(props: MemberSelectProps) {
     // Suspended members cannot be newly picked; an already-selected one stays toggleable so it can be removed.
     getOptionDisabled: (member: MemberOption) => !!member.suspended && !selectedIds.has(member.id),
     getOptionTrailing: (member: MemberOption) =>
-      member.suspended ? <Badge variant="neutral" size="xs" label={suspendedLabel} /> : undefined,
+      member.suspended ? <Badge variant="neutral" size="xs" label={suspendedLabel} /> : member.mark,
     renderChip: (member: MemberOption) => (
       <>
         <Avatar alt={memberAvatarAlt(member)} src={member.avatar_url ?? ""} size="2xs" />

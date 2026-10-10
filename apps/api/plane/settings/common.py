@@ -294,7 +294,7 @@ TIME_ZONE = "UTC"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Email settings
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "plane.utils.service_users.EmailBackend"
 
 # Storage Settings
 # Use Minio settings
