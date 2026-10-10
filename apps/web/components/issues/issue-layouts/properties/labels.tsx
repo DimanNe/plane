@@ -11,6 +11,7 @@ import type { TPopoverMenuPlacement } from "@plane/blocks/common";
 import { cn } from "@plane/utils";
 // components
 import { LabelSelect } from "@/components/dropdowns/label/label-select";
+import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
 
 export interface IIssuePropertyLabels {
   projectId: string | null;
@@ -74,6 +75,7 @@ export const IssuePropertyLabels = observer(function IssuePropertyLabels(props: 
     <div
       role="presentation"
       className={cn(fullHeight ? "h-full" : "h-5", { "w-full": fullWidth }, className)}
+      {...filterValueProps("label_id", value)}
       onClick={swallowEvent}
     >
       <LabelSelect

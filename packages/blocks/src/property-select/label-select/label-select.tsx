@@ -177,8 +177,9 @@ export function LabelSelect(props: LabelSelectProps) {
             );
           }
           if (labelPillClassName) {
+            // Each pill says which label it shows, for a menu about the pill that was right clicked.
             return labels.map((label) => (
-              <span key={label.id} className={labelPillClassName}>
+              <span key={label.id} className={labelPillClassName} data-filter-value={label.id}>
                 <LabelDot color={label.color} />
                 <span className="truncate">{label.name}</span>
               </span>

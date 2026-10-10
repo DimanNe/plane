@@ -32,6 +32,7 @@ import { MemberSelect } from "@/components/dropdowns/member/member-select";
 import { ModuleSelect } from "@/components/dropdowns/module/module-select";
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
 import { StateSelect } from "@/components/dropdowns/state/state-select";
+import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
 import { MilestoneSelect } from "@/components/milestones/select";
 import { WorkItemPropertyBadges } from "@/components/work-item-types/property-badges";
 // hooks
@@ -215,7 +216,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         shouldRenderProperty={() => activeLayout !== "List"}
       >
         {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
-        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+        <div
+          className="h-5"
+          {...filterValueProps("state_id", issue.state_id)}
+          onFocus={handleEventPropagation}
+          onClick={handleEventPropagation}
+        >
           <StateSelect
             value={issue.state_id}
             onChange={handleState}
@@ -234,7 +240,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         shouldRenderProperty={() => activeLayout !== "List"}
       >
         {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
-        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+        <div
+          className="h-5"
+          {...filterValueProps("priority", issue.priority)}
+          onFocus={handleEventPropagation}
+          onClick={handleEventPropagation}
+        >
           <PrioritySelect
             value={issue?.priority}
             onChange={handlePriority}
@@ -328,7 +339,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
       {/* assignee */}
       <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="assignee">
         {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
-        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+        <div
+          className="h-5"
+          {...filterValueProps("assignee_id", issue.assignee_ids)}
+          onFocus={handleEventPropagation}
+          onClick={handleEventPropagation}
+        >
           <MemberSelect
             projectId={issue?.project_id ?? undefined}
             value={issue?.assignee_ids ?? []}
@@ -349,7 +365,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             {projectDetails?.milestone_view && (
               <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="milestone">
                 {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
-                <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+                <div
+                  className="h-5"
+                  {...filterValueProps("milestone_id", issue.milestone_id)}
+                  onFocus={handleEventPropagation}
+                  onClick={handleEventPropagation}
+                >
                   <MilestoneSelect
                     projectId={issue?.project_id ?? undefined}
                     value={issue?.milestone_id}
@@ -366,7 +387,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             {projectDetails?.module_view && (
               <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="modules">
                 {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
-                <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+                <div
+                  className="h-5"
+                  {...filterValueProps("module_id", issue.module_ids)}
+                  onFocus={handleEventPropagation}
+                  onClick={handleEventPropagation}
+                >
                   <ModuleSelect
                     multiple
                     projectId={issue?.project_id ?? undefined}
@@ -384,7 +410,12 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             {projectDetails?.cycle_view && (
               <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="cycle">
                 {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
-                <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+                <div
+                  className="h-5"
+                  {...filterValueProps("cycle_id", issue.cycle_id)}
+                  onFocus={handleEventPropagation}
+                  onClick={handleEventPropagation}
+                >
                   <CycleSelect
                     projectId={issue?.project_id ?? undefined}
                     value={issue?.cycle_id}

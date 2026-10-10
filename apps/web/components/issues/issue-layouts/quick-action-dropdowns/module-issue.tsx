@@ -37,6 +37,7 @@ import { ArchiveIssueModal } from "../../archive-issue-modal";
 import { DeleteIssueModal } from "../../delete-issue-modal";
 import { CreateUpdateIssueModal } from "../../issue-modal/modal";
 import type { IQuickActionProps } from "../list/list-view-types";
+import { useFilterMenuItems } from "./filter-menu-helper";
 import type { MenuItemFactoryProps } from "./helper";
 import {
   useModuleIssueMenuItems,
@@ -116,6 +117,7 @@ export const ModuleIssueQuickActions = observer(function ModuleIssueQuickActions
   };
 
   const MENU_ITEMS = useModuleIssueMenuItems(menuItemProps);
+  const getFilterMenuItems = useFilterMenuItems();
 
   const CONTEXT_MENU_ITEMS = MENU_ITEMS.map(function CONTEXT_MENU_ITEMS(item) {
     return {
@@ -154,7 +156,7 @@ export const ModuleIssueQuickActions = observer(function ModuleIssueQuickActions
         storeType={EIssuesStoreType.MODULE}
       />
 
-      <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
+      <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} getTargetItems={getFilterMenuItems} />
       <Menu>
         <MenuTrigger
           {...quickActionTriggerGuard}

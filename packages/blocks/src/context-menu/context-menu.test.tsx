@@ -34,10 +34,12 @@ function Glyph() {
 /** The consumer owns the right-click target and hands its ref to the menu, like the board cards do. */
 function Harness({
   items,
+  getTargetItems,
   onOuterContextMenu,
   onOuterClick,
 }: {
   items: TContextMenuItem[];
+  getTargetItems?: (target: Element) => TContextMenuItem[];
   onOuterContextMenu?: () => void;
   onOuterClick?: (e: React.MouseEvent) => void;
 }) {
@@ -49,7 +51,7 @@ function Harness({
         <span data-testid="target-child">Card title</span>
       </div>
       <div data-testid="outside">Somewhere else</div>
-      <ContextMenu parentRef={parentRef} items={items} />
+      <ContextMenu parentRef={parentRef} items={items} getTargetItems={getTargetItems} />
     </div>
   );
 }
@@ -271,6 +273,29 @@ describe("ContextMenu rows", () => {
     expect(row("Copy link").contains(glyphs[0])).toBe(true);
     const custom = screen.getByTestId("custom-content");
     expect(row(/Custom/).firstElementChild).toBe(custom);
+  });
+});
+
+describe("ContextMenu items for the right-clicked element", () => {
+  const items = [{ key: "copy", title: "Copy link", action: vi.fn() }];
+  const getTargetItems = (target: Element): TContextMenuItem[] =>
+    target.matches("span") ? [{ key: "about", title: `About ${target.textContent}`, action: vi.fn() }] : [];
+
+  it("draws them first, above a separator", async () => {
+    render(<Harness items={items} getTargetItems={getTargetItems} />);
+    rightClick(screen.getByTestId("target-child"));
+    const menu = await screen.findByRole("menu");
+    expect(Array.from(menu.children).map((entry) => entry.textContent || entry.getAttribute("role"))).toEqual([
+      "About Card title",
+      "separator",
+      "Copy link",
+    ]);
+  });
+
+  it("draws no separator for an element without items", async () => {
+    render(<Harness items={items} getTargetItems={getTargetItems} />);
+    const menu = await openMenu();
+    expect(Array.from(menu.children).map((entry) => entry.getAttribute("role"))).toEqual(["menuitem"]);
   });
 });
 

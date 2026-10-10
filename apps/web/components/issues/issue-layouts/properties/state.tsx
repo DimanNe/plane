@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import type { TIssue } from "@plane/types";
 // components
 import { StateSelect } from "@/components/dropdowns/state/state-select";
+import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
 
 type TIssuePropertyState = {
   issue: TIssue;
@@ -31,7 +32,12 @@ export const IssuePropertyState = observer(function IssuePropertyState(props: TI
 
   return (
     // oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions
-    <div className="mr-0.5 flex flex-shrink-0" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+    <div
+      className="mr-0.5 flex flex-shrink-0"
+      {...filterValueProps("state_id", issue.state_id)}
+      onFocus={handleEventPropagation}
+      onClick={handleEventPropagation}
+    >
       <StateSelect
         value={issue.state_id}
         onChange={(stateId) => updateIssue?.(issue.project_id, issue.id, { state_id: stateId })}

@@ -620,6 +620,8 @@
       "subscribe": "Subscribe",
       "unsubscribe": "Unsubscribe",
       "clear_sorting": "Clear sorting",
+      "show_only": "Show only {property}: {value}",
+      "add_to_filter": "Add {property}: {value} to the filter",
       "show_weekends": "Show weekends",
       "enable": "Enable",
       "disable": "Disable",

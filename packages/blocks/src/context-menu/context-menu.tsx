@@ -7,7 +7,11 @@
 import type * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 // plane imports
-import { ContextMenu as PropelContextMenu, ContextMenuContent } from "@makeplane/propel/components/context-menu";
+import {
+  ContextMenu as PropelContextMenu,
+  ContextMenuContent,
+  ContextMenuSeparator,
+} from "@makeplane/propel/components/context-menu";
 import { usePlatformOS } from "@plane/hooks";
 // local imports
 import { ContextMenuItem } from "./context-menu-item";
@@ -19,6 +23,8 @@ export type ContextMenuProps = {
   parentRef: React.RefObject<HTMLElement | null>;
   /** The rows to render, top to bottom. */
   items: TContextMenuItem[];
+  /** Items for the element that was right clicked, such as one control of a list row; drawn above a separator. */
+  getTargetItems?: (target: Element) => TContextMenuItem[];
 };
 
 /**
@@ -30,9 +36,10 @@ export type ContextMenuProps = {
  * cursor-pinned virtual anchor stay here, and the surface is driven as a controlled menu.
  */
 export function ContextMenu(props: ContextMenuProps) {
-  const { parentRef, items } = props;
+  const { parentRef, items, getTargetItems } = props;
   // states
   const [isOpen, setIsOpen] = useState(false);
+  const [target, setTarget] = useState<Element | null>(null);
   // ref
   // A virtual anchor pinned to the cursor position of the latest right click — Base UI's positioner
   // reads `getBoundingClientRect` to place the popup.
@@ -45,6 +52,7 @@ export function ContextMenu(props: ContextMenuProps) {
     []
   );
   const renderedItems = getRenderableItems(items);
+  const targetItems = getRenderableItems(target && getTargetItems ? getTargetItems(target) : undefined);
   const { isMobile } = usePlatformOS();
 
   // The consumers own the right-click target (passed as `parentRef`), so capture its `contextmenu`
@@ -60,6 +68,7 @@ export function ContextMenu(props: ContextMenuProps) {
       e.stopPropagation();
 
       cursorRef.current = { x: e.clientX, y: e.clientY };
+      setTarget(e.target instanceof Element ? e.target : null);
       setIsOpen(true);
     };
 
@@ -73,6 +82,10 @@ export function ContextMenu(props: ContextMenuProps) {
   return (
     <PropelContextMenu open={isOpen} onOpenChange={setIsOpen}>
       <ContextMenuContent anchor={anchor} side="bottom" align="start" sideOffset={0} onClick={stopClickPropagation}>
+        {targetItems.map((item) => (
+          <ContextMenuItem key={item.key} item={item} />
+        ))}
+        {targetItems.length > 0 && <ContextMenuSeparator />}
         {renderedItems.map((item) => (
           <ContextMenuItem key={item.key} item={item} />
         ))}

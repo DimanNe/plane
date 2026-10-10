@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import type { TIssue } from "@plane/types";
 // components
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
+import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
 
 type TIssuePropertyPriority = {
   issue: TIssue;
@@ -31,7 +32,12 @@ export const IssuePropertyPriority = observer(function IssuePropertyPriority(pro
 
   return (
     // oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions
-    <div className="mr-0.5 flex flex-shrink-0" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+    <div
+      className="mr-0.5 flex flex-shrink-0"
+      {...filterValueProps("priority", issue.priority)}
+      onFocus={handleEventPropagation}
+      onClick={handleEventPropagation}
+    >
       <PrioritySelect
         value={issue.priority}
         onChange={(priority) => updateIssue?.(issue.project_id, issue.id, { priority })}
