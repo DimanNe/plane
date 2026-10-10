@@ -58,6 +58,7 @@ import { useDelayedHover } from "./use-delayed-hover";
 import { useDeleteKey } from "./use-delete-key";
 import { useEntryAnchor } from "./use-entry-anchor";
 import { useTimelineView } from "./use-timeline-view";
+import { useWheelTurn } from "./use-wheel-turn";
 
 type Props = {
   // the tasks of the list, a line each, in the order of the list
@@ -266,6 +267,9 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     const { getPlace, getPlacedPlan, release } = followEntry(taskId);
     dragTask(press, taskId, getPlace, getPlacedPlan, release);
   });
+
+  // everything of the timeline that the wheel turns is turned by this one
+  const wheelTurn = useWheelTurn(operation);
 
   const { link, handleHandlePress, handleArrowEndPress } = useArrowLink({
     taskIds,
@@ -527,7 +531,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   datedTaskIds={datedTaskIds}
                   viewTop={viewTop}
                   viewBottom={viewBottom}
-                  operation={operation}
+                  wheelTurn={wheelTurn}
                   // during a gesture the wheel over a text changes nothing
                   isEditable={isEditable && !drag && !link}
                   scroll={scroll}
@@ -577,6 +581,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   lastLine={lastLine}
                   datedTaskIds={datedTaskIds}
                   shownTaskId={shownTaskId}
+                  wheelTurn={wheelTurn}
+                  isEditable={isEditable && !drag && !link}
                   onHover={handleBarHover}
                 />
                 {shownTaskId && shownTask && shownLineIndex !== undefined && (
@@ -587,6 +593,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                     end={shownTask.end}
                     lineIndex={shownLineIndex}
                     isBelow={shownLineIndex <= firstLineInView}
+                    wheelTurn={wheelTurn}
+                    isEditable={isEditable && !drag && !link}
                     onHover={handleBarHover}
                   />
                 )}

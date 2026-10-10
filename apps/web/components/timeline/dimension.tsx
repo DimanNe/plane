@@ -6,6 +6,7 @@
 
 import { clamp } from "lodash-es";
 // plane imports
+import { resizeTask } from "@plane/blocks/timeline-schedule";
 import { useTranslation } from "@plane/i18n";
 import { cn } from "@plane/utils";
 // components
@@ -13,8 +14,9 @@ import { BLOCK_HEIGHT } from "@/components/gantt-chart/constants";
 // local imports
 import { BAR_HEIGHT, BAR_TOP } from "./bar";
 import type { TTimelineView } from "./scale";
-import { getDayX, MIN_BAR_WIDTH } from "./scale";
-import { TimelineText, TimelineTextPart } from "./text";
+import { getDateOfDay, getDayX, MIN_BAR_WIDTH } from "./scale";
+import { TimelineTurnedText } from "./turned-text";
+import type { TWheelTurn } from "./use-wheel-turn";
 
 type Props = {
   view: TTimelineView;
@@ -25,6 +27,8 @@ type Props = {
   lineIndex: number;
   // it stands under the bar: above the first line in view the header of the timeline is in the way
   isBelow: boolean;
+  wheelTurn: TWheelTurn;
+  isEditable: boolean;
   // the pointer is on the days of the task, which is as good as on its bar
   onHover: (taskId: string | undefined) => void;
 };
@@ -40,10 +44,11 @@ const NUMBER_PADDING = 16;
 
 /**
  * The dimension line of a bar: as wide as the bar, with the days the task lasts in its middle. The dates beside
- * the bar say where its edges are; this says what a resize is made for, how long the task is.
+ * the bar say where its edges are; this says what a resize is made for, how long the task is. The wheel on the
+ * days makes the task a day longer or shorter, at its end.
  */
 export function TimelineBarDimension(props: Props) {
-  const { view, taskId, start, end, lineIndex, isBelow, onHover } = props;
+  const { view, taskId, start, end, lineIndex, isBelow, wheelTurn, isEditable, onHover } = props;
   // translation
   const { t } = useTranslation();
   // derived values
@@ -75,20 +80,30 @@ export function TimelineBarDimension(props: Props) {
           fill="currentColor"
         />
       </svg>
-      <TimelineText
-        className={cn("absolute -translate-x-1/2", {
-          "-translate-y-1/2": isNumberOnLine,
-          "-translate-y-full": !isNumberOnLine && !isBelow,
-        })}
-        style={{
-          left: numberX,
-          top: isNumberOnLine ? top : top + (isBelow ? 1 : -1) * (HEAD_WIDTH / 2 + NUMBER_DISTANCE / 2),
+      <TimelineTurnedText
+        place={{
+          className: cn("absolute -translate-x-1/2", {
+            "-translate-y-1/2": isNumberOnLine,
+            "-translate-y-full": !isNumberOnLine && !isBelow,
+          }),
+          style: {
+            left: numberX,
+            top: isNumberOnLine ? top : top + (isBelow ? 1 : -1) * (HEAD_WIDTH / 2 + NUMBER_DISTANCE / 2),
+          },
         }}
+        turn={
+          isEditable
+            ? {
+                key: `${taskId} days`,
+                change: (plan, direction) => resizeTask(plan, taskId, "end", getDateOfDay(end + direction)),
+              }
+            : undefined
+        }
+        wheelTurn={wheelTurn}
+        onHover={(isOver) => onHover(isOver ? taskId : undefined)}
       >
-        <TimelineTextPart onPointerEnter={() => onHover(taskId)} onPointerLeave={() => onHover(undefined)}>
-          {number}
-        </TimelineTextPart>
-      </TimelineText>
+        {number}
+      </TimelineTurnedText>
     </>
   );
 }

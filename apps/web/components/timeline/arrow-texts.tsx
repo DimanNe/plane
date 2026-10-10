@@ -8,7 +8,7 @@ import { minBy } from "lodash-es";
 import { memo, useEffect, useRef, useState } from "react";
 // plane imports
 import { changeArrow } from "@plane/blocks/timeline-schedule";
-import type { TPlan, TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
+import type { TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 // components
@@ -17,15 +17,15 @@ import { BLOCK_HEIGHT, HEADER_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-c
 import type { TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
 import { getArrowLayerStyle, STUB } from "./arrows";
 import { BAR_HEIGHT, BAR_TOP, DATE_DISTANCE, DATE_WIDTH } from "./bar";
-import type { TTimelineOperation } from "./operation";
 import type { TTimelineView } from "./scale";
 import { getDayDistance, MIN_BAR_WIDTH } from "./scale";
 import { TimelineText, TimelineTextPart } from "./text";
+import type { TWheelTurn } from "./use-wheel-turn";
 import { useWheelNotches } from "./wheel";
 
 type TRect = { left: number; top: number; right: number; bottom: number };
 
-type TPosition = { clientX: number; clientY: number };
+type TPosition = { clientX: number; clientY: number; target?: EventTarget | null };
 
 type TArrowText = { look: "delay" | "conflict"; days: number };
 
@@ -39,7 +39,7 @@ type Props = Omit<TArrowWaysProps, "arrows"> & {
   // the lines in view, in pixels from the top of the first line
   viewTop: number;
   viewBottom: number;
-  operation: TTimelineOperation;
+  wheelTurn: TWheelTurn;
   isEditable: boolean;
   // the element that scrolls the lines of the timeline
   scroll: HTMLElement | null;
@@ -54,8 +54,6 @@ const CHARACTER_WIDTH = 6;
 // how far along its arrow from the middle a text goes for a free place, and in what steps
 const TEXT_REACH = 240;
 const TEXT_STEP = 8;
-// how long the wheel rests over a text before what it changed is saved
-const WHEEL_REST_TIME = 800;
 // How far around a text that shows a delay the wheel still turns that delay: about a centimetre, by which a hand
 // that aims at a small text misses it.
 const WHEEL_MARGIN = 36;
@@ -143,57 +141,6 @@ const getTextPlace = (
   return freePlace ?? getPointAt(points, length / 2);
 };
 
-/**
- * The wheel near the text of an arrow changes the delay of the arrow, a day a notch. That is one operation: begun
- * at the first notch, shown at every notch, and saved when the wheel has rested for a moment, the pointer has
- * left the area of the text, or a button is pressed; Escape drops it. It never stays open: changes of the plan
- * made elsewhere wait for its end.
- */
-const useDelayByWheel = (operation: TTimelineOperation) => {
-  // the operation that is going on: the arrow, the plan it began with, and the timer of the rest
-  const turnRef = useRef<{ arrowId: string; plan: TPlan; timer: number }>(undefined);
-
-  const end = useLatestCallback((isAborted: boolean) => {
-    const turn = turnRef.current;
-    if (!turn) return;
-    turnRef.current = undefined;
-    window.clearTimeout(turn.timer);
-    document.removeEventListener("keydown", handleKeyDown, true);
-    document.removeEventListener("pointerdown", handlePress, true);
-    if (isAborted) operation.abort();
-    else operation.commit();
-  });
-
-  const handleKeyDown = useLatestCallback((event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    // Escape ends the operation and nothing else
-    event.stopPropagation();
-    event.preventDefault();
-    end(true);
-  });
-
-  // a press begins another gesture, whose operation would take the place of this one
-  const handlePress = useLatestCallback(() => end(false));
-
-  const turn = useLatestCallback((arrow: TScheduleArrow, direction: 1 | -1) => {
-    if (turnRef.current && turnRef.current.arrowId !== arrow.id) end(false);
-    if (!turnRef.current) {
-      const plan = operation.begin();
-      if (!plan) return;
-      turnRef.current = { arrowId: arrow.id, plan, timer: 0 };
-      document.addEventListener("keydown", handleKeyDown, true);
-      document.addEventListener("pointerdown", handlePress, true);
-    }
-    window.clearTimeout(turnRef.current.timer);
-    turnRef.current.timer = window.setTimeout(() => end(false), WHEEL_REST_TIME);
-    operation.preview(changeArrow(turnRef.current.plan, arrow.id, { delay: Math.max(arrow.delay + direction, 1) }));
-  });
-
-  useEffect(() => () => end(true), [end]);
-
-  return { turn, end, getTurnedArrowId: () => turnRef.current?.arrowId };
-};
-
 type TTextProps = {
   ref: (element: HTMLElement | null) => void;
   arrow: TScheduleArrow;
@@ -237,7 +184,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     followingTaskIds,
     viewTop,
     viewBottom,
-    operation,
+    wheelTurn,
     isEditable,
     scroll,
     onClick,
@@ -251,8 +198,6 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   const [held, setHeld] = useState<{ arrowId: string; place: TPoint }>();
   // translation
   const { t } = useTranslation();
-  // hooks
-  const { turn, end, getTurnedArrowId } = useDelayByWheel(operation);
 
   const texts = drawnArrows.flatMap(({ arrow, points }) => {
     const arrowText = getArrowText(arrow, schedule, !followingTaskIds.has(arrow.nextId));
@@ -273,14 +218,23 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     return { arrow, text, look, place };
   });
 
+  /** The arrow whose delay the wheel is turning; nothing while it turns something else of the timeline. */
+  const getTurnedArrowId = () => {
+    const turnedKey = wheelTurn.getTurnedKey();
+    return placedTexts.some(({ arrow }) => arrow.id === turnedKey) ? turnedKey : undefined;
+  };
+
   /**
    * The text that has a place of the window in its area; of several the nearest. The area of a text that shows a
    * delay is the text and `WHEEL_MARGIN` on every side of it: there the wheel turns the delay. The area of
    * another text is the text. A text whose delay is being turned keeps the wheel while the place is in its area:
-   * its bars move, and another text may come nearer.
+   * its bars move, and another text may come nearer. Where the pointer is on something else that takes the wheel,
+   * that has it.
    */
-  const getTextNear = ({ clientX, clientY }: TPosition) => {
+  const getTextNear = ({ clientX, clientY, target }: TPosition) => {
     if (!isEditable || !scroll) return;
+    const part = target instanceof Element ? target.closest("[data-actionable]") : null;
+    if (part && ![...elementsRef.current.values()].some((element) => element.contains(part))) return;
     const frame = scroll.getBoundingClientRect();
     // the list and the header of the timeline cover what is under them
     if (clientX < frame.left + SIDEBAR_WIDTH || clientY < frame.top + HEADER_HEIGHT) return;
@@ -299,7 +253,8 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   /** Holds the text that has the pointer in its area, and saves what the wheel turned on the one it has left. */
   const holdTextNear = useLatestCallback((position: TPosition | undefined) => {
     const textNear = position && getTextNear(position);
-    if (textNear?.arrow.id !== getTurnedArrowId()) end(false);
+    const turnedArrowId = getTurnedArrowId();
+    if (turnedArrowId && textNear?.arrow.id !== turnedArrowId) wheelTurn.end(false);
     if (textNear?.arrow.id !== held?.arrowId)
       setHeld(textNear && { arrowId: textNear.arrow.id, place: textNear.place });
     return textNear;
@@ -320,7 +275,11 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     scroll,
     (direction, event) => {
       const textNear = holdTextNear(event);
-      if (textNear) turn(textNear.arrow, direction);
+      const arrow = textNear?.arrow;
+      if (arrow)
+        wheelTurn.turn(arrow.id, (plan) =>
+          changeArrow(plan, arrow.id, { delay: Math.max(arrow.delay + direction, 1) })
+        );
     },
     (event) => holdTextNear(event)?.look === "delay"
   );
@@ -347,7 +306,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
       isActionable={isEditable}
       isHeld={isEditable && arrow.id === held?.arrowId}
       onClick={(clickedArrow, click) => {
-        end(false);
+        wheelTurn.end(false);
         onClick(clickedArrow, click);
       }}
       onHover={onHover}
