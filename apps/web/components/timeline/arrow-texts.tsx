@@ -11,7 +11,6 @@ import { changeArrow } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
-import { cn } from "@plane/utils";
 // components
 import { BLOCK_HEIGHT, HEADER_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 // local imports
@@ -21,6 +20,7 @@ import { BAR_HEIGHT, BAR_TOP, DATE_DISTANCE, DATE_WIDTH } from "./bar";
 import type { TTimelineOperation } from "./operation";
 import type { TTimelineView } from "./scale";
 import { getDayDistance, MIN_BAR_WIDTH } from "./scale";
+import { TimelineText, TimelineTextPart } from "./text";
 import { useWheelNotches } from "./wheel";
 
 type TRect = { left: number; top: number; right: number; bottom: number };
@@ -49,7 +49,7 @@ type Props = Omit<TArrowWaysProps, "arrows"> & {
 
 // The size a text takes on the timeline, for finding it a free place. A little less than it is drawn with, so
 // that a text may touch a bar.
-const TEXT_HEIGHT = 12;
+const TEXT_HEIGHT = 16;
 const CHARACTER_WIDTH = 6;
 // how far along its arrow from the middle a text goes for a free place, and in what steps
 const TEXT_REACH = 240;
@@ -59,10 +59,6 @@ const WHEEL_REST_TIME = 800;
 // How far around a text that shows a delay the wheel still turns that delay: about a centimetre, by which a hand
 // that aims at a small text misses it.
 const WHEEL_MARGIN = 36;
-const CLASS_NAMES = {
-  delay: "text-secondary",
-  conflict: "text-danger-primary",
-};
 
 /**
  * What an arrow says over itself, always: the days of its delay when its next task follows it with one, and for
@@ -199,33 +195,38 @@ const useDelayByWheel = (operation: TTimelineOperation) => {
 };
 
 type TTextProps = {
-  ref: React.RefCallback<HTMLButtonElement>;
+  ref: (element: HTMLElement | null) => void;
   arrow: TScheduleArrow;
   text: string;
   look: TArrowText["look"];
   place: TPoint;
+  // a click on it opens the control of its arrow, and the wheel turns a delay
+  isActionable: boolean;
+  isHeld: boolean;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
 };
 
 function ArrowText(props: TTextProps) {
-  const { ref, arrow, text, look, place, onClick, onHover } = props;
+  const { ref, arrow, text, look, place, isActionable, isHeld, onClick, onHover } = props;
 
   return (
-    <button
+    <TimelineText
       ref={ref}
-      type="button"
-      className={cn(
-        "pointer-events-auto absolute h-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-sm bg-surface-1 px-1 text-caption-md-medium whitespace-nowrap",
-        CLASS_NAMES[look]
-      )}
+      isDanger={look === "conflict"}
+      className="absolute -translate-x-1/2 -translate-y-1/2"
       style={{ left: place[0], top: place[1] }}
-      onClick={(e) => onClick(arrow, e)}
-      onPointerEnter={() => onHover(arrow)}
-      onPointerLeave={() => onHover(undefined)}
     >
-      {text}
-    </button>
+      <TimelineTextPart
+        isActionable={isActionable}
+        isHeld={isHeld}
+        onClick={(e) => onClick(arrow, e)}
+        onPointerEnter={() => onHover(arrow)}
+        onPointerLeave={() => onHover(undefined)}
+      >
+        {text}
+      </TimelineTextPart>
+    </TimelineText>
   );
 }
 
@@ -343,6 +344,8 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
       text={text}
       look={look}
       place={place}
+      isActionable={isEditable}
+      isHeld={isEditable && arrow.id === held?.arrowId}
       onClick={(clickedArrow, click) => {
         end(false);
         onClick(clickedArrow, click);

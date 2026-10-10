@@ -19,6 +19,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useLabel } from "@/hooks/store/use-label";
 // local imports
 import { getDateOfDay, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
+import { TimelineText, TimelineTextPart } from "./text";
 
 type Props = {
   taskId: string;
@@ -64,10 +65,7 @@ export const BAR_HEIGHT = 32;
 export const DATE_DISTANCE = 28;
 export const DATE_WIDTH = 86;
 const TEXT_PADDING = 10;
-// the look of what stands around a bar while it is dragged: its dates, and the days it lasts
-export const MARKER_CLASS_NAME =
-  "pointer-events-none rounded-sm bg-accent-subtle px-2 py-1 text-11 whitespace-nowrap text-tertiary";
-const DATE_CLASS_NAME = cn(MARKER_CLASS_NAME, "absolute top-1/2 -translate-y-1/2");
+const DATE_CLASS_NAME = "absolute top-1/2 -translate-y-1/2";
 
 /**
  * The handles at the start and the end of a bar: an arrow is drawn from one to one of another bar. They show
@@ -198,14 +196,14 @@ export const TimelineBar = memo(function TimelineBar(props: Props) {
         />
       )}
       {(isDragged || isStartDated) && (
-        <div className={cn(DATE_CLASS_NAME, "right-full")} style={{ marginRight: DATE_DISTANCE }}>
-          {renderFormattedDate(getDateOfDay(start))}
-        </div>
+        <TimelineText className={cn(DATE_CLASS_NAME, "right-full")} style={{ marginRight: DATE_DISTANCE }}>
+          <TimelineTextPart>{renderFormattedDate(getDateOfDay(start))}</TimelineTextPart>
+        </TimelineText>
       )}
       {isDragged && (
-        <div className={cn(DATE_CLASS_NAME, "left-full")} style={{ marginLeft: DATE_DISTANCE }}>
-          {renderFormattedDate(getDateOfDay(end))}
-        </div>
+        <TimelineText className={cn(DATE_CLASS_NAME, "left-full")} style={{ marginLeft: DATE_DISTANCE }}>
+          <TimelineTextPart>{renderFormattedDate(getDateOfDay(end))}</TimelineTextPart>
+        </TimelineText>
       )}
     </div>
   );

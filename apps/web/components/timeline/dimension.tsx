@@ -11,9 +11,10 @@ import { cn } from "@plane/utils";
 // components
 import { BLOCK_HEIGHT } from "@/components/gantt-chart/constants";
 // local imports
-import { BAR_HEIGHT, BAR_TOP, MARKER_CLASS_NAME } from "./bar";
+import { BAR_HEIGHT, BAR_TOP } from "./bar";
 import type { TTimelineView } from "./scale";
 import { getDayX, MIN_BAR_WIDTH } from "./scale";
+import { TimelineText, TimelineTextPart } from "./text";
 
 type Props = {
   view: TTimelineView;
@@ -71,8 +72,8 @@ export function TimelineBarDimension(props: Props) {
           fill="currentColor"
         />
       </svg>
-      <div
-        className={cn(MARKER_CLASS_NAME, "absolute -translate-x-1/2", {
+      <TimelineText
+        className={cn("absolute -translate-x-1/2", {
           "-translate-y-1/2": isNumberOnLine,
           "-translate-y-full": !isNumberOnLine && !isBelow,
         })}
@@ -81,8 +82,8 @@ export function TimelineBarDimension(props: Props) {
           top: isNumberOnLine ? top : top + (isBelow ? 1 : -1) * (HEAD_WIDTH / 2 + NUMBER_DISTANCE / 2),
         }}
       >
-        {number}
-      </div>
+        <TimelineTextPart>{number}</TimelineTextPart>
+      </TimelineText>
     </>
   );
 }
