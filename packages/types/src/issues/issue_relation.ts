@@ -31,4 +31,29 @@ export type TTimelineDependency = {
   predecessor_id: string;
   dependent_id: string;
   relation_type: TTimelineDependencyTypes;
+  // days the dependency keeps between its work items on the timeline, 0 for none
+  delay: number;
+};
+
+/** A work item at an end of a dependency, as `timeline-dependencies/` lists it. */
+export type TTimelineIssue = {
+  id: string;
+  name: string;
+  sequence_id: number;
+  project_id: string;
+  project__identifier: string;
+  start_date: string | null;
+  target_date: string | null;
+  // false when the timeline computes the start from the dependencies that lead to the work item
+  is_start_fixed: boolean;
+};
+
+export type TTimelineDependencies = { dependencies: TTimelineDependency[]; issues: TTimelineIssue[] };
+
+/** What one operation on the timeline changed, as `timeline-dependencies/` saves it in one request. */
+export type TTimelineChanges = {
+  // created, or given this delay when the two work items have a dependency of this type
+  dependencies: Omit<TTimelineDependency, "id">[];
+  removed_dependencies: string[];
+  issues: { id: string; start_date: string; target_date: string; is_start_fixed: boolean }[];
 };
