@@ -30,7 +30,7 @@ import { FileService } from "@/services/file.service";
 const fileService = new FileService();
 // local imports
 import { useCreateIssueToastActions } from "../create-issue-toast-action-items";
-import { closeDialogIntoNewWorkItem, highlightNewWorkItem } from "../issue-layouts/list/new-work-item-arrival";
+import { closeDialogAndPointOutNewWorkItem, highlightNewWorkItem } from "../issue-layouts/list/new-work-item-arrival";
 import { DraftIssueLayout } from "./draft-issue-layout";
 import { IssueFormRoot } from "./form";
 import type { IssueFormProps } from "./form";
@@ -251,7 +251,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
             : undefined,
       });
       if (createMore) highlightNewWorkItem(response.id);
-      else await closeDialogIntoNewWorkItem(response, dialogPopupRef.current, handleClose);
+      else closeDialogAndPointOutNewWorkItem(response, handleClose);
       if (createMore && issueTitleRef) issueTitleRef?.current?.focus();
       setDescription("<p></p>");
       setChangesMade(null);
