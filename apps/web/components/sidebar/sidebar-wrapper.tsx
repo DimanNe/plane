@@ -25,11 +25,10 @@ import { Icon } from "@makeplane/propel/components/icon";
 type TSidebarWrapperProps = {
   title: string;
   children: React.ReactNode;
-  quickActions?: React.ReactNode;
 };
 
 export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWrapperProps) {
-  const { title, children, quickActions } = props;
+  const { title, children } = props;
   // translation
   const { t } = useTranslation();
   // state
@@ -73,8 +72,6 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
               <AppSidebarToggleButton />
             </div>
           </div>
-          {/* Quick actions */}
-          {quickActions}
         </div>
 
         <ScrollArea orientation="vertical">

@@ -37,7 +37,6 @@ import {
 import { ModuleQuickActions } from "@/components/modules";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 // hooks
-import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
@@ -69,7 +68,6 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
   } = useIssues(EIssuesStoreType.MODULE);
   const { updateFilters } = useIssuesActions(EIssuesStoreType.MODULE);
   const { getModuleById } = useModule();
-  const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
   // local storage
@@ -239,17 +237,6 @@ export const ModuleIssuesHeader = observer(function ModuleIssuesHeader() {
                     onClick={() => setAnalyticsModal(true)}
                   />
                 </span>
-              </div>
-              <div className="hidden sm:flex">
-                <Button
-                  variant="primary"
-                  size="md"
-                  stretch="auto"
-                  label="Add work item"
-                  onClick={() => {
-                    toggleCreateIssueModal(true, EIssuesStoreType.MODULE);
-                  }}
-                />
               </div>
             </>
           ) : (

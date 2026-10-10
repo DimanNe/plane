@@ -11,7 +11,6 @@ import { Circle } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel, SPACE_BASE_PATH, SPACE_BASE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@makeplane/propel/elements/button";
 import { NewTabOutline, WorkItemsOutline } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { EIssuesStoreType } from "@plane/types";
@@ -24,7 +23,6 @@ import { CountChip } from "@/components/common/count-chip";
 import { HeaderFilters } from "@/components/issues/filters";
 // helpers
 // hooks
-import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -46,7 +44,6 @@ export const IssuesHeader = observer(function IssuesHeader() {
 
   const { currentProjectDetails, loader } = useProject();
 
-  const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
   const { isMobile } = usePlatformOS();
 
@@ -118,20 +115,6 @@ export const IssuesHeader = observer(function IssuesHeader() {
             canUserCreateIssue={canUserCreateIssue}
           />
         </div>
-        {canUserCreateIssue && (
-          <Button
-            variant="primary"
-            size="md"
-            stretch="auto"
-            type="button"
-            onClick={() => {
-              toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
-            }}
-          >
-            <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
-            <div className="hidden sm:block">{t("issue.add.label")}</div>
-          </Button>
-        )}
       </Header.RightItem>
     </Header>
   );

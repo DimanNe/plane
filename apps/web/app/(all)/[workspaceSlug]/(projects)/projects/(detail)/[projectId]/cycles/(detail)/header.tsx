@@ -40,7 +40,6 @@ import {
 } from "@/components/issues/issue-layouts/filters";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 // hooks
-import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
@@ -71,7 +70,6 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
     issues: { getGroupIssueCount },
   } = useIssues(EIssuesStoreType.CYCLE);
   const { getCycleById } = useCycle();
-  const { toggleCreateIssueModal } = useCommandPalette();
   const { currentProjectDetails, loader } = useProject();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
@@ -111,7 +109,6 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
 
   // derived values
   const cycleDetails = cycleId ? getCycleById(cycleId.toString()) : undefined;
-  const isCompletedCycle = cycleDetails?.status?.toLocaleLowerCase() === "completed";
   const canUserCreateIssue = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.PROJECT
@@ -244,17 +241,6 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
                     onClick={() => setAnalyticsModal(true)}
                   />
                 </span>
-                {!isCompletedCycle && (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    stretch="auto"
-                    label={t("issue.add.label")}
-                    onClick={() => {
-                      toggleCreateIssueModal(true, EIssuesStoreType.CYCLE);
-                    }}
-                  />
-                )}
               </>
             )}
             <IconButton

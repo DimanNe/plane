@@ -9,14 +9,8 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 
 // plane imports
-import {
-  EIssueFilterType,
-  ISSUE_DISPLAY_FILTERS_BY_PAGE,
-  EUserPermissions,
-  EUserPermissionsLevel,
-} from "@plane/constants";
+import { EIssueFilterType, ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@makeplane/propel/components/button";
 import { LockOutline, ViewsOutline } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
@@ -31,11 +25,9 @@ import { DisplayFiltersSelection, FiltersDropdown, LayoutSelection } from "@/com
 import { ViewQuickActions } from "@/components/views/quick-actions";
 import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 // hooks
-import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectView } from "@/hooks/store/use-project-view";
-import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
@@ -55,8 +47,6 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
   const {
     issuesFilter: { issueFilters, updateFilters },
   } = useIssues(EIssuesStoreType.PROJECT_VIEW);
-  const { toggleCreateIssueModal } = useCommandPalette();
-  const { allowPermissions } = useUserPermissions();
 
   const { currentProjectDetails, loader } = useProject();
   const { projectViewIds, getViewById } = useProjectView();
@@ -106,11 +96,6 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
   );
 
   const viewDetails = viewId ? getViewById(viewId.toString()) : null;
-
-  const canUserCreateIssue = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
 
   if (!viewDetails) return;
 
@@ -206,17 +191,6 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
             </FiltersDropdown>
           )}
         </>
-        {canUserCreateIssue && (
-          <Button
-            variant="primary"
-            size="md"
-            stretch="auto"
-            label="Add work item"
-            onClick={() => {
-              toggleCreateIssueModal(true, EIssuesStoreType.PROJECT_VIEW);
-            }}
-          />
-        )}
         <div className="hidden md:block">
           <ViewQuickActions
             parentRef={parentRef}
