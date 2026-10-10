@@ -31,10 +31,26 @@
 /*
  * propel lets a menu or a list that is as wide as its content grow to 24rem and no taller, however much room the
  * window has, so one that is an entry longer scrolls beside empty space. The room the window has is the limit:
- * Base UI measures it into `--available-height`.
+ * Base UI measures it into `--available-height`. The pop-up of a picker (`data-select-popup`, the Select of
+ * @plane/blocks) follows the same limit when it is as wide as its field, where propel stops at 18rem: the list
+ * inside it sets its own height.
  */
-.max-h-\[min\(var\(--available-height\)\,24rem\)\] {
+.max-h-\[min\(var\(--available-height\)\,24rem\)\],
+[data-select-popup] {
   max-height: var(--available-height);
+}
+
+/*
+ * A picker's option list sits in propel's scroll area. When the pop-up has less room than its content, that area
+ * scrolls the whole list as one block, and the list scrolls its options inside it: two scroll bars. Laid out as
+ * columns that may shrink, the area and its content pass the shortage on to the list, which then is the only
+ * thing that scrolls. `base-ui-disable-scrollbar` is the class Base UI gives the viewport of a scroll area.
+ */
+[data-select-popup] .base-ui-disable-scrollbar,
+[data-select-popup] .base-ui-disable-scrollbar > * {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 * {

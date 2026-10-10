@@ -13,5 +13,11 @@ export const MENU_ROW_HEIGHT = 32;
 /** Estimated height of Select's standard option row — propel `ComboboxItem`'s fixed single-line `h-7`. */
 export const SELECT_OPTION_ROW_HEIGHT = 28;
 
+/**
+ * The most of the window's height that Select's option list takes. The list is shorter when its popup has
+ * less room than that: the popup never passes the edge of the window, and the list gives way inside it.
+ */
+export const SELECT_LIST_MAX_SHARE_OF_WINDOW_HEIGHT = 1 / 3;
+
 /** Bounded, scrollable option-list container inside a flyout panel. */
 export const MENU_LIST_CLASSNAME = "max-h-48 overflow-y-auto vertical-scrollbar scrollbar-sm p-1";

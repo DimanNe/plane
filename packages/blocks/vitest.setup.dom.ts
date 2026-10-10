@@ -9,6 +9,7 @@
 
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach } from "vitest";
+import { SELECT_LIST_MAX_SHARE_OF_WINDOW_HEIGHT } from "./src/select/select.constants";
 
 /**
  * jsdom implements neither observer API. Base UI's floating positioning needs a `ResizeObserver`
@@ -41,7 +42,7 @@ class TestIntersectionObserver implements IntersectionObserver {
 }
 
 /** The viewport height every stubbed box reports. Matches the Select popup's own scroller cap. */
-const VIEWPORT_HEIGHT = 240;
+const VIEWPORT_HEIGHT = window.innerHeight * SELECT_LIST_MAX_SHARE_OF_WINDOW_HEIGHT;
 
 /**
  * The tallest pixel height declared inline anywhere under `element`. jsdom lays nothing out, so

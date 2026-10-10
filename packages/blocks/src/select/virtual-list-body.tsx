@@ -18,6 +18,8 @@ import {
   ComboboxItemTrailing,
 } from "@makeplane/propel/elements/combobox";
 import { useVirtualizer } from "@tanstack/react-virtual";
+// local imports
+import { SELECT_LIST_MAX_SHARE_OF_WINDOW_HEIGHT } from "./select.constants";
 
 /**
  * The slice of the virtualizer the root drives from `onItemHighlighted`. `scrollToIndex` takes an
@@ -230,7 +232,7 @@ export function VirtualListBody<T>(props: VirtualListBodyProps<T>) {
     overscan: 8,
     // The popup mounts and measures in the same frame the panel animates in; seeding a rect keeps
     // the first paint from rendering a single row.
-    initialRect: { width: 256, height: 240 },
+    initialRect: { width: 256, height: window.innerHeight * SELECT_LIST_MAX_SHARE_OF_WINDOW_HEIGHT },
     // A row that measures 0 has not been laid out yet (the panel is still animating in, or the
     // row's content loaded late). Keeping the estimate for those beats collapsing the list to zero
     // height, which strands the scroller with nothing to scroll and no way back.
@@ -285,9 +287,16 @@ export function VirtualListBody<T>(props: VirtualListBodyProps<T>) {
   }, [hasMore, requestNextPage, items.length]);
 
   return (
-    // Bounded below the panel's own `max-h-72` cap so this scroller — not the panel's ScrollArea —
-    // is the one the virtualizer measures.
-    <div ref={scrollRef} role="presentation" className="vertical-scrollbar scrollbar-sm max-h-60 overflow-y-auto">
+    // The virtualizer measures this scroller, so it has to be the element that scrolls — not the
+    // panel's ScrollArea around it. The panel is as tall as its room allows, and a rule on
+    // `[data-select-popup]` in packages/tailwind-config/index.css makes this scroller, not the
+    // ScrollArea, give way when that room is short.
+    <div
+      ref={scrollRef}
+      role="presentation"
+      className="vertical-scrollbar scrollbar-sm overflow-y-auto"
+      style={{ maxHeight: `${SELECT_LIST_MAX_SHARE_OF_WINDOW_HEIGHT * 100}vh` }}
+    >
       <ComboboxList aria-label={listLabel}>
         <div role="presentation" className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
