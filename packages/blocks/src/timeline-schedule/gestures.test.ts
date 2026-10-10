@@ -196,7 +196,14 @@ describe("placeTask", () => {
 });
 
 describe("addArrow", () => {
-  const cases: { name: string; plan: TPlan; previousId: string; nextId: string; expected: TPlan | TRefusal }[] = [
+  const cases: {
+    name: string;
+    plan: TPlan;
+    previousId: string;
+    nextId: string;
+    delay?: number;
+    expected: TPlan | TRefusal;
+  }[] = [
     {
       name: "a new arrow asks immediately, and its next task follows its arrows from then on",
       plan: { tasks: [fixed("A", 1, 3), fixed("B", 1, 2)], arrows: [] },
@@ -205,6 +212,17 @@ describe("addArrow", () => {
       expected: {
         tasks: [fixed("A", 1, 3), following("B", 2)],
         arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: 0 }],
+      },
+    },
+    {
+      name: "a new arrow that is given a delay asks that delay",
+      plan: { tasks: [fixed("A", 1, 3), fixed("B", 1, 2)], arrows: [] },
+      previousId: "A",
+      nextId: "B",
+      delay: 4,
+      expected: {
+        tasks: [fixed("A", 1, 3), following("B", 2)],
+        arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: 4 }],
       },
     },
     {
@@ -257,8 +275,8 @@ describe("addArrow", () => {
     },
   ];
 
-  it.each(cases)("$name", ({ plan, previousId, nextId, expected }) => {
-    const actual = addArrow(plan, previousId, nextId, "start-start");
+  it.each(cases)("$name", ({ plan, previousId, nextId, delay, expected }) => {
+    const actual = addArrow(plan, previousId, nextId, "start-start", delay);
 
     expect(actual).toEqual(expected);
   });

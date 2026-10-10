@@ -15,7 +15,7 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { ArrowCollapseOutline, FullScreenOutline } from "@makeplane/propel/icons";
 import { DropIndicator } from "@plane/blocks/common";
 import { Row } from "@plane/blocks/layout";
-import { getConflictCause, moveTask, placeTask, resizeTask } from "@plane/blocks/timeline-schedule";
+import { getConflictCause, moveTask, resizeTask } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TScheduleArrow, TTaskEdge } from "@plane/blocks/timeline-schedule";
 import { ALL_ISSUES } from "@plane/constants";
 import { useLatestCallback } from "@plane/hooks";
@@ -52,6 +52,7 @@ import { trackPointer } from "./pointer";
 import { getDateOfDay, getDayOfDate, getDayOfTime, getDayX, MIN_BAR_WIDTH, TimelineViewContext } from "./scale";
 import type { THandle } from "./use-arrow-link";
 import { useArrowLink } from "./use-arrow-link";
+import { useEntryAnchor } from "./use-entry-anchor";
 import { useTimelineView } from "./use-timeline-view";
 
 type Props = {
@@ -192,11 +193,11 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const dragTask = (
     press: TPosition,
     taskId: string,
-    getDay: (position: TPosition) => string | undefined,
+    getDay: (position: TPosition, plan: TPlan) => string | undefined,
     change: (plan: TPlan, day: string) => TPlan,
-    options: { edge?: TTaskEdge } = {}
+    options: { edge?: TTaskEdge; onEnd?: () => void } = {}
   ) => {
-    const { edge } = options;
+    const { edge, onEnd } = options;
     // the operation begins at the first movement sideways, and once: when it cannot begin, the drag changes nothing
     const begin = once(operation.begin);
     const pressedLine = getLineAt(press);
@@ -214,15 +215,17 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
           return;
         }
         plan = begin();
-        const day = getDay(position);
+        if (!plan) return;
+        const day = getDay(position, plan);
         // the plan is the same for every place of the pointer in a day
-        if (!plan || day === shownDay) return;
+        if (day === shownDay) return;
         shownDay = day;
         operation.preview(day ? change(plan, day) : plan);
         setDrag({ taskId, edge });
       },
       onEnd: ({ isAborted }) => {
         setDrag(undefined);
+        onEnd?.();
         if (shownDay && !isAborted) operation.commit();
         else if (plan) operation.abort();
         else if (lineIndex !== undefined && !isAborted) onLineMove?.(taskId, lineIndex);
@@ -253,18 +256,12 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
       );
   });
 
-  // an entry of the list dragged onto the timeline puts its task on the day under the pointer
+  // an entry of the list dragged onto the timeline puts its task on the day under the pointer, or at an edge of a bar
+  const { anchor, followEntry } = useEntryAnchor({ taskIds, days, canvas, getDayAt, getLineAt });
   const handleEntryPress = useLatestCallback((press: React.PointerEvent, taskId: string) => {
     if (press.button !== 0 || !isEditable) return;
-    dragTask(
-      press,
-      taskId,
-      ({ clientX }) =>
-        canvas && clientX >= canvas.getBoundingClientRect().left
-          ? getDateOfDay(Math.floor(getDayAt(clientX)))
-          : undefined,
-      (plan, day) => placeTask(plan, taskId, day)
-    );
+    const { getPlace, getPlacedPlan, release } = followEntry(taskId);
+    dragTask(press, taskId, getPlace, getPlacedPlan, { onEnd: release });
   });
 
   const { link, handleHandlePress, handleArrowEndPress } = useArrowLink({
@@ -471,7 +468,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                     isStartDated={datedTaskIds.has(taskId)}
                     moveOffset={drag?.taskId === taskId ? drag.lineOffset : undefined}
                     areHandlesShown={!!link && (!link.ownTaskId || link.ownTaskId === taskId)}
-                    linkedEdge={link?.target?.taskId === taskId ? link.target.edge : undefined}
+                    linkedEdge={[link?.target, anchor].find((handle) => handle?.taskId === taskId)?.edge}
                     isLinkRefused={!!link?.refusal}
                     onBarPress={handleBarPress}
                     onHandlePress={handleHandlePress}

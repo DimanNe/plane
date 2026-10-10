@@ -45,7 +45,8 @@ type Props = {
   isDisabled: boolean;
   // an arrow is being drawn, so every bar shows its handles
   areHandlesShown: boolean;
-  // the handle the arrow that is being drawn is over, and whether it takes the arrow
+  // the handle that holds the arrow that is being made: one that is drawn to it, or the one that a task dragged
+  // from the list follows; and whether it takes the arrow
   linkedEdge: TTaskEdge | undefined;
   isLinkRefused: boolean;
   onPress: (press: React.PointerEvent, taskId: string, edge?: TTaskEdge) => void;
@@ -70,7 +71,8 @@ const DATE_CLASS_NAME = cn(MARKER_CLASS_NAME, "absolute top-1/2 -translate-y-1/2
 
 /**
  * The handles at the start and the end of a bar: an arrow is drawn from one to one of another bar. They show
- * while the pointer is over the bar and while an arrow is drawn. A bar that moves does not draw them again.
+ * while the pointer is over the bar and while an arrow is drawn, and the one that holds an arrow that is being
+ * made shows whatever else. A bar that moves does not draw them again.
  */
 const BarHandles = memo(function BarHandles(
   props: Pick<Props, "taskId" | "areHandlesShown" | "linkedEdge" | "isLinkRefused" | "onHandlePress">
@@ -88,7 +90,7 @@ const BarHandles = memo(function BarHandles(
         "absolute top-1/2 size-2.5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-accent-strong bg-surface-1 opacity-0 group-hover/bar:opacity-100",
         edge === "start" ? "-left-3.5" : "-right-3.5",
         {
-          "opacity-100": areHandlesShown,
+          "opacity-100": areHandlesShown || linkedEdge === edge,
           "scale-150 bg-accent-primary": linkedEdge === edge && !isLinkRefused,
           "scale-150 border-danger-strong bg-danger-primary": linkedEdge === edge && isLinkRefused,
         }

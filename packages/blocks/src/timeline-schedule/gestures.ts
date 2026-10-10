@@ -115,18 +115,24 @@ const leadsTo = (arrows: TScheduleArrow[], fromId: string, toId: string): boolea
 };
 
 /**
- * An arrow drawn between two bars: it asks "immediately", and its next task follows its arrows from now on.
- * Refused between a task and itself, between tasks that have an arrow in this direction, and when it would close
- * a loop. The new arrow's id lasts until the plan is saved; the server gives it another.
+ * An arrow drawn between two bars: it asks "immediately" unless it is given a delay, and its next task follows
+ * its arrows from now on. Refused between a task and itself, between tasks that have an arrow in this direction,
+ * and when it would close a loop. The new arrow's id lasts until the plan is saved; the server gives it another.
  */
-export function addArrow(plan: TPlan, previousId: string, nextId: string, kind: TArrowKind): TPlan | TRefusal {
+export function addArrow(
+  plan: TPlan,
+  previousId: string,
+  nextId: string,
+  kind: TArrowKind,
+  delay = 0
+): TPlan | TRefusal {
   if (previousId === nextId) return { refused: "same-task" };
   if (plan.arrows.some((arrow) => arrow.previousId === previousId && arrow.nextId === nextId))
     return { refused: "already-connected" };
   if (leadsTo(plan.arrows, nextId, previousId)) return { refused: "loop" };
   return {
     tasks: setStart(plan, nextId, "anchor").tasks,
-    arrows: [...plan.arrows, { id: `${previousId}:${nextId}`, previousId, nextId, kind, delay: 0 }],
+    arrows: [...plan.arrows, { id: `${previousId}:${nextId}`, previousId, nextId, kind, delay }],
   };
 }
 
