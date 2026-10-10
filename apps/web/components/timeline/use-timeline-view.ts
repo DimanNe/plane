@@ -10,6 +10,7 @@ import { clamp } from "lodash-es";
 import { trackPointer } from "./pointer";
 import type { TTimelineView } from "./scale";
 import { MAX_PX_PER_DAY, MIN_PX_PER_DAY } from "./scale";
+import { WHEEL_LINE_HEIGHT } from "./wheel";
 
 // one notch of a mouse wheel is 100 pixels: a sixth more or less of everything
 const ZOOM_PER_WHEEL_PIXEL = 0.0015;
@@ -18,7 +19,6 @@ const ZOOM_PER_PINCH_PIXEL = 0.01;
 const MAX_ZOOM_PER_EVENT = 0.5;
 // the scale reaches the one the wheel asked for over a few frames, so a notch is seen as a movement
 const ZOOM_EASING_MS = 60;
-const WHEEL_LINE_HEIGHT = 16;
 
 type TZoomTarget = { pxPerDay: number; x: number; day: number };
 

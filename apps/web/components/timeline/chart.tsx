@@ -130,9 +130,10 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   // The task that is dragged. When it is its line that moves: the line before which it would land, and how far
   // it is from its place, in pixels.
   const [drag, setDrag] = useState<{ taskId: string; lineIndex?: number; lineOffset?: number }>();
-  // the arrow the pointer is over, and the selected arrow, whose control is open
+  // the arrow the pointer is over; and the selected arrow, whose control is open, with the place of the window
+  // where it was clicked
   const [hoveredArrowId, setHoveredArrowId] = useState<string>();
-  const [selectedArrowId, setSelectedArrowId] = useState<string>();
+  const [selectedArrow, setSelectedArrow] = useState<{ id: string; point: { x: number; y: number } }>();
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [loadMoreElement, setLoadMoreElement] = useState<HTMLDivElement | null>(null);
   // store hooks
@@ -278,16 +279,16 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   useEffect(() => () => window.clearTimeout(hoverTimerRef.current), []);
 
   // one thing is selected at a time: an arrow or a task
-  const handleArrowClick = useLatestCallback((arrow: TScheduleArrow) => {
+  const handleArrowClick = useLatestCallback((arrow: TScheduleArrow, click: React.MouseEvent) => {
     if (!isEditable) return;
     setSelectedRow(undefined);
-    setSelectedArrowId(arrow.id);
+    setSelectedArrow({ id: arrow.id, point: { x: click.clientX, y: click.clientY } });
   });
 
   // as in the List layout: a click selects, a double click opens the work item beside the timeline, and an
   // open work item view follows the selection
   const handleTaskClick = useLatestCallback((click: React.MouseEvent, taskId: string) => {
-    setSelectedArrowId(undefined);
+    setSelectedArrow(undefined);
     setSelectedRow({ issueId: taskId, groupId: ALL_ISSUES });
     if (click.detail > 1 || isPeekOpenOnPressRef.current)
       handleRedirection(workspaceSlug?.toString(), getIssueById(taskId), isMobile);
@@ -305,8 +306,10 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const draggedTaskId = drag && drag.lineIndex === undefined ? drag.taskId : undefined;
   // The arrow that shows more than its text: the selected one its control, a conflict under the pointer what it
   // says, with the tasks and arrows that produce it.
-  const shownArrowId = drag || link ? undefined : (selectedArrowId ?? hoveredArrowId);
-  const conflict = selectedArrowId ? undefined : schedule.conflicts.find(({ arrowId }) => arrowId === shownArrowId);
+  const selectedArrowId = drag || link ? undefined : selectedArrow?.id;
+  const conflict =
+    drag || link || selectedArrowId ? undefined : schedule.conflicts.find(({ arrowId }) => arrowId === hoveredArrowId);
+  const controlledArrow = selectedArrowId ? arrows.find((arrow) => arrow.id === selectedArrowId) : undefined;
   const cause = useMemo(
     () => (conflict ? getConflictCause(arrows, schedule, conflict) : NO_CAUSE),
     [arrows, schedule, conflict]
@@ -505,45 +508,47 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   datedTaskIds={datedTaskIds}
                   viewTop={viewTop}
                   viewBottom={viewBottom}
+                  operation={operation}
+                  // during a gesture the wheel over a text changes nothing
+                  isEditable={isEditable && !drag && !link}
                   onClick={handleArrowClick}
                   onHover={handleArrowHover}
                 />
-                <TimelineArrowControls
-                  view={view}
-                  drawnArrows={drawnArrows.filter(
-                    ({ arrow }) => arrow.id === shownArrowId && (selectedArrowId || conflict)
-                  )}
-                  viewTop={viewTop}
-                  viewBottom={viewBottom}
-                  renderControl={(arrow, nextTaskSide) =>
-                    conflict ? (
+                {conflict && (
+                  <TimelineArrowControls
+                    view={view}
+                    drawnArrows={drawnArrows.filter(({ arrow }) => arrow.id === conflict.arrowId)}
+                    viewTop={viewTop}
+                    viewBottom={viewBottom}
+                    renderControl={(arrow, isNextBelow) => (
                       <TimelineConflict
                         conflict={conflict}
                         arrow={arrow}
                         operation={operation}
                         isEditable={isEditable}
-                        nextTaskSide={nextTaskSide}
+                        isNextBelow={isNextBelow}
                         onClose={() => setHoveredArrowId(undefined)}
                         onPointerEnter={() => handleArrowHover(arrow)}
                         onPointerLeave={() => handleArrowHover(undefined)}
                       />
-                    ) : (
-                      <TimelineArrowControl
-                        arrow={arrow}
-                        schedule={schedule}
-                        isNextFixed={!followingTaskIds.has(arrow.nextId)}
-                        operation={operation}
-                        weekStartsOn={startOfWeek}
-                        nextTaskSide={nextTaskSide}
-                        boundary={canvas}
-                        onClose={() => {
-                          setSelectedArrowId(undefined);
-                          setHoveredArrowId(undefined);
-                        }}
-                      />
-                    )
-                  }
-                />
+                    )}
+                  />
+                )}
+                {controlledArrow && selectedArrow && (
+                  <TimelineArrowControl
+                    key={controlledArrow.id}
+                    arrow={controlledArrow}
+                    schedule={schedule}
+                    isNextFixed={!followingTaskIds.has(controlledArrow.nextId)}
+                    operation={operation}
+                    weekStartsOn={startOfWeek}
+                    point={selectedArrow.point}
+                    onClose={() => {
+                      setSelectedArrow(undefined);
+                      setHoveredArrowId(undefined);
+                    }}
+                  />
+                )}
                 {link && drawnFrom && (
                   <TimelineDrawnArrow from={drawnFrom} to={link.pointer} isRefused={!!link.refusal} />
                 )}

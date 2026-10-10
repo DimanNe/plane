@@ -16,7 +16,6 @@ import { renderFormattedDate } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // local imports
-import type { TNextTaskSide } from "./arrows";
 import type { TTimelineOperation } from "./operation";
 import { runOperation } from "./operation";
 
@@ -26,7 +25,8 @@ type Props = {
   operation: TTimelineOperation;
   // the ways out are offered; else the explanation only tells
   isEditable: boolean;
-  nextTaskSide: TNextTaskSide;
+  // the line of the fixed task is under the arrow's place, not above it
+  isNextBelow: boolean;
   onClose: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -39,7 +39,7 @@ const formatDay = (day: string) => renderFormattedDate(day, "MMM d");
  * schedule reports, and the ways out of it, each applied by a click as one operation.
  */
 export const TimelineConflict = observer(function TimelineConflict(props: Props) {
-  const { conflict, arrow, operation, isEditable, nextTaskSide, onClose, onPointerEnter, onPointerLeave } = props;
+  const { conflict, arrow, operation, isEditable, isNextBelow, onClose, onPointerEnter, onPointerLeave } = props;
   // states
   const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
   // store hooks
@@ -57,7 +57,7 @@ export const TimelineConflict = observer(function TimelineConflict(props: Props)
           <PopoverContent
             anchor={anchor}
             // away from the fixed task, and to the right of the arrow: what produces the conflict is to its left
-            side={nextTaskSide.isBelow ? "top" : "bottom"}
+            side={isNextBelow ? "top" : "bottom"}
             align="start"
             sideOffset={12}
             initialFocus={false}

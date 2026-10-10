@@ -44,23 +44,18 @@ type TPathsProps = {
   // the arrows that produce the conflict the pointer is over
   causeArrowIds: string[];
   isEditable: boolean;
-  onClick: (arrow: TScheduleArrow) => void;
+  onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
   onEndPress: (press: React.PointerEvent, arrow: TScheduleArrow, end: TArrowEnd) => void;
 };
-
-/**
- * Where the bar of the next task is, seen from the place of an arrow's control: to the right of the arrow or to
- * its left, under it or above. What opens at the control opens away from that bar.
- */
-export type TNextTaskSide = { isRight: boolean; isBelow: boolean };
 
 type TControlsProps = {
   drawnArrows: TDrawnArrow[];
   // the lines in view, in pixels from the top of the first line
   viewTop: number;
   viewBottom: number;
-  renderControl: (arrow: TScheduleArrow, nextTaskSide: TNextTaskSide) => ReactNode;
+  // `isNextBelow`: the line of the arrow's next task is under that place, not above it
+  renderControl: (arrow: TScheduleArrow, isNextBelow: boolean) => ReactNode;
 };
 
 // how far an arrow runs out of a bar and into one before it turns: past the handle at that end of the bar
@@ -295,7 +290,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
               stroke="transparent"
               strokeWidth={hitWidth}
               className="[pointer-events:stroke] cursor-pointer"
-              onClick={() => onClick(arrow)}
+              onClick={(e) => onClick(arrow, e)}
               onPointerEnter={() => onHover(arrow)}
               onPointerLeave={() => onHover(undefined)}
             />
@@ -312,7 +307,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
                   strokeWidth={1.5}
                   className="pointer-events-none cursor-grab fill-(--background-color-surface-1) opacity-0 group-hover/arrow:pointer-events-auto group-hover/arrow:opacity-100"
                   onPointerDown={(e) => onEndPress(e, arrow, end)}
-                  onClick={() => onClick(arrow)}
+                  onClick={(e) => onClick(arrow, e)}
                   onPointerEnter={() => onHover(arrow)}
                   onPointerLeave={() => onHover(undefined)}
                 />
@@ -331,7 +326,6 @@ const ArrowControls = memo(function ArrowControls(props: TControlsProps) {
     // on the last stretch of the arrow between the lines: in its middle, or as near to it as is in view
     const [x, fromY] = points[points.length - 3];
     const [, toY] = points[points.length - 2];
-    const [headX] = points[points.length - 1];
     const top = Math.max(Math.min(fromY, toY), viewTop);
     const bottom = Math.min(Math.max(fromY, toY), viewBottom);
     return (
@@ -340,7 +334,7 @@ const ArrowControls = memo(function ArrowControls(props: TControlsProps) {
         className="pointer-events-auto absolute"
         style={{ left: x, top: clamp((fromY + toY) / 2, top, Math.max(top, bottom)) }}
       >
-        {renderControl(arrow, { isRight: headX > x, isBelow: toY > fromY })}
+        {renderControl(arrow, toY > fromY)}
       </div>
     );
   });
@@ -361,7 +355,7 @@ export function TimelineArrows(props: TPathsProps & { view: TTimelineView }) {
   );
 }
 
-/** What `renderControl` gives for each of the arrows, at a place on the arrow. */
+/** What `renderControl` gives for each of the arrows, at a place on the arrow: what a conflict says. */
 export function TimelineArrowControls(props: TControlsProps & { view: TTimelineView }) {
   const { view, ...controlsProps } = props;
 
