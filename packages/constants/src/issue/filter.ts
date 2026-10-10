@@ -288,8 +288,8 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
           type: ["active", "backlog"],
         },
         extra_options: {
-          access: true,
-          values: ["sub_issue"],
+          access: false,
+          values: [],
         },
       },
     },

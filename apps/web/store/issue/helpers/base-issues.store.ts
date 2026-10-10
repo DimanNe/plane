@@ -1286,9 +1286,12 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
     // Get display filters to check if 'Show sub Work items' is enabled - Do not add Work item to main list if disabled.
     const displayFilters = this.issueFilterStore.issueFilters?.displayFilters;
-    // the list layout always holds sub-work items: it nests them under their parent
+    // The list layout always holds sub-work items: it nests them under their parent. So does the timeline: the
+    // tasks that are planned on it are mostly leaves.
     const isShowWorkItemsEnabled =
-      displayFilters?.layout === EIssueLayoutTypes.LIST || (displayFilters?.sub_issue ?? false);
+      displayFilters?.layout === EIssueLayoutTypes.LIST ||
+      displayFilters?.layout === EIssueLayoutTypes.GANTT ||
+      (displayFilters?.sub_issue ?? false);
 
     // get issueUpdates from another method by passing down the three arguments
     // issueUpdates is nothing but an array of objects that contain the path of the issueId list that need updating and also the action that needs to be performed at the path
