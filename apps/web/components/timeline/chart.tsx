@@ -93,9 +93,9 @@ const HANDLE_DISTANCE = 9;
 // What a conflict says shows a moment after the pointer came over its arrow, and goes a moment after it left.
 const HOVER_DELAY = 150;
 const LEAVE_DELAY = 300;
-// The dates and the length of a bar show a moment after the pointer came over it: a little longer than a pointer
-// that crosses bars on its way is over one of them.
-const BAR_HOVER_DELAY = 200;
+// The dates and the length of a bar show a moment after the pointer came over it: short enough not to be waited
+// for, and longer than a pointer that crosses bars on its way is over one of them.
+const BAR_HOVER_DELAY = 120;
 const NO_CAUSE: ReturnType<typeof getConflictCause> = { taskIds: [], arrowIds: [] };
 const NO_ARROW_IDS: string[] = [];
 
