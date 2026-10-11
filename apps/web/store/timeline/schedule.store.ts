@@ -8,7 +8,7 @@ import { set } from "lodash-es";
 import { action, makeObservable, observable, runInAction, when } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
-import { computeSchedule, getChanges, getPlan } from "@plane/blocks/timeline-schedule";
+import { computeSchedule, getChanges, getPlan, keepLinksTogether } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TStoredTask } from "@plane/blocks/timeline-schedule";
 import { setToast } from "@plane/blocks/toast";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -26,6 +26,8 @@ export type TTimelineOperation = {
   workspaceSlug: string;
   projectId: string;
   stored: { tasks: TStoredTask[]; dependencies: TTimelineDependency[] };
+  /** The plan the operation began with: the links that are together in it are together in every preview. */
+  planBefore: TPlan;
   plan: TPlan;
   schedule: TSchedule;
   isSaving: boolean;
@@ -213,7 +215,7 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     const plan = getPlan(stored.tasks, stored.dependencies);
     try {
       const schedule = computeSchedule(plan.tasks, plan.arrows);
-      this.operation = { workspaceSlug, projectId, stored, plan, schedule, isSaving: false };
+      this.operation = { workspaceSlug, projectId, stored, planBefore: plan, plan, schedule, isSaving: false };
       return plan;
     } catch (error) {
       // the engine names tasks by id; a person knows them by key and name
@@ -226,11 +228,20 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     }
   };
 
-  /** Shows a changed copy of the operation's plan and returns its schedule. Nothing is saved. */
+  /**
+   * Shows a changed copy of the operation's plan and returns its schedule. Nothing is saved.
+   *
+   * No operation makes a link come apart. Every plan of every gesture is shown and saved from here, so here the
+   * engine sees to it, and no gesture has to: what is shown is the given plan with the links of the plan the
+   * operation began with kept together. A gesture of several steps goes on from the plan it gave, so that what
+   * it comes to depends on where its value ends and not on the way there, as with a bar that is dragged.
+   */
   previewOperation = (plan: TPlan): TSchedule => {
-    const schedule = computeSchedule(plan.tasks, plan.arrows);
-    if (this.operation && !this.operation.isSaving) this.operation = { ...this.operation, plan, schedule };
-    return schedule;
+    const operation = this.operation;
+    if (!operation || operation.isSaving) return computeSchedule(plan.tasks, plan.arrows);
+    const shown = keepLinksTogether(operation.planBefore, plan);
+    this.operation = { ...operation, plan: shown.plan, schedule: shown.schedule };
+    return shown.schedule;
   };
 
   /**

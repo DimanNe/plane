@@ -66,12 +66,18 @@ const getPreviousEdge = (kind: TArrowKind): TTaskEdge => (kind === "start-start"
  * - an "in n d" that leads into the body from outside gives the days its task stands later than it asks, then
  *   its n, down to 0, where it stops the move; a link that is apart stops the move where its edges come together;
  * - a task that nothing holds on its later day has the n of its deciding arrow grow.
- * What follows the body from outside follows as the plan computes. An arrow into a task that is fixed on its day
+ * What follows the body from outside follows as the plan computes; where that pushes a task off a link from a
+ * task that stayed, `keepLinksTogether` brings the two together. An arrow into a task that is fixed on its day
  * is a check, and stops nothing. One edge alone stops where its task is one day long.
  */
-function getEdgesMove(plan: TPlan, taskId: string, edges: TTaskEdge[], day: TDay): TTaskMove {
+function getEdgesMove(
+  plan: TPlan,
+  taskId: string,
+  edges: TTaskEdge[],
+  day: TDay,
+  schedule = computeSchedule(plan.tasks, plan.arrows)
+): TTaskMove {
   const task = getTask(plan, taskId);
-  const schedule = computeSchedule(plan.tasks, plan.arrows);
   const followingIds = new Set(plan.tasks.flatMap((other) => (other.start === "anchor" ? [other.id] : [])));
   const arrows = plan.arrows.flatMap((arrow) => {
     const gap = schedule.gaps[arrow.id];
@@ -156,9 +162,12 @@ function getEdgesMove(plan: TPlan, taskId: string, edges: TTaskEdge[], day: TDay
   };
 }
 
-/** A bar dragged horizontally: the task starts on the day and keeps its duration. */
-export const getTaskMove = (plan: TPlan, taskId: string, day: TDay): TTaskMove =>
-  getEdgesMove(plan, taskId, ["start", "end"], day);
+/**
+ * A bar dragged horizontally: the task starts on the day and keeps its duration. A caller that has computed the
+ * schedule of the plan gives it, and it is not computed again.
+ */
+export const getTaskMove = (plan: TPlan, taskId: string, day: TDay, schedule?: TSchedule): TTaskMove =>
+  getEdgesMove(plan, taskId, ["start", "end"], day, schedule);
 
 /** An edge of a bar dragged: that edge goes to the day and the other edge stays. */
 export const getTaskResize = (plan: TPlan, taskId: string, edge: TTaskEdge, day: TDay): TTaskMove =>

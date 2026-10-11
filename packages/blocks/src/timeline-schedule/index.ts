@@ -23,6 +23,7 @@ export {
   setArrowMode,
   turnArrowMode,
 } from "./gestures";
+export { keepLinksTogether } from "./keep-links-together";
 export { getChanges, getPlan } from "./stored-plan";
 export type { TStoredTask } from "./stored-plan";
 export type {
