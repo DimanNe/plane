@@ -6,7 +6,6 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import useSWR from "swr";
 // ui
 import { ArchiveOutline, WorkItemsOutline } from "@makeplane/propel/icons";
 import { Breadcrumbs } from "@plane/blocks/breadcrumb";
@@ -14,31 +13,19 @@ import { Header } from "@plane/blocks/layout";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-detail-quick-actions";
-// constants
-import { ISSUE_DETAILS } from "@plane/constants";
+import { IssueTypeSwitcher } from "@/components/issues/issue-type-switcher";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 // plane web
 import { ProjectBreadcrumb } from "@/components/breadcrumbs/project";
 import { useProjectCrumbProps } from "@/components/breadcrumbs/use-project-crumb-props";
-// services
-import { IssueService } from "@/services/issue";
-
-const issueService = new IssueService();
 
 export const ProjectArchivedIssueDetailsHeader = observer(function ProjectArchivedIssueDetailsHeader() {
   // router
   const { workspaceSlug, projectId, archivedIssueId } = useParams();
   const projectCrumb = useProjectCrumbProps(workspaceSlug?.toString(), projectId?.toString());
   // store hooks
-  const { currentProjectDetails, loader } = useProject();
-
-  const { data: issueDetails } = useSWR(
-    workspaceSlug && projectId && archivedIssueId ? ISSUE_DETAILS(archivedIssueId.toString()) : null,
-    workspaceSlug && projectId && archivedIssueId
-      ? () => issueService.retrieve(workspaceSlug.toString(), projectId.toString(), archivedIssueId.toString())
-      : null
-  );
+  const { loader } = useProject();
 
   return (
     <Header>
@@ -67,17 +54,7 @@ export const ProjectArchivedIssueDetailsHeader = observer(function ProjectArchiv
               />
             }
           />
-          <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink
-                label={
-                  currentProjectDetails && issueDetails
-                    ? `${currentProjectDetails.identifier}-${issueDetails.sequence_id}`
-                    : ""
-                }
-              />
-            }
-          />
+          <Breadcrumbs.Item component={<IssueTypeSwitcher issueId={archivedIssueId.toString()} disabled />} />
         </Breadcrumbs>
       </Header.LeftItem>
       <Header.RightItem>

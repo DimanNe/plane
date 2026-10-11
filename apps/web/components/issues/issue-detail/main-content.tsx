@@ -14,7 +14,6 @@ import { EFileAssetType, EIssueServiceType } from "@plane/types";
 // components
 import { DescriptionVersionsRoot } from "@/components/core/description-versions";
 import { DescriptionInput } from "@/components/editor/rich-text/description-input";
-import { IssueTypeSwitcher } from "@/components/issues/issue-type-switcher";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
@@ -28,7 +27,7 @@ import { IssueDetailWidgets } from "../issue-detail-widgets";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
 import { PeekOverviewProperties } from "../peek-overview/properties";
 import { IssueTitleInput } from "../title-input";
-import { ISSUE_TITLE_SURFACE_CLASSNAME } from "../title-surface";
+import { ISSUE_TITLE_SEPARATOR_CLASSNAME, ISSUE_TITLE_SURFACE_CLASSNAME } from "../title-surface";
 import { IssueActivity } from "./issue-activity";
 import { IssueParentDetail } from "./parent";
 import { IssueReaction } from "./reactions";
@@ -89,8 +88,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           />
         )}
 
-        <div className="mb-2.5 flex items-center justify-between gap-4">
-          <IssueTypeSwitcher issueId={issueId} disabled={isArchived || !isEditable} />
+        <div className="mb-2.5 flex items-center justify-end gap-4">
           <div className="flex items-center gap-3">
             <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
           </div>
@@ -107,6 +105,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           value={issue.name}
           containerClassName={ISSUE_TITLE_SURFACE_CLASSNAME}
         />
+        <hr className={ISSUE_TITLE_SEPARATOR_CLASSNAME} />
 
         <DescriptionInput
           issueSequenceId={issue.sequence_id}

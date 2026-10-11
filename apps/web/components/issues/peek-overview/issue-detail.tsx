@@ -19,8 +19,6 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
-// plane web components
-import { IssueTypeSwitcher } from "@/components/issues/issue-type-switcher";
 // plane web hooks
 // services
 import { WorkItemVersionService } from "@/services/issue";
@@ -29,7 +27,7 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueParentDetail } from "../issue-detail/parent";
 import { IssueReaction } from "../issue-detail/reactions";
 import { IssueTitleInput } from "../title-input";
-import { ISSUE_TITLE_SURFACE_CLASSNAME } from "../title-surface";
+import { ISSUE_TITLE_SEPARATOR_CLASSNAME, ISSUE_TITLE_SURFACE_CLASSNAME } from "../title-surface";
 // services init
 const workItemVersionService = new WorkItemVersionService();
 
@@ -92,9 +90,6 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
           issueOperations={issueOperations}
         />
       )}
-      <div className="flex items-center justify-between gap-2">
-        <IssueTypeSwitcher issueId={issueId} disabled={isArchived || disabled} />
-      </div>
       <IssueTitleInput
         workspaceSlug={workspaceSlug}
         projectId={issue.project_id}
@@ -106,6 +101,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         value={issue.name}
         containerClassName={ISSUE_TITLE_SURFACE_CLASSNAME}
       />
+      <hr className={ISSUE_TITLE_SEPARATOR_CLASSNAME} />
 
       <DescriptionInput
         issueSequenceId={issue.sequence_id}

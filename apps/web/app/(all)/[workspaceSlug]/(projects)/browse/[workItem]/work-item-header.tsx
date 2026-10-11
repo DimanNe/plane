@@ -9,14 +9,17 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane ui
 import { WorkItemsOutline } from "@makeplane/propel/icons";
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { Breadcrumbs } from "@plane/blocks/breadcrumb";
 import { Header } from "@plane/blocks/layout";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-detail-quick-actions";
+import { IssueTypeSwitcher } from "@/components/issues/issue-type-switcher";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { useProjectCrumbProps } from "@/components/breadcrumbs/use-project-crumb-props";
@@ -25,7 +28,8 @@ export const WorkItemDetailsHeader = observer(function WorkItemDetailsHeader() {
   // router
   const { workspaceSlug, workItem } = useParams();
   // store hooks
-  const { getProjectById, loader } = useProject();
+  const { loader } = useProject();
+  const { allowPermissions } = useUserPermissions();
   const {
     issue: { getIssueById, getIssueIdByIdentifier },
   } = useIssueDetail();
@@ -34,7 +38,12 @@ export const WorkItemDetailsHeader = observer(function WorkItemDetailsHeader() {
   const issueDetails = issueId ? getIssueById(issueId.toString()) : undefined;
   const projectId = issueDetails ? issueDetails?.project_id : undefined;
   const projectCrumb = useProjectCrumbProps(workspaceSlug?.toString(), projectId?.toString());
-  const projectDetails = projectId ? getProjectById(projectId?.toString()) : undefined;
+  const isEditable = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug?.toString(),
+    projectId?.toString()
+  );
 
   if (!workspaceSlug || !projectId || !issueId) return null;
   return (
@@ -56,11 +65,7 @@ export const WorkItemDetailsHeader = observer(function WorkItemDetailsHeader() {
             }
           />
           <Breadcrumbs.Item
-            component={
-              <BreadcrumbLink
-                label={projectDetails && issueDetails ? `${projectDetails.identifier}-${issueDetails.sequence_id}` : ""}
-              />
-            }
+            component={<IssueTypeSwitcher issueId={issueId} disabled={!isEditable || !!issueDetails?.archived_at} />}
           />
         </Breadcrumbs>
       </Header.LeftItem>

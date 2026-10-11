@@ -31,6 +31,7 @@ import { useUser } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { IssueSubscription } from "../issue-detail/subscription";
+import { IssueTypeSwitcher } from "../issue-type-switcher";
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
 import { IconButton } from "@makeplane/propel/components/icon-button";
@@ -193,6 +194,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
             </Select>
           </div>
         )}
+        <IssueTypeSwitcher issueId={issueId} disabled={isArchived || disabled} />
       </div>
       <div className="flex items-center gap-x-4">
         <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
