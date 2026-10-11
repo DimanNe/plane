@@ -15,11 +15,15 @@ import {
   moveTask,
   placeTask,
   removeArrow,
+  getArrowMode,
+  getLatestArrowId,
   removeTask,
   resizeTask,
+  setArrowMode,
+  turnArrowMode,
 } from "./gestures";
 import { arrow, day, fixed, following } from "./test-helpers";
-import type { TArrowKind, TPlan, TRefusal, TTaskEdge, TWayOut } from "./types";
+import type { TArrowDelay, TArrowKind, TArrowMode, TPlan, TRefusal, TTaskEdge, TWayOut } from "./types";
 
 describe("moveTask", () => {
   const cases: { name: string; plan: TPlan; taskId: string; dayOfMonth: number; expected: TPlan }[] = [
@@ -71,6 +75,141 @@ describe("moveTask", () => {
       dayOfMonth: 6,
       expected: { tasks: [fixed("A", 1, 5), following("B", 2)], arrows: [arrow("A>B", "end-end", 2)] },
     },
+    {
+      name: "a task that is linked takes the fixed task it is linked to along, later, and the arrow stays linked",
+      plan: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+      taskId: "B",
+      dayOfMonth: 7,
+      expected: { tasks: [fixed("A", 4, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+    },
+    {
+      name: "a task that is linked takes the fixed task it is linked to along, earlier",
+      plan: { tasks: [fixed("A", 5, 3), following("B", 2)], arrows: [arrow("A>B", "end-end", "linked")] },
+      taskId: "B",
+      dayOfMonth: 2,
+      expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-end", "linked")] },
+    },
+    {
+      name: "up a chain of linked tasks the task that is fixed on its day takes up the move",
+      plan: {
+        tasks: [fixed("A", 1, 3), following("B", 2), following("C", 4)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("B>C", "start-start", "linked")],
+      },
+      taskId: "C",
+      dayOfMonth: 6,
+      expected: {
+        tasks: [fixed("A", 3, 3), following("B", 2), following("C", 4)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("B>C", "start-start", "linked")],
+      },
+    },
+    {
+      name: "up a chain of linked tasks an in n d takes up the move: its n changes and the task before it stays",
+      plan: {
+        tasks: [fixed("A", 1, 3), following("B", 2), following("C", 4)],
+        arrows: [arrow("A>B", "end-start", 2), arrow("B>C", "end-start", "linked")],
+      },
+      taskId: "C",
+      dayOfMonth: 11,
+      expected: {
+        tasks: [fixed("A", 1, 3), following("B", 2), following("C", 4)],
+        arrows: [arrow("A>B", "end-start", 5), arrow("B>C", "end-start", "linked")],
+      },
+    },
+    {
+      name: "the move stops where an in n d up the chain would go under 0",
+      plan: {
+        tasks: [fixed("A", 1, 3), following("B", 2), following("C", 4)],
+        arrows: [arrow("A>B", "end-start", 2), arrow("B>C", "end-start", "linked")],
+      },
+      taskId: "C",
+      dayOfMonth: 1,
+      expected: {
+        tasks: [fixed("A", 1, 3), following("B", 2), following("C", 4)],
+        arrows: [arrow("A>B", "end-start", 0), arrow("B>C", "end-start", "linked")],
+      },
+    },
+    {
+      name: "a linked task goes no earlier than another arrow to it asks for",
+      plan: {
+        tasks: [fixed("A", 5, 3), fixed("X", 1, 3), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 2)],
+      },
+      taskId: "B",
+      dayOfMonth: 2,
+      expected: {
+        tasks: [fixed("A", 3, 3), fixed("X", 1, 3), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 2)],
+      },
+    },
+    {
+      name: "a linked arrow and an in n d that hold the task on the same day both take up the move",
+      plan: {
+        tasks: [fixed("A", 5, 3), fixed("X", 1, 3), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 4)],
+      },
+      taskId: "B",
+      dayOfMonth: 6,
+      expected: {
+        tasks: [fixed("A", 3, 3), fixed("X", 1, 3), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 2)],
+      },
+    },
+    {
+      name: "a task that two linked arrows hold takes both their tasks along",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 2, 2), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", "linked")],
+      },
+      taskId: "B",
+      dayOfMonth: 7,
+      expected: {
+        tasks: [fixed("A", 4, 3), fixed("X", 5, 2), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", "linked")],
+      },
+    },
+    {
+      name: "two linked chains that meet in one task move that task once",
+      plan: {
+        tasks: [fixed("R", 1, 2), following("A", 3), following("X", 3), following("B", 2)],
+        arrows: [
+          arrow("R>A", "start-start", "linked"),
+          arrow("R>X", "start-start", "linked"),
+          arrow("A>B", "end-start", "linked"),
+          arrow("X>B", "end-start", "linked"),
+        ],
+      },
+      taskId: "B",
+      dayOfMonth: 6,
+      expected: {
+        tasks: [fixed("R", 3, 2), following("A", 3), following("X", 3), following("B", 2)],
+        arrows: [
+          arrow("R>A", "start-start", "linked"),
+          arrow("R>X", "start-start", "linked"),
+          arrow("A>B", "end-start", "linked"),
+          arrow("X>B", "end-start", "linked"),
+        ],
+      },
+    },
+    {
+      name: "a link that is apart lets the task go earlier until its edges are together",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 3), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 5)],
+      },
+      taskId: "B",
+      dayOfMonth: 2,
+      expected: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 3), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 0)],
+      },
+    },
+    {
+      name: "the task a link leads from moves alone: the linked task follows by the plan, and nothing is changed for it",
+      plan: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+      taskId: "A",
+      dayOfMonth: 4,
+      expected: { tasks: [fixed("A", 4, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+    },
   ];
 
   it.each(cases)("$name", ({ plan, taskId, dayOfMonth, expected }) => {
@@ -89,7 +228,43 @@ describe("resizeTask", () => {
     tasks: [fixed("A", 1, 5), following("B", 2)],
     arrows: [arrow("A>B", "end-end")],
   };
+  const linkedAtStart: TPlan = {
+    tasks: [fixed("A", 1, 3), following("B", 3)],
+    arrows: [arrow("A>B", "end-start", "linked")],
+  };
+  const linkedAtEnd: TPlan = {
+    tasks: [fixed("A", 1, 5), following("B", 2)],
+    arrows: [arrow("A>B", "end-end", "linked")],
+  };
   const cases: { name: string; plan: TPlan; edge: TTaskEdge; toDay: string; expected: TPlan }[] = [
+    {
+      name: "the start edge that a link holds takes the task it is linked to along, and the end stays",
+      plan: linkedAtStart,
+      edge: "start",
+      toDay: day(5),
+      expected: { tasks: [fixed("A", 2, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+    },
+    {
+      name: "the end edge of a task that is linked at its start changes only its duration",
+      plan: linkedAtStart,
+      edge: "end",
+      toDay: day(8),
+      expected: { tasks: [fixed("A", 1, 3), following("B", 5)], arrows: [arrow("A>B", "end-start", "linked")] },
+    },
+    {
+      name: "the end edge that a link holds takes the task it is linked to along, and the start stays",
+      plan: linkedAtEnd,
+      edge: "end",
+      toDay: day(7),
+      expected: { tasks: [fixed("A", 3, 5), following("B", 4)], arrows: [arrow("A>B", "end-end", "linked")] },
+    },
+    {
+      name: "the start edge of a task that is linked at its end changes only its duration",
+      plan: linkedAtEnd,
+      edge: "start",
+      toDay: day(2),
+      expected: { tasks: [fixed("A", 1, 5), following("B", 4)], arrows: [arrow("A>B", "end-end", "linked")] },
+    },
     {
       name: "the end edge of a fixed task changes its duration",
       plan: { tasks: [fixed("B", 1, 3)], arrows: [] },
@@ -283,16 +458,46 @@ describe("addArrow", () => {
     plan: TPlan;
     previousId: string;
     nextId: string;
-    delay?: number;
+    delay?: TArrowDelay;
     expected: TPlan | TRefusal;
   }[] = [
     {
-      name: "a new arrow asks immediately, and its next task follows its arrows from then on",
+      name: "a new arrow between edges that are together is in 0 d, and its next task follows its arrows from then on",
       plan: { tasks: [fixed("A", 1, 3), fixed("B", 1, 2)], arrows: [] },
       previousId: "A",
       nextId: "B",
       expected: {
         tasks: [fixed("A", 1, 3), following("B", 2)],
+        arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: 0 }],
+      },
+    },
+    {
+      name: "a new arrow says the days there are between its edges, so that its next task stays where it is",
+      plan: { tasks: [fixed("A", 1, 3), fixed("B", 6, 2)], arrows: [] },
+      previousId: "A",
+      nextId: "B",
+      expected: {
+        tasks: [fixed("A", 1, 3), following("B", 2)],
+        arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: 5 }],
+      },
+    },
+    {
+      name: "a new arrow to a task that stands before its edge is in 0 d, which moves the task to the edge",
+      plan: { tasks: [fixed("A", 4, 3), fixed("B", 1, 2)], arrows: [] },
+      previousId: "A",
+      nextId: "B",
+      expected: {
+        tasks: [fixed("A", 4, 3), following("B", 2)],
+        arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: 0 }],
+      },
+    },
+    {
+      name: "a new arrow to a work item that is not on the timeline is in 0 d",
+      plan: { tasks: [fixed("A", 4, 3)], arrows: [] },
+      previousId: "A",
+      nextId: "B",
+      expected: {
+        tasks: [fixed("A", 4, 3)],
         arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: 0 }],
       },
     },
@@ -308,6 +513,17 @@ describe("addArrow", () => {
       },
     },
     {
+      name: "a new arrow that is given as linked is linked, whatever days there are",
+      plan: { tasks: [fixed("A", 1, 3), fixed("B", 6, 2)], arrows: [] },
+      previousId: "A",
+      nextId: "B",
+      delay: "linked",
+      expected: {
+        tasks: [fixed("A", 1, 3), following("B", 2)],
+        arrows: [{ id: "A:B", previousId: "A", nextId: "B", kind: "start-start", delay: "linked" }],
+      },
+    },
+    {
       name: "a second arrow into a task from another chain is not a loop",
       plan: {
         tasks: [fixed("A", 1, 3), fixed("C", 1, 1), following("B", 2)],
@@ -320,7 +536,7 @@ describe("addArrow", () => {
         arrows: [
           arrow("A>B", "end-start"),
           arrow("A>C", "end-start"),
-          { id: "C:B", previousId: "C", nextId: "B", kind: "start-start", delay: 0 },
+          { id: "C:B", previousId: "C", nextId: "B", kind: "start-start", delay: 3 },
         ],
       },
     },
@@ -364,18 +580,192 @@ describe("addArrow", () => {
   });
 });
 
+describe("getArrowMode", () => {
+  const cases: { name: string; plan: TPlan; expected: TArrowMode }[] = [
+    {
+      name: "an arrow without a delay whose next task follows it is linked",
+      plan: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+      expected: "linked",
+    },
+    {
+      name: "an arrow with a delay whose next task follows it is in n d, also with no days",
+      plan: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 0)] },
+      expected: "in",
+    },
+    {
+      name: "an arrow whose next task is fixed on its day is on, whatever it asks",
+      plan: { tasks: [fixed("A", 1, 3), fixed("B", 9, 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+      expected: "on",
+    },
+  ];
+
+  it.each(cases)("$name", ({ plan, expected }) => {
+    const actual = getArrowMode(plan, plan.arrows[0]);
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("setArrowMode", () => {
+  const linked: TPlan = { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] };
+  const inThreeDays: TPlan = { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 3)] };
+  const onLaterDay: TPlan = { tasks: [fixed("A", 1, 3), fixed("B", 9, 2)], arrows: [arrow("A>B", "end-start", 1)] };
+  const onEarlierDay: TPlan = { tasks: [fixed("A", 1, 3), fixed("B", 2, 2)], arrows: [arrow("A>B", "end-start", 1)] };
+  const cases: { name: string; plan: TPlan; mode: TArrowMode; expected: TPlan }[] = [
+    {
+      name: "linked to in gives in 0 d, which moves nothing",
+      plan: linked,
+      mode: "in",
+      expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 0)] },
+    },
+    {
+      name: "a link that is apart, turned to in, says the days it is apart, which moves nothing either",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 6), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 1)],
+      },
+      mode: "in",
+      expected: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 6), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", 4), arrow("X>B", "end-start", 1)],
+      },
+    },
+    {
+      name: "linked to on fixes the task on the day it stands on, and the arrow is still linked underneath",
+      plan: linked,
+      mode: "on",
+      expected: { tasks: [fixed("A", 1, 3), fixed("B", 4, 2)], arrows: [arrow("A>B", "end-start", "linked")] },
+    },
+    {
+      name: "in to linked brings the edges together",
+      plan: inThreeDays,
+      mode: "linked",
+      expected: linked,
+    },
+    {
+      name: "in to on fixes the task on the day it stands on, and the arrow keeps its days",
+      plan: inThreeDays,
+      mode: "on",
+      expected: { tasks: [fixed("A", 1, 3), fixed("B", 7, 2)], arrows: [arrow("A>B", "end-start", 3)] },
+    },
+    {
+      name: "on to in says the days there are, so that the task stays where it is",
+      plan: onLaterDay,
+      mode: "in",
+      expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 5)] },
+    },
+    {
+      name: "on to in for a task that stands before the edge is in 0 d, which moves it to the edge",
+      plan: onEarlierDay,
+      mode: "in",
+      expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 0)] },
+    },
+    {
+      name: "on to linked makes the task follow, linked",
+      plan: onLaterDay,
+      mode: "linked",
+      expected: linked,
+    },
+    {
+      name: "the mode an arrow has already changes nothing",
+      plan: inThreeDays,
+      mode: "in",
+      expected: inThreeDays,
+    },
+  ];
+
+  it.each(cases)("$name", ({ plan, mode, expected }) => {
+    const actual = setArrowMode(plan, "A>B", mode);
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("turnArrowMode", () => {
+  const plan: TPlan = { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] };
+  const cases: { name: string; directions: (1 | -1)[]; expected: TArrowMode[] }[] = [
+    {
+      name: "forward it goes from linked to in, to on, and to linked again",
+      directions: [1, 1, 1],
+      expected: ["in", "on", "linked"],
+    },
+    {
+      name: "backward it goes from linked to on, to in, and to linked again",
+      directions: [-1, -1, -1],
+      expected: ["on", "in", "linked"],
+    },
+  ];
+
+  it.each(cases)("$name", ({ directions, expected }) => {
+    const actual: TArrowMode[] = [];
+    let turned = plan;
+    for (const direction of directions) {
+      turned = turnArrowMode(turned, "A>B", direction);
+      actual.push(getArrowMode(turned, turned.arrows[0]));
+    }
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("a whole round moves nothing when the edges were together", () => {
+    const expected = computeSchedule(plan.tasks, plan.arrows).dates;
+
+    const turned = [1, 1, 1].reduce((turnedPlan) => turnArrowMode(turnedPlan, "A>B", 1), plan);
+    const actual = computeSchedule(turned.tasks, turned.arrows).dates;
+
+    expect(actual).toEqual(expected);
+  });
+});
+
+describe("getLatestArrowId", () => {
+  const cases: { name: string; plan: TPlan; expected: string | undefined }[] = [
+    {
+      name: "of a task that follows its arrows it is the arrow that decides its day",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 6), following("B", 2)],
+        arrows: [arrow("A>B", "end-start", 1), arrow("X>B", "end-start", 0)],
+      },
+      expected: "X>B",
+    },
+    {
+      name: "of a task that is fixed on its day it is the arrow that asks for the latest day",
+      plan: {
+        tasks: [fixed("A", 1, 3), fixed("X", 1, 6), fixed("B", 20, 2)],
+        arrows: [arrow("A>B", "end-start", 9), arrow("X>B", "end-start", 0)],
+      },
+      expected: "A>B",
+    },
+    {
+      name: "a task to which no arrow leads from the timeline has none",
+      plan: { tasks: [fixed("B", 20, 2)], arrows: [arrow("A>B", "end-start", 9)] },
+      expected: undefined,
+    },
+  ];
+
+  it.each(cases)("$name", ({ plan, expected }) => {
+    const actual = getLatestArrowId(plan.arrows, computeSchedule(plan.tasks, plan.arrows), "B");
+
+    expect(actual).toEqual(expected);
+  });
+});
+
 describe("changeArrow", () => {
   const plan: TPlan = { tasks: [fixed("A", 1, 3), fixed("B", 9, 2)], arrows: [arrow("A>B", "end-start", 1)] };
-  const cases: { name: string; change: { kind?: TArrowKind; delay?: number }; expected: TPlan }[] = [
+  const cases: { name: string; change: { kind?: TArrowKind; delay?: TArrowDelay }; expected: TPlan }[] = [
     {
       name: "a delay is set on the arrow and makes its next task follow its arrows",
       change: { delay: 4 },
       expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 4)] },
     },
     {
-      name: "the delay immediately is set as any other",
+      name: "no days is a delay as any other",
       change: { delay: 0 },
       expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", 0)] },
+    },
+    {
+      name: "linked is set as a delay is, and makes its next task follow its arrows",
+      change: { delay: "linked" },
+      expected: { tasks: [fixed("A", 1, 3), following("B", 2)], arrows: [arrow("A>B", "end-start", "linked")] },
     },
     {
       name: "a kind alone changes the arrow and leaves its delay and its next task as they are",

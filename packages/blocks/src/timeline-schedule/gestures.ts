@@ -4,14 +4,17 @@
  * See the LICENSE file for details.
  */
 
-import { computeSchedule } from "./compute-schedule";
+import { computeSchedule, getDelayDays } from "./compute-schedule";
 import { toDay, toDayNumber } from "./days";
 import type {
+  TArrowDelay,
   TArrowKind,
+  TArrowMode,
   TConflict,
   TDay,
   TPlan,
   TRefusal,
+  TSchedule,
   TScheduleArrow,
   TScheduleTask,
   TTaskEdge,
@@ -50,40 +53,57 @@ export function getArrowKind(previousEdge: TTaskEdge, nextEdge: TTaskEdge): TArr
 
 /**
  * Moves the given edges of a task to the day. Of a fixed task the day or the duration changes. A task that
- * follows its arrows stands where they ask, so the delay of its deciding arrow changes when that arrow constrains
- * a moved edge. A moved edge goes no earlier than its other arrows ask for, nor before "immediately" on the
- * deciding arrow; the other arrows keep their delay. One edge alone stops where the task is one day long.
+ * follows its arrows stands where they ask, so something else has to take up the move, for each arrow that holds
+ * a moved edge where it is:
+ * - a linked arrow keeps its two edges together, so its previous task goes along as a whole, by this same rule,
+ *   up a chain of linked tasks until a fixed task or an "in n d" takes up the move;
+ * - of the deciding arrow, when it is "in n d", the n changes.
+ * A moved edge goes no earlier than its other arrows ask for, nor before "in 0 d" on an arrow whose n changes,
+ * here or up the chain. One edge alone stops where the task is one day long.
  */
 function moveEdges(plan: TPlan, taskId: string, edges: TTaskEdge[], day: TDay): TPlan {
   const task = getTask(plan, taskId);
   const schedule = computeSchedule(plan.tasks, plan.arrows);
-  const decidingArrowId = schedule.decidingArrowId[taskId];
   const moves = (edge: TTaskEdge) => edges.includes(edge);
   let earliest = moves("start") ? -Infinity : 1 - task.duration;
   const latest = moves("end") ? Infinity : task.duration - 1;
-  if (task.start === "anchor")
+  // what takes up the move: fixed tasks up the linked chains, and "in n d" arrows
+  const movedTaskIds = new Set<string>();
+  const changedArrowIds = new Set<string>();
+  const seenIds = new Set<string>();
+  const follow = (id: string, isMoved: (edge: TTaskEdge) => boolean) => {
+    if (seenIds.has(id)) return;
+    seenIds.add(id);
     for (const arrow of plan.arrows) {
-      if (arrow.nextId !== taskId || !(arrow.id in schedule.gaps) || !moves(getConstrainedEdge(arrow.kind))) continue;
-      const room = arrow.id === decidingArrowId ? arrow.delay : schedule.gaps[arrow.id] - arrow.delay;
-      earliest = Math.max(earliest, -room);
+      if (arrow.nextId !== id || !(arrow.id in schedule.gaps) || !isMoved(getConstrainedEdge(arrow.kind))) continue;
+      // the days the task stands after what this arrow asks for
+      const room = schedule.gaps[arrow.id] - getDelayDays(arrow.delay);
+      if (arrow.delay === "linked" && room === 0) {
+        if (getTask(plan, arrow.previousId).start === "anchor") follow(arrow.previousId, () => true);
+        else movedTaskIds.add(arrow.previousId);
+      } else if (arrow.delay !== "linked" && arrow.id === schedule.decidingArrowId[id]) {
+        changedArrowIds.add(arrow.id);
+        earliest = Math.max(earliest, -arrow.delay);
+      } else earliest = Math.max(earliest, -room);
     }
+  };
+  if (task.start === "anchor") follow(taskId, moves);
   const wanted = toDayNumber(day) - toDayNumber(schedule.dates[taskId][edges[0]]);
   const days = Math.min(latest, Math.max(earliest, wanted));
+  const moveStart = (start: TTaskStart): TTaskStart =>
+    start === "anchor" ? start : { at: toDay(toDayNumber(start.at) + days) };
   return {
-    tasks: plan.tasks.map((other) =>
-      other === task
-        ? {
-            ...task,
-            duration: task.duration + (moves("end") ? days : 0) - (moves("start") ? days : 0),
-            start:
-              task.start !== "anchor" && moves("start") ? { at: toDay(toDayNumber(task.start.at) + days) } : task.start,
-          }
-        : other
-    ),
+    tasks: plan.tasks.map((other) => {
+      if (other === task)
+        return {
+          ...task,
+          duration: task.duration + (moves("end") ? days : 0) - (moves("start") ? days : 0),
+          start: moves("start") ? moveStart(task.start) : task.start,
+        };
+      return movedTaskIds.has(other.id) ? { ...other, start: moveStart(other.start) } : other;
+    }),
     arrows: plan.arrows.map((arrow) =>
-      arrow.id === decidingArrowId && moves(getConstrainedEdge(arrow.kind))
-        ? { ...arrow, delay: arrow.delay + days }
-        : arrow
+      changedArrowIds.has(arrow.id) ? { ...arrow, delay: getDelayDays(arrow.delay) + days } : arrow
     ),
   };
 }
@@ -115,32 +135,39 @@ const leadsTo = (arrows: TScheduleArrow[], fromId: string, toId: string): boolea
 };
 
 /**
- * An arrow drawn between two bars: it asks "immediately" unless it is given a delay, and its next task follows
- * its arrows from now on. Refused between a task and itself, between tasks that have an arrow in this direction,
- * and when it would close a loop. The new arrow's id lasts until the plan is saved; the server gives it another.
+ * An arrow drawn between two bars. It says what is there: "in n d" with the days between its two edges at this
+ * moment, so that drawing it moves nothing; only a next task that stands before the edge moves, to "in 0 d". A
+ * given delay is taken as it is. The next task follows its arrows from now on. Refused between a task and
+ * itself, between tasks that have an arrow in this direction, and when it would close a loop. The new arrow's id
+ * lasts until the plan is saved; the server gives it another.
  */
 export function addArrow(
   plan: TPlan,
   previousId: string,
   nextId: string,
   kind: TArrowKind,
-  delay = 0
+  delay?: TArrowDelay
 ): TPlan | TRefusal {
   if (previousId === nextId) return { refused: "same-task" };
   if (plan.arrows.some((arrow) => arrow.previousId === previousId && arrow.nextId === nextId))
     return { refused: "already-connected" };
   if (leadsTo(plan.arrows, nextId, previousId)) return { refused: "loop" };
+  const arrow = { id: `${previousId}:${nextId}`, previousId, nextId, kind };
+  // The gap of an arrow that asks "in 0 d" is the days there are. An arrow to or from a work item without dates
+  // has none.
+  const getDaysThere = () =>
+    Math.max(computeSchedule(plan.tasks, [...plan.arrows, { ...arrow, delay: 0 }]).gaps[arrow.id] ?? 0, 0);
   return {
     tasks: setStart(plan, nextId, "anchor").tasks,
-    arrows: [...plan.arrows, { id: `${previousId}:${nextId}`, previousId, nextId, kind, delay }],
+    arrows: [...plan.arrows, { ...arrow, delay: delay ?? getDaysThere() }],
   };
 }
 
 /**
- * A new kind (an end of the arrow dragged to the other edge of the same bar) or a new delay ("immediately" is 0).
- * Setting a delay makes the next task follow its arrows.
+ * A new kind (an end of the arrow dragged to the other edge of the same bar) or a new delay, "linked" or the n of
+ * "in n d". Setting a delay makes the next task follow its arrows.
  */
-export function changeArrow(plan: TPlan, arrowId: string, change: { kind?: TArrowKind; delay?: number }): TPlan {
+export function changeArrow(plan: TPlan, arrowId: string, change: { kind?: TArrowKind; delay?: TArrowDelay }): TPlan {
   const arrow = getArrow(plan, arrowId);
   return {
     tasks: change.delay === undefined ? plan.tasks : setStart(plan, arrow.nextId, "anchor").tasks,
@@ -148,6 +175,48 @@ export function changeArrow(plan: TPlan, arrowId: string, change: { kind?: TArro
       other === arrow ? { ...arrow, kind: change.kind ?? arrow.kind, delay: change.delay ?? arrow.delay } : other
     ),
   };
+}
+
+/** How an arrow holds its next task. */
+export const getArrowMode = (plan: TPlan, arrow: TScheduleArrow): TArrowMode =>
+  getTask(plan, arrow.nextId).start !== "anchor" ? "on" : arrow.delay === "linked" ? "linked" : "in";
+
+/**
+ * Sets how an arrow holds its next task, and moves as little as that allows. "linked" brings the two edges
+ * together, which moves the task when it stood apart. "in" says the days there are between the edges, none for
+ * a link whose edges were together, so that only a task that stood before the edge moves. "on" fixes the task on
+ * the day it stands on; the arrow keeps what it asked.
+ */
+export function setArrowMode(plan: TPlan, arrowId: string, mode: TArrowMode): TPlan {
+  const arrow = getArrow(plan, arrowId);
+  const current = getArrowMode(plan, arrow);
+  if (mode === current) return plan;
+  if (mode === "linked") return changeArrow(plan, arrowId, { delay: "linked" });
+  const schedule = computeSchedule(plan.tasks, plan.arrows);
+  if (mode === "on") return setStart(plan, arrow.nextId, { at: schedule.dates[arrow.nextId].start });
+  return changeArrow(plan, arrowId, { delay: Math.max(schedule.gaps[arrowId], 0) });
+}
+
+const MODES: TArrowMode[] = ["linked", "in", "on"];
+
+/** The wheel on what an arrow is: a step round linked, in, on and linked again, or the other way. */
+export function turnArrowMode(plan: TPlan, arrowId: string, direction: 1 | -1): TPlan {
+  const index = MODES.indexOf(getArrowMode(plan, getArrow(plan, arrowId)));
+  return setArrowMode(plan, arrowId, MODES[(index + direction + MODES.length) % MODES.length]);
+}
+
+/**
+ * Of the arrows that lead to a task, the one that asks for the latest day. It decides where the task stands when
+ * the task follows its arrows; of a task that is fixed on its day it is the one that would.
+ */
+export function getLatestArrowId(arrows: TScheduleArrow[], schedule: TSchedule, taskId: string): string | undefined {
+  let latest: { id: string; room: number } | undefined;
+  for (const arrow of arrows) {
+    if (arrow.nextId !== taskId || !(arrow.id in schedule.gaps)) continue;
+    const room = schedule.gaps[arrow.id] - getDelayDays(arrow.delay);
+    if (!latest || room < latest.room) latest = { id: arrow.id, room };
+  }
+  return latest?.id;
 }
 
 /**
@@ -158,8 +227,10 @@ export function changeArrow(plan: TPlan, arrowId: string, change: { kind?: TArro
 export function removeTask(plan: TPlan, taskId: string): TPlan {
   const schedule = computeSchedule(plan.tasks, plan.arrows);
   const arrows = plan.arrows.filter((arrow) => arrow.previousId !== taskId && arrow.nextId !== taskId);
-  // an arrow whose gap is its delay asks for exactly the day its next task stands on
-  const heldIds = new Set(arrows.flatMap((arrow) => (schedule.gaps[arrow.id] === arrow.delay ? [arrow.nextId] : [])));
+  // an arrow whose gap is the days it asks for asks for exactly the day its next task stands on
+  const heldIds = new Set(
+    arrows.flatMap((arrow) => (schedule.gaps[arrow.id] === getDelayDays(arrow.delay) ? [arrow.nextId] : []))
+  );
   return {
     tasks: plan.tasks.flatMap((task) => {
       if (task.id === taskId) return [];

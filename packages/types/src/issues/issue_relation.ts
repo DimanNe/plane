@@ -31,8 +31,9 @@ export type TTimelineDependency = {
   predecessor_id: string;
   dependent_id: string;
   relation_type: TTimelineDependencyTypes;
-  // days the dependency keeps between its work items on the timeline, 0 for none
-  delay: number;
+  // What the dependency asks on the timeline: `null` when its two work items are linked and move as one, else
+  // the days it keeps between them, from 0 up.
+  delay: number | null;
 };
 
 /** A work item at an end of a dependency, as `timeline-dependencies/` lists it. */

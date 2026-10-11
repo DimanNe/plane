@@ -5,7 +5,10 @@
  */
 
 import { toDay, toDayNumber } from "./days";
-import type { TConflict, TSchedule, TScheduleArrow, TScheduleTask } from "./types";
+import type { TApartLink, TArrowDelay, TConflict, TSchedule, TScheduleArrow, TScheduleTask } from "./types";
+
+/** The days an arrow asks for: a linked arrow asks for the same day as "in 0 d". */
+export const getDelayDays = (delay: TArrowDelay): number => (delay === "linked" ? 0 : delay);
 
 /** An arrow between two tasks of the timeline: their places in `tasks`, and the start it asks of the next one. */
 type TLink = { arrow: TScheduleArrow; previous: number; next: number; askedStart: number };
@@ -55,10 +58,16 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
     for (const link of incoming[index]) {
       const { kind, delay } = link.arrow;
       const anchor = start[link.previous] + (kind === "start-start" ? 0 : tasks[link.previous].duration - 1);
-      // end -> start asks for the day after the anchor, so that "immediately" makes the bars touch;
+      // end -> start asks for the day after the anchor, so that with no days between them the bars touch;
       // end -> end asks for the end, and the start follows from the duration
-      link.askedStart = anchor + delay + (kind === "end-start" ? 1 : kind === "end-end" ? 1 - task.duration : 0);
-      if (!deciding || link.askedStart > deciding.askedStart) deciding = link;
+      link.askedStart =
+        anchor + getDelayDays(delay) + (kind === "end-start" ? 1 : kind === "end-end" ? 1 - task.duration : 0);
+      // Of two arrows that ask for the same day the "in n d" decides: it is the one whose n a move of the task
+      // changes, while a linked arrow takes its previous task along whether it decides or not.
+      const isLater = !deciding || link.askedStart > deciding.askedStart;
+      const isSameDayInDays =
+        deciding?.askedStart === link.askedStart && deciding.arrow.delay === "linked" && delay !== "linked";
+      if (isLater || isSameDayInDays) deciding = link;
     }
     if (task.start !== "anchor") start[index] = toDayNumber(task.start.at);
     else if (deciding) {
@@ -74,10 +83,14 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
 
   const gaps: TSchedule["gaps"] = {};
   const conflicts: TConflict[] = [];
+  const apartLinks: TApartLink[] = [];
   for (const { arrow, next, askedStart } of links) {
-    const gap = arrow.delay + start[next] - askedStart;
+    const gap = getDelayDays(arrow.delay) + start[next] - askedStart;
     gaps[arrow.id] = gap;
     const task = tasks[next];
+    const heldByArrowId = decidingArrowId[task.id];
+    if (arrow.delay === "linked" && heldByArrowId && askedStart < start[next])
+      apartLinks.push({ arrowId: arrow.id, taskId: task.id, days: gap, heldByArrowId });
     if (task.start === "anchor" || askedStart <= start[next]) continue;
     const askedDay = toDay(askedStart);
     conflicts.push({
@@ -141,6 +154,7 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
     decidingArrowId,
     gaps,
     conflicts,
+    apartLinks,
     slack,
     criticalTaskIds: tasks.filter((_task, index) => isCritical(index)).map((task) => task.id),
     criticalArrowIds: links

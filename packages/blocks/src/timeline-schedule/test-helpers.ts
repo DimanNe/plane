@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { TArrowKind, TDay, TSchedule, TScheduleArrow, TScheduleTask } from "./types";
+import type { TArrowDelay, TArrowKind, TDay, TSchedule, TScheduleArrow, TScheduleTask } from "./types";
 
 /** A day of January 2026. */
 export const day = (dayOfMonth: number): TDay => `2026-01-${String(dayOfMonth).padStart(2, "0")}`;
@@ -18,7 +18,7 @@ export const fixed = (id: string, dayOfMonth: number, duration: number): TSchedu
 export const following = (id: string, duration: number): TScheduleTask => ({ id, duration, start: "anchor" });
 
 /** An arrow named by its tasks, "A>B" from A to B; the name is its id. */
-export const arrow = (name: string, kind: TArrowKind, delay = 0): TScheduleArrow => {
+export const arrow = (name: string, kind: TArrowKind, delay: TArrowDelay = 0): TScheduleArrow => {
   const [previousId, nextId] = name.split(">");
   return { id: name, previousId, nextId, kind, delay };
 };
@@ -33,6 +33,7 @@ export const PLAIN_SCHEDULE: TSchedule = {
   decidingArrowId: {},
   gaps: {},
   conflicts: [],
+  apartLinks: [],
   slack: {},
   criticalTaskIds: [],
   criticalArrowIds: [],

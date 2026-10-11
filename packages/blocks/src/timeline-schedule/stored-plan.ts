@@ -28,7 +28,7 @@ const toArrow = (dependency: TTimelineDependency): TScheduleArrow => ({
   previousId: dependency.predecessor_id,
   nextId: dependency.dependent_id,
   kind: KIND_BY_RELATION_TYPE[dependency.relation_type],
-  delay: dependency.delay,
+  delay: dependency.delay ?? "linked",
 });
 
 /**
@@ -83,7 +83,7 @@ export function getChanges(issues: TStoredTask[], dependencies: TTimelineDepende
         predecessor_id: arrow.previousId,
         dependent_id: arrow.nextId,
         relation_type: RELATION_TYPE_BY_KIND[arrow.kind],
-        delay: arrow.delay,
+        delay: arrow.delay === "linked" ? null : arrow.delay,
       })),
     removed_dependencies: [...storedArrows.values()]
       .filter((stored) => kindInPlan.get(stored.id) !== stored.kind)

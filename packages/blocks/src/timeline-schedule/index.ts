@@ -4,23 +4,30 @@
  * See the LICENSE file for details.
  */
 
-export { computeSchedule, getConflictCause } from "./compute-schedule";
+export { computeSchedule, getConflictCause, getDelayDays } from "./compute-schedule";
 export {
   addArrow,
   applyWayOut,
   changeArrow,
   fixNextTask,
   getArrowKind,
+  getArrowMode,
+  getLatestArrowId,
   moveTask,
   placeTask,
   removeArrow,
   removeTask,
   resizeTask,
+  setArrowMode,
+  turnArrowMode,
 } from "./gestures";
 export { getChanges, getPlan } from "./stored-plan";
 export type { TStoredTask } from "./stored-plan";
 export type {
+  TApartLink,
+  TArrowDelay,
   TArrowKind,
+  TArrowMode,
   TConflict,
   TDay,
   TPlan,

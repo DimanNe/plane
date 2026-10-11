@@ -21,7 +21,11 @@ const issue = (id: string, start: number | null, target: number | null, is_start
 });
 
 /** A stored dependency named by its work items, "A>B" from the predecessor A; the name is its id. */
-const dependency = (name: string, relation_type: TTimelineDependencyTypes, delay = 0): TTimelineDependency => {
+const dependency = (
+  name: string,
+  relation_type: TTimelineDependencyTypes,
+  delay: number | null = 0
+): TTimelineDependency => {
   const [predecessor_id, dependent_id] = name.split(">");
   return { id: name, predecessor_id, dependent_id, relation_type, delay };
 };
@@ -52,6 +56,12 @@ describe("getPlan", () => {
         tasks: [],
         arrows: [arrow("A>B", "end-start", 1), arrow("A>C", "start-start", 2), arrow("A>D", "end-end", 3)],
       },
+    },
+    {
+      name: "a dependency without a delay is a linked arrow, and one with no days is in 0 d",
+      issues: [],
+      dependencies: [dependency("A>B", "blocking", null), dependency("A>C", "blocking", 0)],
+      expected: { tasks: [], arrows: [arrow("A>B", "end-start", "linked"), arrow("A>C", "end-start", 0)] },
     },
     {
       name: "a work item whose start is not fixed follows its arrows when one leads to it from a task",
@@ -141,6 +151,14 @@ describe("getChanges", () => {
         ...nothing,
         dependencies: [{ predecessor_id: "A", dependent_id: "B", relation_type: "blocking", delay: 2 }],
         issues: [{ id: "B", start_date: day(6), target_date: day(7), is_start_fixed: false }],
+      },
+    },
+    {
+      name: "an arrow that became linked is saved as the dependency without a delay",
+      changed: changeArrow(plan, "A>B", { delay: "linked" }),
+      expected: {
+        ...nothing,
+        dependencies: [{ predecessor_id: "A", dependent_id: "B", relation_type: "blocking", delay: null }],
       },
     },
     {
