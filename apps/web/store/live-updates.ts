@@ -10,6 +10,8 @@ import { mutate } from "swr";
 // plane imports
 import { LIVE_BASE_PATH, LIVE_BASE_URL } from "@plane/constants";
 import type { TIssue } from "@plane/types";
+// helpers
+import { parseWorkItemsAddress } from "@/helpers/work-items-address.helper";
 // store
 import { rootStore } from "@/lib/store-context";
 // services
@@ -44,8 +46,11 @@ const getListOnScreen = () => {
   const { workspaceSlug, projectId } = rootStore.router;
   const store = rootStore.issue.projectIssues;
   const options = store.paginationOptions;
-  // On the other pages of the project the store still holds the list of the last visit.
-  const isListPage = window.location.pathname.replace(/\/$/, "").endsWith(`/projects/${projectId}/issues`);
+  // On the other pages of the project the store still holds the list of the last visit. The browser shows the
+  // list page under its short address, or under the router's own for a moment after it is opened.
+  const { pathname } = window.location;
+  const isListPage =
+    !!parseWorkItemsAddress(pathname) || pathname.replace(/\/$/, "").endsWith(`/projects/${projectId}/issues`);
   if (!workspaceSlug || !projectId || !isListPage || !options) return;
   const params = rootStore.issue.projectIssuesFilter.getFilterParams(
     options,

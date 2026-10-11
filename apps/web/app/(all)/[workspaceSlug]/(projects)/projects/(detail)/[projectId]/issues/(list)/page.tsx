@@ -10,6 +10,7 @@ import { useTranslation } from "@plane/i18n";
 // components
 import { PageHead } from "@/components/core/page-title";
 import { ProjectLayoutRoot } from "@/components/issues/issue-layouts/roots/project-layout-root";
+import { ProjectWorkItemsAddress } from "@/components/issues/work-items-address";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import type { Route } from "./+types/page";
@@ -28,6 +29,7 @@ function ProjectIssuesPage({ params }: Route.ComponentProps) {
   return (
     <>
       <PageHead title={pageTitle} />
+      <ProjectWorkItemsAddress />
       <div className="h-full w-full">
         <ProjectLayoutRoot />
       </div>
