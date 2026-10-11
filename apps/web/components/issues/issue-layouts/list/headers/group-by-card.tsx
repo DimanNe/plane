@@ -4,25 +4,15 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { CircleDashed } from "lucide-react";
-import { AddOutline } from "@makeplane/propel/icons";
 // types
-import { setToast } from "@plane/blocks/toast";
-import type { TIssue, ISearchIssueResponse, TIssueGroupByOptions } from "@plane/types";
-import { useTranslation } from "@plane/i18n";
-// ui
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@makeplane/propel/components/menu";
+import type { TIssueGroupByOptions } from "@plane/types";
 // components
 import { cn } from "@plane/utils";
-import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { MultipleSelectGroupAction } from "@/components/core/multiple-select";
-import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
-import { CreateUpdateEpicModal } from "@/components/epic-modal";
 // constants
-import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 
 interface IHeaderGroupByCard {
@@ -31,67 +21,21 @@ interface IHeaderGroupByCard {
   icon?: React.ReactNode;
   title: string;
   count: number;
-  issuePayload: Partial<TIssue>;
   canEditProperties: (projectId: string | undefined) => boolean;
-  disableIssueCreation?: boolean;
-  addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   selectionHelpers: TSelectionHelper;
   handleCollapsedGroups: (value: string) => void;
-  isEpic?: boolean;
-  quickAddChip?: React.ReactNode;
+  quickAddButton?: React.ReactNode;
 }
 
 export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHeaderGroupByCard) {
-  const {
-    groupID,
-    icon,
-    title,
-    count,
-    issuePayload,
-    canEditProperties,
-    disableIssueCreation,
-    addIssuesToView,
-    selectionHelpers,
-    handleCollapsedGroups,
-    isEpic = false,
-    quickAddChip,
-  } = props;
-  // plane hooks
-  const { t } = useTranslation();
-  // states
-  const [isOpen, setIsOpen] = useState(false);
-  const [openExistingIssueListModal, setOpenExistingIssueListModal] = useState(false);
+  const { groupID, icon, title, count, canEditProperties, selectionHelpers, handleCollapsedGroups, quickAddButton } =
+    props;
   // router
-  const { workspaceSlug, projectId, moduleId, cycleId } = useParams();
-  const storeType = useIssueStoreType();
+  const { projectId } = useParams();
   // derived values
-  const renderExistingIssueModal = moduleId || cycleId;
-  const existingIssuesListModalPayload = moduleId ? { module: moduleId.toString() } : { cycle: true };
   const isGroupSelectionEmpty = selectionHelpers.isGroupSelected(groupID) === "empty";
   // auth
   const canSelectIssues = canEditProperties(projectId?.toString()) && !selectionHelpers.isSelectionDisabled;
-
-  const handleAddIssuesToView = async (data: ISearchIssueResponse[]) => {
-    if (!workspaceSlug || !projectId) return;
-
-    const issues = data.map((i) => i.id);
-
-    try {
-      await addIssuesToView?.(issues);
-
-      setToast({
-        type: "success",
-        title: "Success!",
-        message: "Work items added to the cycle successfully.",
-      });
-    } catch (_error) {
-      setToast({
-        type: "error",
-        title: "Error!",
-        message: "Selected work items could not be added to the cycle. Please try again.",
-      });
-    }
-  };
 
   return (
     <>
@@ -122,73 +66,9 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
         >
           <div className="line-clamp-1 inline-block truncate font-medium text-primary">{title}</div>
           <div className="pl-2 text-13 font-medium text-tertiary">{count || 0}</div>
-          {quickAddChip}
+          {quickAddButton}
           <div className="px-2.5"></div>
         </div>
-
-        {!disableIssueCreation &&
-          (renderExistingIssueModal ? (
-            <Menu>
-              <MenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={t("common.add")}
-                    className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xs transition-all hover:bg-layer-1"
-                  >
-                    <AddOutline className="h-3.5 w-3.5" />
-                  </button>
-                }
-              />
-              <MenuContent side="bottom" align="start">
-                <MenuItem
-                  label="Create work item"
-                  onClick={() => {
-                    setIsOpen(true);
-                  }}
-                />
-                <MenuItem
-                  label="Add an existing work item"
-                  onClick={() => {
-                    setOpenExistingIssueListModal(true);
-                  }}
-                />
-              </MenuContent>
-            </Menu>
-          ) : (
-            <button
-              type="button"
-              aria-label={t("common.add")}
-              className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xs transition-all hover:bg-layer-1"
-              onClick={() => {
-                setIsOpen(true);
-              }}
-            >
-              <AddOutline width={14} />
-            </button>
-          ))}
-
-        {isEpic ? (
-          <CreateUpdateEpicModal isOpen={isOpen} onClose={() => setIsOpen(false)} data={issuePayload} />
-        ) : (
-          <CreateUpdateIssueModal
-            isOpen={isOpen}
-            onClose={() => setIsOpen(false)}
-            data={issuePayload}
-            storeType={storeType}
-          />
-        )}
-
-        {renderExistingIssueModal && (
-          <ExistingIssuesListModal
-            workspaceSlug={workspaceSlug?.toString()}
-            projectId={projectId?.toString()}
-            isOpen={openExistingIssueListModal}
-            handleClose={() => setOpenExistingIssueListModal(false)}
-            searchParams={existingIssuesListModalPayload}
-            handleOnSubmit={handleAddIssuesToView}
-          />
-        )}
       </div>
     </>
   );

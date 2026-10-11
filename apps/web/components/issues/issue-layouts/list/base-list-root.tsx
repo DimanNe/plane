@@ -41,21 +41,13 @@ type ListStoreType =
 
 interface IBaseListRoot {
   QuickActions: FC<IQuickActionProps>;
-  addIssuesToView?: (issueIds: string[]) => Promise<any>;
   canEditPropertiesBasedOnProject?: (projectId: string) => boolean;
   viewId?: string | undefined;
   isCompletedCycle?: boolean;
   isEpic?: boolean;
 }
 export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot) {
-  const {
-    QuickActions,
-    viewId,
-    addIssuesToView,
-    canEditPropertiesBasedOnProject,
-    isCompletedCycle = false,
-    isEpic = false,
-  } = props;
+  const { QuickActions, viewId, canEditPropertiesBasedOnProject, isCompletedCycle = false, isEpic = false } = props;
   // router
   const storeType = useIssueStoreType() as ListStoreType;
   //stores
@@ -171,7 +163,6 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
           enableIssueQuickAdd={!!enableQuickAdd}
           canEditProperties={canEditProperties}
           disableIssueCreation={!enableIssueCreation || !isEditingAllowed}
-          addIssuesToView={addIssuesToView}
           isCompletedCycle={isCompletedCycle}
           handleOnDrop={handleOnDrop}
           handleCollapsedGroups={handleCollapsedGroups}

@@ -40,7 +40,7 @@ import type { GroupDropLocation } from "../utils";
 import { getIssueBlockId, getSourceFromDropPayload, highlightIssueOnDrop } from "../utils";
 import { IssueBlocksList } from "./blocks-list";
 import { HeaderGroupByCard } from "./headers/group-by-card";
-import { ListGroupQuickAddChip } from "./headers/quick-add-chip";
+import { ListGroupQuickAddButton } from "./headers/quick-add-button";
 import { highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
 import { getListDropLocation } from "./utils";
@@ -61,7 +61,6 @@ interface Props {
   quickAddCallback?: ((projectId: string | null | undefined, data: TIssue) => Promise<TIssue | undefined>) | undefined;
   handleOnDrop: (source: GroupDropLocation, destination: GroupDropLocation) => Promise<void>;
   disableIssueCreation?: boolean;
-  addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   isCompletedCycle?: boolean;
   showEmptyGroup?: boolean;
   loadMoreIssues: (groupId?: string) => void;
@@ -88,7 +87,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     quickAddCallback,
     handleOnDrop,
     disableIssueCreation,
-    addIssuesToView,
     isCompletedCycle,
     showEmptyGroup,
     loadMoreIssues,
@@ -284,18 +282,12 @@ export const ListGroup = observer(function ListGroup(props: Props) {
             icon={group.icon}
             title={group.name}
             count={groupIssueCount}
-            issuePayload={group.payload}
             canEditProperties={canEditProperties}
-            disableIssueCreation={
-              disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
-            }
-            addIssuesToView={addIssuesToView}
             selectionHelpers={selectionHelpers}
             handleCollapsedGroups={handleCollapsedGroups}
-            isEpic={isEpic}
-            quickAddChip={
+            quickAddButton={
               isQuickAddAllowed && (
-                <ListGroupQuickAddChip
+                <ListGroupQuickAddButton
                   isEpic={isEpic}
                   onClick={() => {
                     if (!isExpanded) handleCollapsedGroups(group.id);
