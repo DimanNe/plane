@@ -3,11 +3,14 @@
 # See the LICENSE file for details.
 
 import datetime
+import importlib
 import json
+import types
 import typing as t
 import unittest.mock as mock
 import uuid
 
+import django.apps as django_apps
 import pytest
 import rest_framework.response as api_response
 import rest_framework.test as api_test
@@ -74,7 +77,7 @@ def get_relations() -> t.Set[t.Tuple[str, uuid.UUID, uuid.UUID]]:
 
 
 def create_relation(
-    issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue, delay: int = 0
+    issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue, delay: t.Optional[int] = 0
 ) -> db_models.IssueRelation:
     return db_models.IssueRelation.objects.create(
         project=issue.project, issue=issue, relation_type=relation_type, related_issue=related_issue, delay=delay
@@ -146,6 +149,65 @@ def test_create_relation_stores_each_dependency_in_one_direction(
 
     assert response.status_code == 201, response.content
     assert get_relations() == {(stored_relation_type, b.id, a.id) if is_reverse else (stored_relation_type, a.id, b.id)}
+
+
+def test_create_relation_without_a_delay_asks_for_no_days_and_links_nothing(
+    project: db_models.Project, session_client: api_test.APIClient
+) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    b: db_models.Issue = create_issue(project, "B")
+
+    response: api_response.Response = session_client.post(
+        get_url(project, f"issues/{a.id}/issue-relation/"),
+        {"relation_type": "blocking", "issues": [str(b.id)]},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+    assert get_stored_relations() == {("blocked_by", "B", "A", 0)}
+
+
+@pytest.mark.parametrize(
+    "step, expected_relations",
+    [
+        pytest.param(
+            "link_dependencies_without_days",
+            {
+                ("blocked_by", "B", "A", None),
+                ("start_before", "A", "C", None),
+                ("finish_before", "A", "D", 2),
+                ("relates_to", "A", "E", 0),
+                ("blocked_by", "F", "A", None),
+            },
+            id="forward-dependencies-with-0-days-become-linked",
+        ),
+        pytest.param(
+            "give_linked_dependencies_no_days",
+            {
+                ("blocked_by", "B", "A", 0),
+                ("start_before", "A", "C", 0),
+                ("finish_before", "A", "D", 2),
+                ("relates_to", "A", "E", 0),
+                ("blocked_by", "F", "A", 0),
+            },
+            id="backward-linked-dependencies-get-0-days",
+        ),
+    ],
+)
+def test_migration_to_linked_dependencies_changes_the_delay_of_dependencies_only(
+    project: db_models.Project, step: str, expected_relations: t.Set[t.Tuple[str, str, str, t.Optional[int]]]
+) -> None:
+    issues: t.Dict[str, db_models.Issue] = {name: create_issue(project, name) for name in "ABCDEF"}
+    create_relation(issues["B"], "blocked_by", issues["A"], delay=0)
+    create_relation(issues["A"], "start_before", issues["C"], delay=0)
+    create_relation(issues["A"], "finish_before", issues["D"], delay=2)
+    create_relation(issues["A"], "relates_to", issues["E"], delay=0)
+    create_relation(issues["F"], "blocked_by", issues["A"], delay=None)
+    migration: types.ModuleType = importlib.import_module("plane.db.migrations.0128_linked_dependencies")
+
+    getattr(migration, step)(django_apps.apps, None)
+
+    assert get_stored_relations() == expected_relations
 
 
 def test_create_relation_twice_keeps_one_relation(
@@ -272,6 +334,29 @@ def test_remove_relation_removes_the_relation_of_the_given_type(
     assert get_relations() == {("relates_to", a.id, b.id)}
 
 
+def test_timeline_dependencies_shows_a_linked_dependency_with_an_empty_delay(
+    project: db_models.Project, session_client: api_test.APIClient
+) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    b: db_models.Issue = create_issue(project, "B")
+    linked: db_models.IssueRelation = create_relation(b, "blocked_by", a, delay=None)
+
+    response: api_response.Response = session_client.get(get_url(project, "timeline-dependencies/"))
+
+    assert (response.status_code, response.json()["dependencies"]) == (
+        200,
+        [
+            {
+                "id": str(linked.id),
+                "predecessor_id": str(a.id),
+                "dependent_id": str(b.id),
+                "relation_type": "blocking",
+                "delay": None,
+            }
+        ],
+    )
+
+
 def test_timeline_dependencies_lists_dependencies_touching_the_project(
     project: db_models.Project, other_project: db_models.Project, session_client: api_test.APIClient
 ) -> None:
@@ -364,13 +449,13 @@ def create_issues_and_relations(
     issue_name: str
     relation_type: str
     related_issue_name: str
-    delay: t.List[int]
+    delay: t.List[t.Optional[int]]
     for issue_name, relation_type, related_issue_name, *delay in relations:
         create_relation(issues[issue_name], relation_type, issues[related_issue_name], *delay)
     return issues
 
 
-def get_stored_relations() -> t.Set[t.Tuple[str, str, str, int]]:
+def get_stored_relations() -> t.Set[t.Tuple[str, str, str, t.Optional[int]]]:
     """Relation type, names of the work item and the related work item, and delay of every relation, as stored."""
     return set(
         db_models.IssueRelation.objects.values_list("relation_type", "issue__name", "related_issue__name", "delay")
@@ -391,7 +476,7 @@ def post_timeline_changes(
     client: api_test.APIClient,
     project: db_models.Project,
     issues: t.Dict[str, db_models.Issue],
-    dependencies: t.List[t.Tuple[str, str, str, int]],
+    dependencies: t.List[t.Tuple[str, str, str, t.Optional[int]]],
     removed: t.List[t.Tuple[str, str]],
     updates: t.Dict[str, JsonObject],
 ) -> api_response.Response:
@@ -444,6 +529,20 @@ def post_timeline_changes(
             id="existing-dependency-gets-the-given-delay",
         ),
         pytest.param(
+            [],
+            [("A", "blocking", "B", None), ("A", "blocking", "C", 0)],
+            [],
+            {("blocked_by", "B", "A", None), ("blocked_by", "C", "A", 0)},
+            id="new-dependency-with-an-empty-delay-is-stored-linked-and-one-with-0-days-is-not",
+        ),
+        pytest.param(
+            [("B", "blocked_by", "A", 2), ("C", "blocked_by", "A", None)],
+            [("A", "blocking", "B", None), ("A", "blocking", "C", 0)],
+            [],
+            {("blocked_by", "B", "A", None), ("blocked_by", "C", "A", 0)},
+            id="existing-dependency-becomes-linked-and-a-linked-one-gets-days",
+        ),
+        pytest.param(
             [("B", "blocked_by", "A"), ("C", "blocked_by", "A")],
             [],
             [("B", "A")],
@@ -471,9 +570,9 @@ def test_save_timeline_changes_saves_the_given_dependencies(
     other_project: db_models.Project,
     session_client: api_test.APIClient,
     relations: t.List[t.Tuple[t.Any, ...]],
-    dependencies: t.List[t.Tuple[str, str, str, int]],
+    dependencies: t.List[t.Tuple[str, str, str, t.Optional[int]]],
     removed: t.List[t.Tuple[str, str]],
-    expected_relations: t.Set[t.Tuple[str, str, str, int]],
+    expected_relations: t.Set[t.Tuple[str, str, str, t.Optional[int]]],
 ) -> None:
     issues: t.Dict[str, db_models.Issue] = create_issues_and_relations(
         project, other_project, {name: "None..None" for name in "ABC"}, relations
@@ -590,7 +689,7 @@ def test_save_timeline_changes_that_are_refused_change_nothing(
         {name: "2026-01-01..2026-01-03" for name in ("A", "B", "C", "Archived D", "E")},
         [("B", "blocked_by", "A"), ("C", "blocked_by", "A"), ("A", "relates_to", "E")],
     )
-    relations: t.Set[t.Tuple[str, str, str, int]] = get_stored_relations()
+    relations: t.Set[t.Tuple[str, str, str, t.Optional[int]]] = get_stored_relations()
 
     response: api_response.Response = post_timeline_changes(
         session_client, project, issues, dependencies, [("C", "A")], updates

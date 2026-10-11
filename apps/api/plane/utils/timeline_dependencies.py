@@ -85,8 +85,10 @@ def create_issue_relations(
     related_issue_ids: t.Iterable[t.Union[str, uuid.UUID]],
     relation_type: str,
     actor: db_models.User,
-    delay: int = 0,
+    delay: t.Optional[int] = 0,
 ) -> t.List[db_models.IssueRelation]:
+    """A relation that is made without a delay asks for 0 days: it says that one work item is not before the
+    other, and links nothing. No delay at all, which is linked, is what only the timeline gives."""
     actual_relation: str = issue_relation_mapper.get_actual_relation(relation_type)
     is_reverse: bool = relation_type in ("blocking", "start_after", "finish_after")
     # Relations can cross projects, so the workspace alone scopes the related work items.

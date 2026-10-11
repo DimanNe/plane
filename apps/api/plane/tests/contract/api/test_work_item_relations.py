@@ -45,7 +45,9 @@ def create_issue(project: db_models.Project, name: str) -> db_models.Issue:
     return issue
 
 
-def create_relation(issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue, delay: int = 0) -> None:
+def create_relation(
+    issue: db_models.Issue, relation_type: str, related_issue: db_models.Issue, delay: t.Optional[int] = 0
+) -> None:
     db_models.IssueRelation.objects.create(
         project=issue.project, issue=issue, relation_type=relation_type, related_issue=related_issue, delay=delay
     )
@@ -139,6 +141,50 @@ def test_create_dependency_with_a_delay(project: db_models.Project, api_key_clie
     assert list(
         db_models.IssueRelation.objects.values_list("relation_type", "issue_id", "related_issue_id", "delay")
     ) == [("start_before", b.id, a.id, 3)]
+
+
+@pytest.mark.parametrize(
+    "delay_in_body, expected_delay",
+    [
+        pytest.param({}, 0, id="without-a-delay-it-asks-for-no-days"),
+        pytest.param({"delay": 0}, 0, id="with-no-days-it-is-not-linked"),
+        pytest.param({"delay": None}, None, id="with-an-empty-delay-it-is-linked"),
+    ],
+)
+def test_create_dependency_is_linked_only_when_its_delay_is_given_as_empty(
+    project: db_models.Project,
+    api_key_client: api_test.APIClient,
+    delay_in_body: JsonObject,
+    expected_delay: t.Optional[int],
+) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    b: db_models.Issue = create_issue(project, "B")
+
+    response: api_response.Response = api_key_client.post(
+        get_url(project, f"work-items/{a.id}/dependencies/"),
+        {"relation_type": "blocking", "work_item_ids": [str(b.id)], **delay_in_body},
+        format="json",
+    )
+
+    assert (response.status_code, response.json()) == (201, [get_work_item_body(b, "blocking", delay=expected_delay)])
+    assert list(db_models.IssueRelation.objects.values_list("delay", flat=True)) == [expected_delay]
+
+
+def test_list_dependencies_shows_a_linked_dependency_with_an_empty_delay(
+    project: db_models.Project, api_key_client: api_test.APIClient
+) -> None:
+    a: db_models.Issue = create_issue(project, "A")
+    b: db_models.Issue = create_issue(project, "B")
+    c: db_models.Issue = create_issue(project, "C")
+    create_relation(b, "blocked_by", a, delay=None)
+    create_relation(c, "blocked_by", a, delay=0)
+
+    response: api_response.Response = api_key_client.get(get_url(project, f"work-items/{a.id}/dependencies/"))
+
+    assert (response.status_code, sorted(response.json()["blocking"], key=lambda work_item: work_item["name"])) == (
+        200,
+        [get_work_item_body(b, "blocking", delay=None), get_work_item_body(c, "blocking", delay=0)],
+    )
 
 
 def test_create_dependency_with_a_negative_delay_is_rejected(

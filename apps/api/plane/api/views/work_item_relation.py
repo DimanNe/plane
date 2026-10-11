@@ -36,11 +36,13 @@ def get_related_work_items(
 ) -> t.Dict[str, t.List[t.Dict[str, object]]]:
     """Work items related to the given one, grouped by the relation type as read from the given one.
     A dependency also shows its delay."""
-    related_ids: t.Dict[str, t.List[t.Tuple[uuid.UUID, int]]] = {relation_type: [] for relation_type in relation_types}
+    related_ids: t.Dict[str, t.List[t.Tuple[uuid.UUID, t.Optional[int]]]] = {
+        relation_type: [] for relation_type in relation_types
+    }
     relation_type: str
     source_id: uuid.UUID
     related_id: uuid.UUID
-    delay: int
+    delay: t.Optional[int]
     for relation_type, source_id, related_id, delay in db_models.IssueRelation.objects.filter(
         django_models.Q(issue_id=issue_id) | django_models.Q(related_issue_id=issue_id), workspace__slug=slug
     ).values_list("relation_type", "issue_id", "related_issue_id", "delay"):

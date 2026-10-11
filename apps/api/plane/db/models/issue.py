@@ -307,8 +307,10 @@ class IssueRelation(ProjectBaseModel):
         verbose_name="Issue Relation Type",
         default=IssueRelationChoices.BLOCKED_BY,
     )
-    # Days a dependency keeps between its two work items on the timeline, 0 for none.
-    delay = models.PositiveIntegerField(default=0)
+    # What a dependency asks on the timeline. Empty: its two work items are linked and move as one. A number, from
+    # 0 up: the days it keeps between them, which a move of the dependent changes. A relation that is made without
+    # a delay asks for 0 days and links nothing.
+    delay = models.PositiveIntegerField(null=True, blank=True, default=0)
 
     class Meta:
         unique_together = ["issue", "related_issue", "deleted_at"]
