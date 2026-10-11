@@ -30,3 +30,24 @@ export function resolveItemVariant(item: TContextMenuItem): TContextMenuItemVari
 export function stopClickPropagation(e: React.MouseEvent) {
   e.stopPropagation();
 }
+
+/**
+ * A key that stands for an item of an element's right-click menu, such as Delete for "Delete" on a list row, must
+ * act only where the menu has that item, and do what the item does. The menu belongs to whoever rendered it, so
+ * the key's handler asks the element: the menu of that element answers the event.
+ */
+export const CONTEXT_MENU_ITEM_EVENT = "plane:context-menu-item";
+
+export type TContextMenuItemRequest = { key: string; shouldRun: boolean };
+
+/** Whether the right-click menu of the element has the item with this key. */
+export const hasContextMenuItem = (parent: Element, key: string) =>
+  !parent.dispatchEvent(
+    new CustomEvent(CONTEXT_MENU_ITEM_EVENT, { detail: { key, shouldRun: false }, cancelable: true })
+  );
+
+/** Does what the item with this key does, if the right-click menu of the element has it; tells whether it has. */
+export const runContextMenuItem = (parent: Element, key: string) =>
+  !parent.dispatchEvent(
+    new CustomEvent(CONTEXT_MENU_ITEM_EVENT, { detail: { key, shouldRun: true }, cancelable: true })
+  );

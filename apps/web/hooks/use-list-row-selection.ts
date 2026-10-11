@@ -24,6 +24,7 @@ import { isTypingInInput } from "@/components/power-k/core/shortcut-handler";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
 import useKeypress from "@/hooks/use-keypress";
+import { useListRowDelete } from "@/hooks/use-list-row-delete";
 
 type Props = {
   containerRef: React.MutableRefObject<HTMLElement | null>;
@@ -62,11 +63,25 @@ export const useListRowSelection = (props: Props) => {
   );
   const selectedIssueGroupId = rows.find((row) => row.issueId === selectedRow?.issueId)?.groupId;
 
-  // a selected work item that moved to another group stays selected there, one that left the list is dropped
+  const { getRowInPlaceOf } = useListRowDelete({ containerRef, rows, selectedRowIndex, issuesMap });
+  // the work item view beside the list shows the row that took the place of the one it showed
+  const openRowInPlaceOf = useLatestCallback((issueId: string, row: TListRow) => {
+    if (peekIssue?.issueId === issueId) openRow(row);
+  });
+
+  // A selected work item that moved to another group stays selected there, one that left the list is dropped.
+  // One that the Delete key removed leaves the selection to the row that took its place, so that the arrow keys
+  // go on from there.
   useEffect(() => {
     if (!selectedRow || selectedRowIndex !== -1) return;
-    setSelectedRow(selectedIssueGroupId ? { issueId: selectedRow.issueId, groupId: selectedIssueGroupId } : undefined);
-  }, [selectedRow, selectedRowIndex, selectedIssueGroupId, setSelectedRow]);
+    if (selectedIssueGroupId) {
+      setSelectedRow({ issueId: selectedRow.issueId, groupId: selectedIssueGroupId });
+      return;
+    }
+    const rowInPlace = getRowInPlaceOf(selectedRow.issueId);
+    setSelectedRow(rowInPlace && { issueId: rowInPlace.issueId, groupId: rowInPlace.groupId });
+    if (rowInPlace) openRowInPlaceOf(selectedRow.issueId, rowInPlace);
+  }, [selectedRow, selectedRowIndex, selectedIssueGroupId, setSelectedRow, getRowInPlaceOf, openRowInPlaceOf]);
 
   // without a list nothing is selected
   useEffect(() => () => setSelectedRow(undefined), [setSelectedRow]);

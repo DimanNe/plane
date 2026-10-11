@@ -7,5 +7,5 @@
 export { ContextMenu } from "./context-menu";
 export type { ContextMenuProps } from "./context-menu";
 export { ContextMenuItem } from "./context-menu-item";
-export { getRenderableItems, resolveItemVariant } from "./helpers";
+export { getRenderableItems, hasContextMenuItem, resolveItemVariant, runContextMenuItem } from "./helpers";
 export type { TContextMenuItem, TContextMenuItemVariant } from "./types";

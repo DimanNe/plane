@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ContextMenu } from "./context-menu";
+import { hasContextMenuItem, runContextMenuItem } from "./helpers";
 import type { TContextMenuItem } from "./types";
 
 type TVirtualAnchor = { getBoundingClientRect: () => DOMRect };
@@ -389,5 +390,57 @@ describe("ContextMenu nested rows", () => {
     await user.click(trigger);
     expect(screen.getAllByRole("menu")).toHaveLength(1);
     expect(screen.queryByRole("menuitem", { name: "Backlog" })).toBeNull();
+  });
+});
+
+describe("ContextMenu items asked for by their key", () => {
+  it("does what the item does without opening the menu, and tells that it has the item", () => {
+    const action = vi.fn();
+    render(<Harness items={[{ key: "delete", title: "Delete", action }]} />);
+    expect(runContextMenuItem(screen.getByTestId("target"), "delete")).toBe(true);
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("tells whether it has an item without doing what the item does", () => {
+    const action = vi.fn();
+    render(<Harness items={[{ key: "delete", title: "Delete", action }]} />);
+    expect(hasContextMenuItem(screen.getByTestId("target"), "delete")).toBe(true);
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it("has no item that it would not show, or would show disabled", () => {
+    const action = vi.fn();
+    render(
+      <Harness
+        items={[
+          { key: "delete", title: "Delete", action, shouldRender: false },
+          { key: "archive", title: "Archive", action, disabled: true },
+        ]}
+      />
+    );
+    const target = screen.getByTestId("target");
+    expect(runContextMenuItem(target, "delete")).toBe(false);
+    expect(runContextMenuItem(target, "archive")).toBe(false);
+    expect(runContextMenuItem(target, "restore")).toBe(false);
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it("answers with the items of its latest render", () => {
+    const action = vi.fn();
+    const { rerender } = render(<Harness items={[{ key: "delete", title: "Delete", action }]} />);
+    rerender(<Harness items={[{ key: "delete", title: "Delete", action, shouldRender: false }]} />);
+    expect(runContextMenuItem(screen.getByTestId("target"), "delete")).toBe(false);
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it("is silent outside its parent and after unmount", () => {
+    const action = vi.fn();
+    const { unmount } = render(<Harness items={[{ key: "delete", title: "Delete", action }]} />);
+    expect(runContextMenuItem(screen.getByTestId("outside"), "delete")).toBe(false);
+    const target = screen.getByTestId("target");
+    unmount();
+    expect(runContextMenuItem(target, "delete")).toBe(false);
+    expect(action).not.toHaveBeenCalled();
   });
 });

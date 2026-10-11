@@ -12,10 +12,11 @@ import {
   ContextMenuContent,
   ContextMenuSeparator,
 } from "@makeplane/propel/components/context-menu";
-import { usePlatformOS } from "@plane/hooks";
+import { useLatestCallback, usePlatformOS } from "@plane/hooks";
 // local imports
 import { ContextMenuItem } from "./context-menu-item";
-import { getRenderableItems, stopClickPropagation } from "./helpers";
+import { CONTEXT_MENU_ITEM_EVENT, getRenderableItems, stopClickPropagation } from "./helpers";
+import type { TContextMenuItemRequest } from "./helpers";
 import type { TContextMenuItem } from "./types";
 
 export type ContextMenuProps = {
@@ -55,6 +56,15 @@ export function ContextMenu(props: ContextMenuProps) {
   const targetItems = getRenderableItems(target && getTargetItems ? getTargetItems(target) : undefined);
   const { isMobile } = usePlatformOS();
 
+  // A request for one item by its key (see CONTEXT_MENU_ITEM_EVENT): cancelled when the menu has the item.
+  const handleItemRequest = useLatestCallback((e: Event) => {
+    const { key, shouldRun } = (e as CustomEvent<TContextMenuItemRequest>).detail;
+    const item = renderedItems.find((renderedItem) => renderedItem.key === key && !renderedItem.disabled);
+    if (!item) return;
+    e.preventDefault();
+    if (shouldRun) item.action();
+  });
+
   // The consumers own the right-click target (passed as `parentRef`), so capture its `contextmenu`
   // events to record the cursor position and open the menu.
   useEffect(() => {
@@ -73,11 +83,13 @@ export function ContextMenu(props: ContextMenuProps) {
     };
 
     parentElement.addEventListener("contextmenu", handleContextMenu);
+    parentElement.addEventListener(CONTEXT_MENU_ITEM_EVENT, handleItemRequest);
 
     return () => {
       parentElement.removeEventListener("contextmenu", handleContextMenu);
+      parentElement.removeEventListener(CONTEXT_MENU_ITEM_EVENT, handleItemRequest);
     };
-  }, [isMobile, parentRef]);
+  }, [isMobile, parentRef, handleItemRequest]);
 
   return (
     <PropelContextMenu open={isOpen} onOpenChange={setIsOpen}>
