@@ -32,7 +32,6 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
 import { useProject } from "@/hooks/store/use-project";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
-import { usePlatformOS } from "@/hooks/use-platform-os";
 import { calculateIdentifierWidth } from "../utils";
 import { IssueBlockAddSubIssue } from "./block-add-sub-issue";
 import { IssueBlockTitle, TITLE_TEXT_SIZES } from "./block-title";
@@ -112,8 +111,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
   const isTitleEdited = getIsRowTitleEdited(issueId, groupId);
-
-  const { isMobile } = usePlatformOS();
 
   useEffect(() => {
     const element = issueRef.current;
@@ -290,7 +287,6 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               groupId={groupId}
               nestingLevel={nestingLevel}
               isEditingAllowed={canEditIssueProperties}
-              isTooltipDisabled={isCurrentBlockDragging || isMobile}
               updateIssue={updateIssue}
             />
             {!isTitleEdited && (

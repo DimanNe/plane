@@ -8,7 +8,6 @@ import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { setToast } from "@plane/blocks/toast";
 import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
@@ -21,7 +20,6 @@ type Props = {
   groupId: string;
   nestingLevel: number;
   isEditingAllowed: boolean;
-  isTooltipDisabled: boolean;
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
 };
 
@@ -33,7 +31,7 @@ export const TITLE_TEXT_SIZES = ["text-body-sm-medium", "text-body-xs-medium", "
  * The title of a list row. A click turns it into an input in place; the name is saved when the focus leaves the input.
  */
 export const IssueBlockTitle = observer(function IssueBlockTitle(props: Props) {
-  const { issue, groupId, nestingLevel, isEditingAllowed, isTooltipDisabled, updateIssue } = props;
+  const { issue, groupId, nestingLevel, isEditingAllowed, updateIssue } = props;
   // refs
   const inputRef = useRef<HTMLInputElement | null>(null);
   const caretOffsetRef = useRef(0);
@@ -95,11 +93,9 @@ export const IssueBlockTitle = observer(function IssueBlockTitle(props: Props) {
     );
 
   return (
-    <Tooltip label={issue.name} layout="stacked" align="start" disabled={isTooltipDisabled}>
-      {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-noninteractive-element-interactions */}
-      <p className={cn(className, isEditingAllowed ? "cursor-text" : "cursor-pointer")} onClick={handleClick}>
-        {issue.name}
-      </p>
-    </Tooltip>
+    // oxlint-disable-next-line jsx_a11y/click-events-have-key-events, jsx_a11y/no-noninteractive-element-interactions
+    <p className={cn(className, isEditingAllowed ? "cursor-text" : "cursor-pointer")} onClick={handleClick}>
+      {issue.name}
+    </p>
   );
 });
