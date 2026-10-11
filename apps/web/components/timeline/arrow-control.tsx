@@ -10,7 +10,7 @@ import { Popover } from "@base-ui/react/popover";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { DeleteOutline } from "@makeplane/propel/icons";
 import { DateSelect } from "@plane/blocks/property-select";
-import { changeArrow, fixNextTask, removeArrow } from "@plane/blocks/timeline-schedule";
+import { changeArrow, fixNextTask, getDelayDays, removeArrow, setArrowMode } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { useTranslation } from "@plane/i18n";
 import type { EStartOfTheWeek } from "@plane/types";
@@ -44,8 +44,8 @@ const ITEM_CLASS_NAME =
   "flex items-center gap-1 rounded-md border border-strong bg-surface-1 px-2 text-body-xs-regular text-secondary shadow-raised-100 hover:text-primary data-[chosen=true]:border-accent-strong data-[chosen=true]:bg-accent-subtle data-[chosen=true]:text-primary";
 
 /**
- * The control of the selected arrow: "immediately", "in n d", "on a date", and under them the removal of the
- * arrow, one under the other with no panel behind them. A choice is shown on the timeline at once as one
+ * The control of the selected arrow: "linked", "in n d", "on a date", and under them the removal of the arrow,
+ * one under the other with no panel behind them. A choice is shown on the timeline at once as one
  * operation, which is saved when the control closes (Enter, a press elsewhere) and dropped on Escape. The wheel
  * over "in n d" or "on a date" turns the number or the date and makes that the choice. The Delete key removes
  * the arrow.
@@ -58,20 +58,22 @@ export function TimelineArrowControl(props: Props) {
   const { arrow, schedule, isNextFixed, operation, weekStartsOn, point, onClose } = props;
   // refs
   const itemsRef = useRef<HTMLDivElement>(null);
-  // the plan the operation began with, once a choice has begun one
-  const begunPlanRef = useRef<TPlan>(undefined);
+  // The plan as the last choice left it, once a choice has begun the operation. A choice goes on from the one
+  // before it, as a notch of the wheel on the arrow's text does: "on" after "linked" fixes the task where the
+  // link has put it, and leaves the arrow linked.
+  const planRef = useRef<TPlan>(undefined);
   // derived values
   const gap = schedule.gaps[arrow.id];
   const day = schedule.dates[arrow.nextId]?.[arrow.kind === "end-end" ? "end" : "start"];
-  const isImmediate = !isNextFixed && arrow.delay === 0;
-  const isDelayed = !isNextFixed && arrow.delay > 0;
-  // "in n d" offers the delay of the arrow; of an arrow that asks "immediately", the gap there is now
-  const days = arrow.delay || Math.max(gap, 1);
+  const isLinked = !isNextFixed && arrow.delay === "linked";
+  const isInDays = !isNextFixed && arrow.delay !== "linked";
+  // "in n d" offers the days of the arrow; of an arrow that is something else, the days there are now
+  const days = isInDays ? getDelayDays(arrow.delay) : Math.max(gap, 0);
   // states
   // The things stand in a column whose middle line is at the pointer, and the column begins as far above the
   // pointer as the middle of the choice that holds is below its top. Found once: the place does not change.
   const [anchor] = useState(() => {
-    const chosenIndex = isImmediate ? 0 : isDelayed ? 1 : 2;
+    const chosenIndex = isLinked ? 0 : isInDays ? 1 : 2;
     const rect = new DOMRect(point.x, point.y - chosenIndex * (ITEM_HEIGHT + ITEM_GAP) - ITEM_HEIGHT / 2, 0, 0);
     return { getBoundingClientRect: () => rect };
   });
@@ -82,15 +84,17 @@ export function TimelineArrowControl(props: Props) {
   // translation
   const { t } = useTranslation();
 
-  const show = (getChangedPlan: (begunPlan: TPlan) => TPlan) => {
-    begunPlanRef.current ??= operation.begin();
-    if (begunPlanRef.current) operation.preview(getChangedPlan(begunPlanRef.current));
+  const show = (getChangedPlan: (plan: TPlan) => TPlan) => {
+    planRef.current ??= operation.begin();
+    if (!planRef.current) return;
+    planRef.current = getChangedPlan(planRef.current);
+    operation.preview(planRef.current);
   };
 
   const close = (isAborted: boolean) => {
-    if (begunPlanRef.current && isAborted) operation.abort();
-    else if (begunPlanRef.current) operation.commit();
-    begunPlanRef.current = undefined;
+    if (planRef.current && isAborted) operation.abort();
+    else if (planRef.current) operation.commit();
+    planRef.current = undefined;
     onClose();
   };
 
@@ -113,7 +117,7 @@ export function TimelineArrowControl(props: Props) {
   // The wheel over "in n d" turns the number, over "on a date" the date, a day a notch, whether or not anything
   // there has the focus; and it makes that the choice.
   useWheelNotches(delayItem, (direction) =>
-    show((plan) => changeArrow(plan, arrow.id, { delay: Math.max(days + direction, 1) }))
+    show((plan) => changeArrow(plan, arrow.id, { delay: Math.max(days + direction, 0) }))
   );
   useWheelNotches(
     dateItem,
@@ -125,7 +129,7 @@ export function TimelineArrowControl(props: Props) {
   // a control that goes away while its operation is going on, with its arrow or with the timeline, drops it
   useEffect(
     () => () => {
-      if (begunPlanRef.current) operation.abort();
+      if (planRef.current) operation.abort();
     },
     [operation]
   );
@@ -155,30 +159,31 @@ export function TimelineArrowControl(props: Props) {
               type="button"
               className={ITEM_CLASS_NAME}
               style={{ height: ITEM_HEIGHT }}
-              data-chosen={isImmediate}
-              aria-pressed={isImmediate}
-              onClick={() => show((plan) => changeArrow(plan, arrow.id, { delay: 0 }))}
+              data-chosen={isLinked}
+              aria-pressed={isLinked}
+              onClick={() => show((plan) => setArrowMode(plan, arrow.id, "linked"))}
             >
-              {t("timeline.arrow.immediately")}
+              {t("timeline.arrow.linked")}
             </button>
-            <div ref={setDelayItem} className={ITEM_CLASS_NAME} style={{ height: ITEM_HEIGHT }} data-chosen={isDelayed}>
+            <div ref={setDelayItem} className={ITEM_CLASS_NAME} style={{ height: ITEM_HEIGHT }} data-chosen={isInDays}>
               <button
                 type="button"
-                aria-pressed={isDelayed}
+                aria-pressed={isInDays}
                 onClick={() => show((plan) => changeArrow(plan, arrow.id, { delay: days }))}
               >
                 {t("timeline.arrow.in")}
               </button>
               <input
                 type="number"
-                min={1}
+                min={0}
                 aria-label={t("timeline.arrow.delay")}
                 className="w-10 rounded-sm border border-subtle bg-surface-1 px-1 text-center text-primary outline-none focus:border-accent-strong"
                 value={typedDays ?? days}
                 onChange={(e) => {
-                  const delay = Math.round(Number(e.target.value));
-                  setTypedDays(delay >= 1 ? undefined : e.target.value);
-                  if (delay >= 1) show((plan) => changeArrow(plan, arrow.id, { delay }));
+                  // an empty field is no number of days yet
+                  const delay = e.target.value.trim() ? Math.round(Number(e.target.value)) : NaN;
+                  setTypedDays(delay >= 0 ? undefined : e.target.value);
+                  if (delay >= 0) show((plan) => changeArrow(plan, arrow.id, { delay }));
                 }}
                 onBlur={() => setTypedDays(undefined)}
               />

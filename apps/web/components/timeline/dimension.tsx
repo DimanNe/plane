@@ -91,19 +91,19 @@ export function TimelineBarDimension(props: Props) {
             top: isNumberOnLine ? top : top + (isBelow ? 1 : -1) * (HEAD_WIDTH / 2 + NUMBER_DISTANCE / 2),
           },
         }}
-        turn={
-          isEditable
-            ? {
-                key: `${taskId} days`,
-                change: (plan, direction) => resizeTask(plan, taskId, "end", getDateOfDay(end + direction)),
-              }
-            : undefined
-        }
+        parts={[
+          {
+            key: "value",
+            label: number,
+            turn: isEditable
+              ? (plan, direction) => resizeTask(plan, taskId, "end", getDateOfDay(end + direction))
+              : undefined,
+          },
+        ]}
+        turnKey={`${taskId} days`}
         wheelTurn={wheelTurn}
         onHover={(isOver) => onHover(isOver ? taskId : undefined)}
-      >
-        {number}
-      </TimelineTurnedText>
+      />
     </>
   );
 }

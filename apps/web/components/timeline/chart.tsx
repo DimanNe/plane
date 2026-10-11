@@ -43,7 +43,7 @@ import { TimelineArrowControl } from "./arrow-control";
 import { TimelineArrowTexts } from "./arrow-texts";
 import { getDrawnArrows, TimelineArrowControls, TimelineArrows, TimelineDrawnArrow } from "./arrows";
 import { TimelineBackdrop } from "./backdrop";
-import { TimelineConflict } from "./conflict";
+import { TimelineApartLink, TimelineConflict } from "./conflict";
 import { TimelineBarDimension } from "./dimension";
 import { TimelineHeader } from "./header";
 import { TimelineDateMarkers } from "./markers";
@@ -326,16 +326,21 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   // under the pointer, when nothing else is going on.
   const draggedTaskId = drag && drag.lineIndex === undefined ? drag.taskId : undefined;
   const shownTaskId = drag ? draggedTaskId : link || selectedArrow ? undefined : hoveredTaskId;
-  // The arrow that shows more than its text: the selected one its control, a conflict under the pointer what it
-  // says, with the tasks and arrows that produce it.
+  // The arrow that shows more than its text: the selected one its control; under the pointer, a conflict or a
+  // link that is apart what it says, with the tasks and arrows that produce it.
   const selectedArrowId = drag || link ? undefined : selectedArrow?.id;
-  const conflict =
-    drag || link || selectedArrowId ? undefined : schedule.conflicts.find(({ arrowId }) => arrowId === hoveredArrowId);
+  const explainedArrowId = drag || link || selectedArrowId ? undefined : hoveredArrowId;
+  const conflict = schedule.conflicts.find(({ arrowId }) => arrowId === explainedArrowId);
+  const apartLink = schedule.apartLinks.find(({ arrowId }) => arrowId === explainedArrowId);
   const controlledArrow = selectedArrowId ? arrows.find((arrow) => arrow.id === selectedArrowId) : undefined;
-  const cause = useMemo(
-    () => (conflict ? getConflictCause(arrows, schedule, conflict) : NO_CAUSE),
-    [arrows, schedule, conflict]
-  );
+  const cause = useMemo(() => {
+    if (conflict) return getConflictCause(arrows, schedule, conflict);
+    if (!apartLink) return NO_CAUSE;
+    // the link, the arrow that holds its next task apart, and the tasks at their ends
+    const arrowIds = [apartLink.arrowId, apartLink.heldByArrowId];
+    const previousIds = arrows.flatMap((arrow) => (arrowIds.includes(arrow.id) ? [arrow.previousId] : []));
+    return { taskIds: [apartLink.taskId, ...previousIds], arrowIds };
+  }, [arrows, schedule, conflict, apartLink]);
   // A fixed task that an arrow leads to shows the day it is fixed on beside its bar: the arrow does not tell it.
   const datedTaskIds = useMemo(
     () =>
@@ -526,8 +531,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   lineIndexes={arrowLineIndexes}
                   firstLine={firstLine}
                   lastLine={lastLine}
+                  plan={props.plan}
                   schedule={schedule}
-                  followingTaskIds={followingTaskIds}
                   datedTaskIds={datedTaskIds}
                   viewTop={viewTop}
                   viewBottom={viewBottom}
@@ -548,6 +553,27 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                       <TimelineConflict
                         conflict={conflict}
                         arrow={arrow}
+                        operation={operation}
+                        isEditable={isEditable}
+                        isNextBelow={isNextBelow}
+                        onClose={() => setHoveredArrowId(undefined)}
+                        onPointerEnter={() => handleArrowHover(arrow)}
+                        onPointerLeave={() => handleArrowHover(undefined)}
+                      />
+                    )}
+                  />
+                )}
+                {apartLink && (
+                  <TimelineArrowControls
+                    view={view}
+                    drawnArrows={drawnArrows.filter(({ arrow }) => arrow.id === apartLink.arrowId)}
+                    viewTop={viewTop}
+                    viewBottom={viewBottom}
+                    renderControl={(arrow, isNextBelow) => (
+                      <TimelineApartLink
+                        apartLink={apartLink}
+                        arrow={arrow}
+                        heldByArrow={arrows.find((other) => other.id === apartLink.heldByArrowId)}
                         operation={operation}
                         isEditable={isEditable}
                         isNextBelow={isNextBelow}
@@ -579,6 +605,8 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   lineIndexes={arrowLineIndexes}
                   firstLine={firstLine}
                   lastLine={lastLine}
+                  plan={props.plan}
+                  schedule={schedule}
                   datedTaskIds={datedTaskIds}
                   shownTaskId={shownTaskId}
                   wheelTurn={wheelTurn}

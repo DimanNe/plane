@@ -269,7 +269,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
         const isSelected = arrow.id === selectedArrowId;
         const isConflictCause = causeArrowIds.includes(arrow.id);
         const state =
-          isConflictCause || schedule.conflicts.some((conflict) => conflict.arrowId === arrow.id)
+          isConflictCause || [...schedule.conflicts, ...schedule.apartLinks].some(({ arrowId }) => arrowId === arrow.id)
             ? "danger"
             : isSelected || schedule.criticalArrowIds.includes(arrow.id)
               ? "accent"

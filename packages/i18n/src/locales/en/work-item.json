@@ -438,8 +438,8 @@
       "end": "Draw an arrow from the end"
     },
     "arrow": {
-      "immediately": "immediately",
-      "in_days": "in {days} d",
+      "linked": "linked",
+      "apart": "{days} d apart",
       "too_early": "{days} d too early",
       "in": "in",
       "days": "d",
@@ -453,17 +453,24 @@
         "loop": "This arrow would close a loop"
       }
     },
+    "apart": {
+      "sentence": "{task} is linked to {previous}, but stands {days, plural, one {# day} other {# days}} later than the link puts it: the arrow from {other} asks for that.",
+      "ways_out": {
+        "in-days": "Make this arrow in {days} d",
+        "remove-arrow": "Remove this arrow"
+      }
+    },
     "conflict": {
       "fixed": "{task} is fixed on {day}.",
       "asks": {
-        "end-start": "This arrow asks it to start no earlier than {day}: {days, plural, =0 {immediately} one {# day} other {# days}} after {previous} ends on {anchor}.",
+        "end-start": "This arrow asks it to start no earlier than {day}: {days, plural, =0 {right} one {# day} other {# days}} after {previous} ends on {anchor}.",
         "start-start": "This arrow asks it to start no earlier than {day}: {days, plural, =0 {when} one {# day after} other {# days after}} {previous} starts on {anchor}.",
         "end-end": "This arrow asks it to start no earlier than {day}, to end {days, plural, =0 {when} one {# day after} other {# days after}} {previous} ends on {anchor}."
       },
       "ways_out": {
         "follow-arrows": "Let it follow its arrows",
         "move-fixed-day": "Fix it on {day}",
-        "shorten-delay": "{days, plural, =0 {Make this arrow immediate} other {Shorten the delay to # d}}",
+        "shorten-delay": "Shorten the delay to {days} d",
         "remove-arrow": "Remove this arrow"
       }
     }

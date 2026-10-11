@@ -9,8 +9,8 @@ import { observer } from "mobx-react";
 // plane imports
 import { Button } from "@makeplane/propel/components/button";
 import { Popover, PopoverContent } from "@makeplane/propel/components/popover";
-import { applyWayOut } from "@plane/blocks/timeline-schedule";
-import type { TConflict, TScheduleArrow } from "@plane/blocks/timeline-schedule";
+import { applyWayOut, getDelayDays, removeArrow, setArrowMode } from "@plane/blocks/timeline-schedule";
+import type { TApartLink, TConflict, TPlan, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { useTranslation } from "@plane/i18n";
 import { renderFormattedDate } from "@plane/utils";
 // hooks
@@ -19,35 +19,29 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import type { TTimelineOperation } from "./operation";
 import { runOperation } from "./operation";
 
-type Props = {
-  conflict: TConflict;
-  arrow: TScheduleArrow;
+type TCardProps = {
   operation: TTimelineOperation;
   // the ways out are offered; else the explanation only tells
   isEditable: boolean;
-  // the line of the fixed task is under the arrow's place, not above it
+  // the line of the next task is under the arrow's place, not above it
   isNextBelow: boolean;
   onClose: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
 };
 
+type TWayOutButton = { key: string; label: string; change: (plan: TPlan) => TPlan };
+
 const formatDay = (day: string) => renderFormattedDate(day, "MMM d");
 
 /**
- * Why an arrow is a conflict, at the arrow while the pointer is over it: a sentence made of the conflict the
- * schedule reports, and the ways out of it, each applied by a click as one operation.
+ * Why the plan does not keep an arrow, at the arrow while the pointer is over it: a sentence, and the ways out,
+ * each applied by a click as one operation.
  */
-export const TimelineConflict = observer(function TimelineConflict(props: Props) {
-  const { conflict, arrow, operation, isEditable, isNextBelow, onClose, onPointerEnter, onPointerLeave } = props;
+function ConflictCard(props: TCardProps & { sentence: string; waysOut: TWayOutButton[] }) {
+  const { sentence, waysOut, operation, isEditable, isNextBelow, onClose, onPointerEnter, onPointerLeave } = props;
   // states
   const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
-  // store hooks
-  const {
-    issue: { getIssueById },
-  } = useIssueDetail();
-  // translation
-  const { t } = useTranslation();
 
   return (
     <>
@@ -56,7 +50,7 @@ export const TimelineConflict = observer(function TimelineConflict(props: Props)
         <Popover open onOpenChange={onClose}>
           <PopoverContent
             anchor={anchor}
-            // away from the fixed task, and to the right of the arrow: what produces the conflict is to its left
+            // away from the next task, and to the right of the arrow: what produces the conflict is to its left
             side={isNextBelow ? "top" : "bottom"}
             align="start"
             sideOffset={12}
@@ -66,32 +60,18 @@ export const TimelineConflict = observer(function TimelineConflict(props: Props)
             onPointerLeave={(e) => e.buttons === 0 && onPointerLeave()}
           >
             <div className="flex max-w-96 flex-col gap-2 select-text">
-              <p className="text-body-xs-regular text-primary">
-                {t("timeline.conflict.fixed", {
-                  task: getIssueById(conflict.taskId)?.name,
-                  day: formatDay(conflict.fixedDay),
-                })}{" "}
-                {t(`timeline.conflict.asks.${arrow.kind}`, {
-                  day: formatDay(conflict.askedDay),
-                  days: arrow.delay,
-                  previous: getIssueById(arrow.previousId)?.name,
-                  anchor: formatDay(conflict.anchorDay),
-                })}
-              </p>
+              <p className="text-body-xs-regular text-primary">{sentence}</p>
               {isEditable && (
                 <div className="flex flex-wrap gap-1.5">
-                  {conflict.waysOut.map((wayOut) => (
+                  {waysOut.map(({ key, label, change }) => (
                     <Button
-                      key={wayOut.way}
+                      key={key}
                       variant="secondary"
                       size="sm"
                       stretch="auto"
-                      label={t(`timeline.conflict.ways_out.${wayOut.way}`, {
-                        day: "day" in wayOut ? formatDay(wayOut.day) : undefined,
-                        days: "delay" in wayOut ? wayOut.delay : undefined,
-                      })}
+                      label={label}
                       onClick={() => {
-                        runOperation(operation, (plan) => applyWayOut(plan, conflict, wayOut));
+                        runOperation(operation, change);
                         onClose();
                       }}
                     />
@@ -103,5 +83,81 @@ export const TimelineConflict = observer(function TimelineConflict(props: Props)
         </Popover>
       )}
     </>
+  );
+}
+
+/** A conflict as the schedule reports it: a task fixed on a day before the day its arrow asks for. */
+export const TimelineConflict = observer(function TimelineConflict(
+  props: TCardProps & { conflict: TConflict; arrow: TScheduleArrow }
+) {
+  const { conflict, arrow, ...cardProps } = props;
+  // store hooks
+  const {
+    issue: { getIssueById },
+  } = useIssueDetail();
+  // translation
+  const { t } = useTranslation();
+
+  return (
+    <ConflictCard
+      sentence={`${t("timeline.conflict.fixed", {
+        task: getIssueById(conflict.taskId)?.name,
+        day: formatDay(conflict.fixedDay),
+      })} ${t(`timeline.conflict.asks.${arrow.kind}`, {
+        day: formatDay(conflict.askedDay),
+        days: getDelayDays(arrow.delay),
+        previous: getIssueById(arrow.previousId)?.name,
+        anchor: formatDay(conflict.anchorDay),
+      })}`}
+      waysOut={conflict.waysOut.map((wayOut) => ({
+        key: wayOut.way,
+        label: t(`timeline.conflict.ways_out.${wayOut.way}`, {
+          day: "day" in wayOut ? formatDay(wayOut.day) : undefined,
+          days: "delay" in wayOut ? wayOut.delay : undefined,
+        }),
+        change: (plan) => applyWayOut(plan, conflict, wayOut),
+      }))}
+      {...cardProps}
+    />
+  );
+});
+
+/**
+ * A link that is apart: the arrow says that its two tasks move as one, and another arrow holds its next task
+ * later. The ways out make the arrow say what is there, or take it away.
+ */
+export const TimelineApartLink = observer(function TimelineApartLink(
+  props: TCardProps & { apartLink: TApartLink; arrow: TScheduleArrow; heldByArrow: TScheduleArrow | undefined }
+) {
+  const { apartLink, arrow, heldByArrow, ...cardProps } = props;
+  // store hooks
+  const {
+    issue: { getIssueById },
+  } = useIssueDetail();
+  // translation
+  const { t } = useTranslation();
+
+  return (
+    <ConflictCard
+      sentence={t("timeline.apart.sentence", {
+        task: getIssueById(apartLink.taskId)?.name,
+        previous: getIssueById(arrow.previousId)?.name,
+        days: apartLink.days,
+        other: heldByArrow && getIssueById(heldByArrow.previousId)?.name,
+      })}
+      waysOut={[
+        {
+          key: "in-days",
+          label: t("timeline.apart.ways_out.in-days", { days: apartLink.days }),
+          change: (plan) => setArrowMode(plan, arrow.id, "in"),
+        },
+        {
+          key: "remove-arrow",
+          label: t("timeline.apart.ways_out.remove-arrow"),
+          change: (plan) => removeArrow(plan, arrow.id),
+        },
+      ]}
+      {...cardProps}
+    />
   );
 });

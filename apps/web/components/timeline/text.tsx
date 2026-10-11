@@ -15,6 +15,10 @@ type TTextProps = {
   // where it stands
   className?: string;
   style?: CSSProperties;
+  // for a text that is held as a whole while the pointer is on any of its parts
+  onPointerEnter?: PointerEventHandler;
+  onPointerLeave?: PointerEventHandler;
+  onPointerMove?: PointerEventHandler;
   // its parts
   children: ReactNode;
 };
@@ -26,7 +30,7 @@ type TTextProps = {
  * parts, because a part may be something to act on by itself.
  */
 export function TimelineText(props: TTextProps) {
-  const { ref, isDanger = false, className, style, children } = props;
+  const { ref, isDanger = false, className, style, onPointerEnter, onPointerLeave, onPointerMove, children } = props;
 
   return (
     <div
@@ -37,6 +41,9 @@ export function TimelineText(props: TTextProps) {
         className
       )}
       style={style}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onPointerMove={onPointerMove}
     >
       {children}
     </div>

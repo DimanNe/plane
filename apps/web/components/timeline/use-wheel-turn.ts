@@ -17,17 +17,17 @@ const WHEEL_REST_TIME = 800;
 export type TWheelTurn = ReturnType<typeof useWheelTurn>;
 
 /**
- * The wheel on a value of the plan turns that value, a step a notch: the days of a delay, a date beside a bar.
- * Many notches are one change to the person who turns the wheel, so they are one operation: begun at the first
- * notch, shown at every notch, and saved when the wheel has rested for a moment, when what it turned says that
- * the pointer has left it, or when a button is pressed. Escape drops it. It never stays open: changes of the
- * plan made elsewhere wait for its end.
+ * The wheel on a value of the plan turns that value, a step a notch: what an arrow is, the days of a delay, a
+ * date beside a bar. Many notches are one change to the person who turns the wheel, so they are one operation:
+ * begun at the first notch, shown at every notch, and saved when the wheel has rested for a moment, when what it
+ * turned says that the pointer has left it, or when a button is pressed. Escape drops it. It never stays open:
+ * changes of the plan made elsewhere wait for its end.
  *
  * The timeline has one of these for everything the wheel turns, so that a turn of one value ends before a turn
  * of another begins.
  */
 export const useWheelTurn = (operation: TTimelineOperation) => {
-  // the operation that is going on: what is turned, the plan it began with, and the timer of the rest
+  // the operation that is going on: what is turned, the plan as the last notch left it, and the timer of the rest
   const turnRef = useRef<{ key: string; plan: TPlan; timer: number }>(undefined);
 
   const end = useLatestCallback((isAborted: boolean) => {
@@ -52,7 +52,11 @@ export const useWheelTurn = (operation: TTimelineOperation) => {
   // a press begins another gesture, whose operation would take the place of this one
   const handlePress = useLatestCallback(() => end(false));
 
-  /** A notch on the value named by `key`: `change` gives the plan after it, from the plan the turn began with. */
+  /**
+   * A notch on what `key` names: `change` gives the plan after it from the plan before it. A step of a round, as
+   * of what an arrow is, has no other plan to start from; a text with several parts names itself, so that a turn
+   * of one part goes on with a turn of another.
+   */
   const turn = useLatestCallback((key: string, change: (plan: TPlan) => TPlan) => {
     if (turnRef.current && turnRef.current.key !== key) end(false);
     if (!turnRef.current) {
@@ -64,7 +68,8 @@ export const useWheelTurn = (operation: TTimelineOperation) => {
     }
     window.clearTimeout(turnRef.current.timer);
     turnRef.current.timer = window.setTimeout(() => end(false), WHEEL_REST_TIME);
-    operation.preview(change(turnRef.current.plan));
+    turnRef.current.plan = change(turnRef.current.plan);
+    operation.preview(turnRef.current.plan);
   });
 
   useEffect(() => () => end(true), [end]);

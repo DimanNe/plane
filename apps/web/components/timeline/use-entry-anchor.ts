@@ -8,7 +8,7 @@ import { minBy } from "lodash-es";
 import { useState } from "react";
 // plane imports
 import { addArrow, placeTask } from "@plane/blocks/timeline-schedule";
-import type { TPlan } from "@plane/blocks/timeline-schedule";
+import type { TArrowDelay, TPlan } from "@plane/blocks/timeline-schedule";
 // local imports
 import { getDateOfDay } from "./scale";
 import type { THandle } from "./use-arrow-link";
@@ -38,8 +38,9 @@ const ANCHOR_SPEED = 0.3;
  * A task dragged from the list onto the timeline is put on the day under the pointer, fixed there. A task that
  * comes after another is better said so than put on a day: near an edge of a bar the dragged task takes that
  * edge as its anchor. It then follows a new arrow from that edge, from an end to its start or from a start to
- * its start: "immediately" at the edge, and with a delay of the days the pointer is to the right of it. It keeps
- * the anchor wherever the pointer goes, until that is to the left of the edge or near another edge.
+ * its start: linked at the edge, because who drops a task on an edge means the two to stay together, and "in n
+ * d" with the days the pointer is to the right of it. It keeps the anchor wherever the pointer goes, until that
+ * is to the left of the edge or near another edge.
  */
 export const useEntryAnchor = (params: TParams) => {
   const { taskIds, days, canvas, getDayAt, getLineAt } = params;
@@ -56,7 +57,7 @@ export const useEntryAnchor = (params: TParams) => {
     let placedPlan: TPlan | undefined;
     let lastMove: (TPosition & { time: number }) | undefined;
 
-    /** The day at which an edge stands: a task that follows it "immediately" starts on that day. */
+    /** The day at which an edge stands: a task that is linked to it starts on that day. */
     const getEdgeDay = ({ taskId: barTaskId, edge }: THandle) => {
       const bar = barDays[barTaskId];
       return bar ? (edge === "start" ? bar.start : bar.end + 1) : Infinity;
@@ -74,11 +75,14 @@ export const useEntryAnchor = (params: TParams) => {
       );
     };
 
+    /** What the new arrow from an edge is when the task is put on a day: linked at the edge, "in n d" beyond it. */
+    const getDelay = (day: number, edge: THandle): TArrowDelay =>
+      day > getEdgeDay(edge) ? day - getEdgeDay(edge) : "linked";
+
     /** The plan with the task following a new arrow from an edge; nothing when the engine refuses that arrow. */
     const getAnchoredPlan = (plan: TPlan, day: number, edge: THandle) => {
       const placed = placeTask(plan, taskId, getDateOfDay(day));
-      const delay = Math.max(day - getEdgeDay(edge), 0);
-      const anchored = addArrow(placed, edge.taskId, taskId, `${edge.edge}-start`, delay);
+      const anchored = addArrow(placed, edge.taskId, taskId, `${edge.edge}-start`, getDelay(day, edge));
       return "refused" in anchored ? undefined : anchored;
     };
 
@@ -111,9 +115,7 @@ export const useEntryAnchor = (params: TParams) => {
       else if (heldAnchor && getDayAt(position.clientX + ANCHOR_REACH) < getEdgeDay(heldAnchor)) heldAnchor = undefined;
       setAnchor(heldAnchor);
       placedPlan = (heldAnchor && getAnchoredPlan(plan, day, heldAnchor)) ?? placeTask(plan, taskId, getDateOfDay(day));
-      return heldAnchor
-        ? `${heldAnchor.taskId} ${heldAnchor.edge} ${Math.max(day - getEdgeDay(heldAnchor), 0)}`
-        : getDateOfDay(day);
+      return heldAnchor ? `${heldAnchor.taskId} ${heldAnchor.edge} ${getDelay(day, heldAnchor)}` : getDateOfDay(day);
     };
 
     return { getPlace, getPlacedPlan: (plan: TPlan) => placedPlan ?? plan, release };

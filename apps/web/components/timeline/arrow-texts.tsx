@@ -4,22 +4,25 @@
  * See the LICENSE file for details.
  */
 
-import { minBy } from "lodash-es";
+import { minBy, sortBy } from "lodash-es";
 import { memo, useEffect, useRef, useState } from "react";
 // plane imports
-import { changeArrow } from "@plane/blocks/timeline-schedule";
-import type { TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
+import { getArrowMode, getDelayDays } from "@plane/blocks/timeline-schedule";
+import type { TPlan, TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 // components
 import { BLOCK_HEIGHT, HEADER_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 // local imports
+import { getArrowModeParts } from "./arrow-parts";
+import type { TTextPart } from "./arrow-parts";
 import type { TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
 import { getArrowLayerStyle, STUB } from "./arrows";
 import { BAR_HEIGHT, BAR_TOP, DATE_DISTANCE, DATE_WIDTH } from "./bar";
 import type { TTimelineView } from "./scale";
-import { getDayDistance, MIN_BAR_WIDTH } from "./scale";
+import { getDayDistance, getDayOfDate, MIN_BAR_WIDTH } from "./scale";
 import { TimelineText, TimelineTextPart } from "./text";
+import { getNearestPartIndex, usePartAnchor } from "./use-part-anchor";
 import type { TWheelTurn } from "./use-wheel-turn";
 import { useWheelNotches } from "./wheel";
 
@@ -27,13 +30,14 @@ type TRect = { left: number; top: number; right: number; bottom: number };
 
 type TPosition = { clientX: number; clientY: number; target?: EventTarget | null };
 
-type TArrowText = { look: "delay" | "conflict"; days: number };
+type TArrowText = { isDanger: boolean; parts: TTextPart[] };
+
+type TTranslate = (key: string, params?: Record<string, unknown>) => string;
 
 type Props = Omit<TArrowWaysProps, "arrows"> & {
   drawnArrows: TDrawnArrow[];
+  plan: TPlan;
   schedule: TSchedule;
-  // the tasks that follow their arrows; the others are fixed on a day
-  followingTaskIds: Set<string>;
   // the fixed tasks that show the date of their start beside their bar
   datedTaskIds: Set<string>;
   // the lines in view, in pixels from the top of the first line
@@ -54,21 +58,43 @@ const CHARACTER_WIDTH = 6;
 // how far along its arrow from the middle a text goes for a free place, and in what steps
 const TEXT_REACH = 240;
 const TEXT_STEP = 8;
-// How far around a text that shows a delay the wheel still turns that delay: about a centimetre, by which a hand
-// that aims at a small text misses it.
+// How far around a text that the wheel turns the wheel still turns it: about a centimetre, by which a hand that
+// aims at a small text misses it.
 const WHEEL_MARGIN = 36;
 
 /**
- * What an arrow says over itself, always: the days of its delay when its next task follows it with one, and for
- * a conflict the days by which the fixed task is too early for the arrow. Else nothing: an arrow that is
- * followed "immediately" needs no word, and of a task that is fixed on its day the date stands beside its bar.
+ * What an arrow says over itself, always: what it is, "linked" or "in n d", in the parts that the wheel turns.
+ * What the plan does not keep is red: a link whose edges are apart tells by how many days, and an arrow whose
+ * fixed next task is too early for it tells that. An arrow that is kept by a task fixed on its day says nothing
+ * over itself, because that day stands beside the bar of the task. Only while the pointer holds the text of an
+ * arrow that the wheel has turned to "on" does that text stay, as "on" and the day, so that the wheel can turn on.
  */
-const getArrowText = (arrow: TScheduleArrow, schedule: TSchedule, isNextFixed: boolean): TArrowText | undefined => {
+const getArrowText = (
+  arrow: TScheduleArrow,
+  plan: TPlan,
+  schedule: TSchedule,
+  isHeldForWheel: boolean,
+  t: TTranslate
+): TArrowText | undefined => {
   const gap = schedule.gaps[arrow.id];
   if (gap === undefined) return;
-  if (!isNextFixed) return arrow.delay ? { look: "delay", days: arrow.delay } : undefined;
-  if (schedule.conflicts.some((conflict) => conflict.arrowId === arrow.id))
-    return { look: "conflict", days: arrow.delay - gap };
+  const mode = getArrowMode(plan, arrow);
+  const modeParts = getArrowModeParts(arrow, mode, getDayOfDate(schedule.dates[arrow.nextId].start), t);
+  if (mode === "on") {
+    const isConflict = schedule.conflicts.some((conflict) => conflict.arrowId === arrow.id);
+    if (isHeldForWheel) return { isDanger: isConflict, parts: modeParts };
+    if (!isConflict) return;
+    return {
+      isDanger: true,
+      parts: [{ key: "value", label: t("timeline.arrow.too_early", { days: getDelayDays(arrow.delay) - gap }) }],
+    };
+  }
+  const apartLink = schedule.apartLinks.find((link) => link.arrowId === arrow.id);
+  if (!apartLink) return { isDanger: false, parts: modeParts };
+  return {
+    isDanger: true,
+    parts: [modeParts[0], { key: "value", label: t("timeline.arrow.apart", { days: apartLink.days }) }],
+  };
 };
 
 /** The point of a way through the points that is at a distance from its start. */
@@ -144,92 +170,100 @@ const getTextPlace = (
 type TTextProps = {
   ref: (element: HTMLElement | null) => void;
   arrow: TScheduleArrow;
-  text: string;
-  look: TArrowText["look"];
+  text: TArrowText;
   place: TPoint;
-  // a click on it opens the control of its arrow, and the wheel turns a delay
-  isActionable: boolean;
-  isHeld: boolean;
+  // a click on it opens the control of its arrow
+  isClickable: boolean;
+  // the part that the wheel turns where the pointer is
+  heldPartIndex: number | undefined;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
 };
 
 function ArrowText(props: TTextProps) {
-  const { ref, arrow, text, look, place, isActionable, isHeld, onClick, onHover } = props;
+  const { ref, arrow, text, place, isClickable, heldPartIndex, onClick, onHover } = props;
 
   return (
     <TimelineText
       ref={ref}
-      isDanger={look === "conflict"}
+      isDanger={text.isDanger}
       className="absolute -translate-x-1/2 -translate-y-1/2"
       style={{ left: place[0], top: place[1] }}
     >
-      <TimelineTextPart
-        isActionable={isActionable}
-        isHeld={isHeld}
-        onClick={(e) => onClick(arrow, e)}
-        onPointerEnter={() => onHover(arrow)}
-        onPointerLeave={() => onHover(undefined)}
-      >
-        {text}
-      </TimelineTextPart>
+      {text.parts.map((part, index) => (
+        <TimelineTextPart
+          key={part.key}
+          isActionable={isClickable || !!part.turn}
+          isHeld={!!part.turn && index === heldPartIndex}
+          onClick={isClickable ? (e) => onClick(arrow, e) : undefined}
+          onPointerEnter={() => onHover(arrow)}
+          onPointerLeave={() => onHover(undefined)}
+        >
+          {part.label}
+        </TimelineTextPart>
+      ))}
     </TimelineText>
   );
 }
 
 const ArrowTexts = memo(function ArrowTexts(props: Props) {
-  const {
-    drawnArrows,
-    schedule,
-    followingTaskIds,
-    viewTop,
-    viewBottom,
-    wheelTurn,
-    isEditable,
-    scroll,
-    onClick,
-    onHover,
-  } = props;
+  const { drawnArrows, plan, schedule, viewTop, viewBottom, wheelTurn, isEditable, scroll, onClick, onHover } = props;
   // refs
   const elementsRef = useRef(new Map<string, HTMLElement>());
+  // where the pointer was when the part that the wheel turns was last found
+  const pointRef = useRef<{ x: number; y: number }>(undefined);
   // states
-  // The text whose area the pointer is in, and its place. It stays there while the pointer is in the area,
-  // whatever its arrow does: a text that moved away from the pointer would have to be found again.
-  const [held, setHeld] = useState<{ arrowId: string; place: TPoint }>();
+  // The text whose area the pointer is in: its place, the part of it that the wheel turns there, and whether the
+  // wheel turns it at all. It stays at that place while the pointer is in the area, whatever its arrow does: a
+  // text that moved away from the pointer would have to be found again.
+  const [held, setHeld] = useState<{ arrowId: string; place: TPoint; partIndex: number; isForWheel: boolean }>();
   // translation
   const { t } = useTranslation();
 
-  const texts = drawnArrows.flatMap(({ arrow, points }) => {
-    const arrowText = getArrowText(arrow, schedule, !followingTaskIds.has(arrow.nextId));
-    if (!arrowText) return [];
-    const text = t(`timeline.arrow.${arrowText.look === "conflict" ? "too_early" : "in_days"}`, {
-      days: arrowText.days,
-    });
-    return [{ arrow, points, text, look: arrowText.look, width: (text.length + 2) * CHARACTER_WIDTH }];
+  // a short arrow has few places for its text and a long one many: the short ones are placed first
+  const natural = sortBy(drawnArrows, ({ points }) => getLength(points)).flatMap(({ arrow, points }) => {
+    const text = getArrowText(arrow, plan, schedule, arrow.id === held?.arrowId && held.isForWheel, t);
+    return text ? [{ arrow, points, text }] : [];
   });
+  // the text that the pointer holds stays also when its arrow is out of the lines that are drawn
+  const heldArrow = held && plan.arrows.find((arrow) => arrow.id === held.arrowId);
+  const heldText =
+    natural.find(({ arrow }) => arrow.id === held?.arrowId)?.text ??
+    (heldArrow && held.isForWheel ? getArrowText(heldArrow, plan, schedule, true, t) : undefined);
+  const getWidth = (text: TArrowText) =>
+    text.parts.reduce((width, part) => width + (part.label.length + 2) * CHARACTER_WIDTH, 0);
   // A text that has its place is in the way of the next ones: first the one the pointer holds, then the others.
   const takenRects = getTakenRects(props);
-  const heldText = texts.find(({ arrow }) => arrow.id === held?.arrowId);
-  if (held && heldText) takenRects.push(getTextRect(held.place, heldText.width));
-  const placedTexts = texts.map(({ arrow, points, text, look, width }) => {
-    const place =
-      held && arrow.id === held.arrowId ? held.place : getTextPlace(points, width, takenRects, viewTop, viewBottom);
-    if (arrow.id !== held?.arrowId) takenRects.push(getTextRect(place, width));
-    return { arrow, text, look, place };
+  if (held && heldText) takenRects.push(getTextRect(held.place, getWidth(heldText)));
+  const placedTexts = natural.flatMap(({ arrow, points, text }) => {
+    if (arrow.id === held?.arrowId) return [];
+    const place = getTextPlace(points, getWidth(text), takenRects, viewTop, viewBottom);
+    takenRects.push(getTextRect(place, getWidth(text)));
+    return [{ arrow, text, place }];
   });
+  if (held && heldArrow && heldText) placedTexts.push({ arrow: heldArrow, text: heldText, place: held.place });
 
-  /** The arrow whose delay the wheel is turning; nothing while it turns something else of the timeline. */
+  const getHeldPart = (arrowId: string, partIndex: number) => {
+    const parts = elementsRef.current.get(arrowId)?.children;
+    return parts?.[Math.min(partIndex, parts.length - 1)];
+  };
+  const partAnchor = usePartAnchor(
+    () => held && getHeldPart(held.arrowId, held.partIndex),
+    (distance) => setHeld((text) => text && { ...text, place: [text.place[0] + distance, text.place[1]] })
+  );
+
+  /** The arrow whose text the wheel is turning; nothing while it turns something else of the timeline. */
   const getTurnedArrowId = () => {
     const turnedKey = wheelTurn.getTurnedKey();
     return placedTexts.some(({ arrow }) => arrow.id === turnedKey) ? turnedKey : undefined;
   };
 
   /**
-   * The text that has a place of the window in its area; of several the nearest. The area of a text that shows a
-   * delay is the text and `WHEEL_MARGIN` on every side of it: there the wheel turns the delay. The area of
-   * another text is the text. A text whose delay is being turned keeps the wheel while the place is in its area:
-   * its bars move, and another text may come nearer. Where the pointer is on something else that takes the wheel,
-   * that has it.
+   * The text that has a place of the window in its area, and its part that is nearest to that place; of several
+   * texts the nearest. The area of a text that the wheel turns is the text and `WHEEL_MARGIN` on every side of
+   * it: there the wheel turns its nearest part. The area of another text is the text. A text that is being turned
+   * keeps the wheel while the place is in its area: its bars move, and another text may come nearer. Where the
+   * pointer is on something else that takes the wheel, that has it.
    */
   const getTextNear = ({ clientX, clientY, target }: TPosition) => {
     if (!isEditable || !scroll) return;
@@ -238,14 +272,16 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     const frame = scroll.getBoundingClientRect();
     // the list and the header of the timeline cover what is under them
     if (clientX < frame.left + SIDEBAR_WIDTH || clientY < frame.top + HEADER_HEIGHT) return;
+    const getDistanceX = (box: DOMRect) => Math.max(box.left - clientX, clientX - box.right, 0);
     const textsNear = placedTexts.flatMap((placedText) => {
-      const box = elementsRef.current.get(placedText.arrow.id)?.getBoundingClientRect();
-      if (!box) return [];
-      const margin = placedText.look === "delay" ? WHEEL_MARGIN : 0;
-      const distanceX = Math.max(box.left - clientX, clientX - box.right, 0);
+      const element = elementsRef.current.get(placedText.arrow.id);
+      if (!element) return [];
+      const box = element.getBoundingClientRect();
+      const margin = placedText.text.parts.some(({ turn }) => turn) ? WHEEL_MARGIN : 0;
       const distanceY = Math.max(box.top - clientY, clientY - box.bottom, 0);
-      if (distanceX > margin || distanceY > margin) return [];
-      return [{ ...placedText, distance: Math.hypot(distanceX, distanceY) }];
+      if (getDistanceX(box) > margin || distanceY > margin) return [];
+      const partIndex = getNearestPartIndex(element, clientX);
+      return [{ ...placedText, partIndex, distance: Math.hypot(getDistanceX(box), distanceY) }];
     });
     return textsNear.find(({ arrow }) => arrow.id === getTurnedArrowId()) ?? minBy(textsNear, "distance");
   };
@@ -255,9 +291,25 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     const textNear = position && getTextNear(position);
     const turnedArrowId = getTurnedArrowId();
     if (turnedArrowId && textNear?.arrow.id !== turnedArrowId) wheelTurn.end(false);
-    if (textNear?.arrow.id !== held?.arrowId)
-      setHeld(textNear && { arrowId: textNear.arrow.id, place: textNear.place });
-    return textNear;
+    // A turn changes the text under a pointer that rests, and another part may come nearest: the wheel stays
+    // with its part until the pointer moves.
+    const hasMoved = position?.clientX !== pointRef.current?.x || position?.clientY !== pointRef.current?.y;
+    pointRef.current = position && { x: position.clientX, y: position.clientY };
+    if (hasMoved) partAnchor.release();
+    if (!textNear) {
+      if (held) setHeld(undefined);
+      return;
+    }
+    const isHeldText = textNear.arrow.id === held?.arrowId;
+    const partIndex = isHeldText && !hasMoved ? held.partIndex : textNear.partIndex;
+    if (!isHeldText || partIndex !== held.partIndex)
+      setHeld({
+        arrowId: textNear.arrow.id,
+        place: isHeldText ? held.place : textNear.place,
+        partIndex,
+        isForWheel: isHeldText ? held.isForWheel : textNear.text.parts.some(({ turn }) => turn),
+      });
+    return { ...textNear, partIndex, part: textNear.text.parts[Math.min(partIndex, textNear.text.parts.length - 1)] };
   });
 
   useEffect(() => {
@@ -271,17 +323,18 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     };
   }, [scroll, holdTextNear]);
 
+  // in the area of a text that the wheel turns, the wheel does nothing else, also on a part that only tells
   useWheelNotches(
     scroll,
     (direction, event) => {
       const textNear = holdTextNear(event);
-      const arrow = textNear?.arrow;
-      if (arrow)
-        wheelTurn.turn(arrow.id, (plan) =>
-          changeArrow(plan, arrow.id, { delay: Math.max(arrow.delay + direction, 1) })
-        );
+      const turn = textNear?.part.turn;
+      const part = textNear && getHeldPart(textNear.arrow.id, textNear.partIndex);
+      if (!textNear || !turn || !part) return;
+      partAnchor.hold(part, event.clientX);
+      wheelTurn.turn(textNear.arrow.id, (turnedPlan) => turn(turnedPlan, direction));
     },
-    (event) => holdTextNear(event)?.look === "delay"
+    (event) => !!holdTextNear(event)?.text.parts.some(({ turn }) => turn)
   );
 
   // a text that went away with the pointer in its area tells nobody that the pointer has left it
@@ -290,7 +343,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     if (isHeldTextGone) setHeld(undefined);
   }, [isHeldTextGone]);
 
-  return placedTexts.map(({ arrow, text, look, place }) => (
+  return placedTexts.map(({ arrow, text, place }) => (
     <ArrowText
       key={arrow.id}
       ref={(element) => {
@@ -300,11 +353,10 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
         };
       }}
       arrow={arrow}
-      text={text}
-      look={look}
+      text={isEditable ? text : { ...text, parts: text.parts.map(({ key, label }) => ({ key, label })) }}
       place={place}
-      isActionable={isEditable}
-      isHeld={isEditable && arrow.id === held?.arrowId}
+      isClickable={isEditable}
+      heldPartIndex={arrow.id === held?.arrowId ? held.partIndex : undefined}
       onClick={(clickedArrow, click) => {
         wheelTurn.end(false);
         onClick(clickedArrow, click);
@@ -314,7 +366,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   ));
 });
 
-/** The texts over the arrows: how each arrow is set, without a click. */
+/** The texts over the arrows: what each arrow is, without a click, and where the wheel changes it. */
 export function TimelineArrowTexts(props: Omit<Props, "pxPerDay"> & { view: TTimelineView }) {
   const { view, ...textsProps } = props;
 

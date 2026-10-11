@@ -61,7 +61,7 @@ export const BAR_HEIGHT = 32;
 // A date beside a bar stands this far from it, clear of the handle there and of the end of an arrow, and is about
 // this wide.
 export const DATE_DISTANCE = 28;
-export const DATE_WIDTH = 86;
+export const DATE_WIDTH = 112;
 const TEXT_PADDING = 10;
 
 /**
