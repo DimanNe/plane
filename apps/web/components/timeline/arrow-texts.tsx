@@ -260,6 +260,7 @@ function ArrowText(props: TTextProps) {
           <TimelineTextPart
             key={part.key}
             isActionable={isClickable || !!part.turn}
+            isTurned={!!part.turn}
             isHeld={!!part.turn && index === heldPartIndex}
             onClick={isClickable ? (e) => onClick(arrow, e) : undefined}
             onPointerEnter={() => onHover(arrow)}

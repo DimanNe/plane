@@ -96,7 +96,12 @@ export function TimelineTurnedText(props: Props) {
       }}
     >
       {parts.map((part) => (
-        <TimelineTextPart key={part.key} isActionable={!!part.turn} className={part.turn && "cursor-ns-resize"}>
+        <TimelineTextPart
+          key={part.key}
+          isActionable={!!part.turn}
+          isTurned={!!part.turn}
+          className={part.turn && "cursor-ns-resize"}
+        >
           {part.label}
         </TimelineTextPart>
       ))}
