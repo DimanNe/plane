@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { Button } from "@makeplane/propel/components/button";
@@ -20,11 +19,12 @@ import type { TTimelineOperation } from "./operation";
 import { runOperation } from "./operation";
 
 type TCardProps = {
+  // The text of the arrow, over which the pointer brings the card. The card stands under it, or above it where
+  // there is no room: never on it, because the wheel on that text turns the arrow.
+  text: HTMLElement;
   operation: TTimelineOperation;
   // the ways out are offered; else the explanation only tells
   isEditable: boolean;
-  // the line of the next task is under the arrow's place, not above it
-  isNextBelow: boolean;
   onClose: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -35,54 +35,46 @@ type TWayOutButton = { key: string; label: string; change: (plan: TPlan) => TPla
 const formatDay = (day: string) => renderFormattedDate(day, "MMM d");
 
 /**
- * Why the plan does not keep an arrow, at the arrow while the pointer is over it: a sentence, and the ways out,
- * each applied by a click as one operation.
+ * Why the plan does not keep an arrow, at the text of the arrow while the pointer is over the arrow: a sentence,
+ * and the ways out, each applied by a click as one operation.
  */
 function ConflictCard(props: TCardProps & { sentence: string; waysOut: TWayOutButton[] }) {
-  const { sentence, waysOut, operation, isEditable, isNextBelow, onClose, onPointerEnter, onPointerLeave } = props;
-  // states
-  const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
+  const { sentence, waysOut, text, operation, isEditable, onClose, onPointerEnter, onPointerLeave } = props;
 
   return (
-    <>
-      <span ref={setAnchor} />
-      {anchor && (
-        <Popover open onOpenChange={onClose}>
-          <PopoverContent
-            anchor={anchor}
-            // away from the next task, and to the right of the arrow: what produces the conflict is to its left
-            side={isNextBelow ? "top" : "bottom"}
-            align="start"
-            sideOffset={12}
-            initialFocus={false}
-            onPointerEnter={onPointerEnter}
-            // it stays while its text is being selected, also when the pointer goes over its edge
-            onPointerLeave={(e) => e.buttons === 0 && onPointerLeave()}
-          >
-            <div className="flex max-w-96 flex-col gap-2 select-text">
-              <p className="text-body-xs-regular text-primary">{sentence}</p>
-              {isEditable && (
-                <div className="flex flex-wrap gap-1.5">
-                  {waysOut.map(({ key, label, change }) => (
-                    <Button
-                      key={key}
-                      variant="secondary"
-                      size="sm"
-                      stretch="auto"
-                      label={label}
-                      onClick={() => {
-                        runOperation(operation, change);
-                        onClose();
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+    <Popover open onOpenChange={onClose}>
+      <PopoverContent
+        anchor={text}
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        initialFocus={false}
+        onPointerEnter={onPointerEnter}
+        // it stays while its text is being selected, also when the pointer goes over its edge
+        onPointerLeave={(e) => e.buttons === 0 && onPointerLeave()}
+      >
+        <div className="flex max-w-96 flex-col gap-2 select-text">
+          <p className="text-body-xs-regular text-primary">{sentence}</p>
+          {isEditable && (
+            <div className="flex flex-wrap gap-1.5">
+              {waysOut.map(({ key, label, change }) => (
+                <Button
+                  key={key}
+                  variant="secondary"
+                  size="sm"
+                  stretch="auto"
+                  label={label}
+                  onClick={() => {
+                    runOperation(operation, change);
+                    onClose();
+                  }}
+                />
+              ))}
             </div>
-          </PopoverContent>
-        </Popover>
-      )}
-    </>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

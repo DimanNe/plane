@@ -37,6 +37,7 @@ export interface ITimelineScheduleStore {
   // computed functions
   getPlan: (projectId: string) => TPlan;
   getSchedule: (projectId: string) => TSchedule;
+  getChangingArrowIds: (projectId: string) => string[];
   getHeldProjectIds: (workspaceSlug: string) => string[];
   isPlanComputedFrom: (projectId: string, table: string, id: string) => boolean;
   // actions
@@ -47,6 +48,9 @@ export interface ITimelineScheduleStore {
   commitOperation: () => Promise<boolean>;
   abortOperation: () => void;
 }
+
+// one list for every time there is none, so that what reads it is not drawn again
+const NO_ARROW_IDS: string[] = [];
 
 const getReason = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -119,6 +123,18 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     (projectId: string): TPlan =>
       this.operation?.projectId === projectId ? this.operation.plan : this.getStoredPlan(projectId)
   );
+
+  /**
+   * The arrows whose days the operation that is going on has changed, and those it has added: what a move of a
+   * task makes count. None without an operation, and none while it is being saved: the gesture is over then.
+   */
+  getChangingArrowIds = computedFn((projectId: string): string[] => {
+    if (this.operation?.projectId !== projectId || this.operation.isSaving) return NO_ARROW_IDS;
+    const storedDelays = new Map(this.getStoredPlan(projectId).arrows.map((arrow) => [arrow.id, arrow.delay]));
+    return this.operation.plan.arrows.flatMap((arrow) =>
+      storedDelays.get(arrow.id) === arrow.delay ? [] : [arrow.id]
+    );
+  });
 
   /**
    * The schedule of that plan: the preview of the operation while one is going on. Stored arrows that cannot be

@@ -167,6 +167,7 @@ export const WorkItemsTimeline = observer(function WorkItemsTimeline(props: Prop
       taskIds={taskIds}
       plan={schedule.getPlan(projectId)}
       schedule={schedule.getSchedule(projectId)}
+      changingArrowIds={schedule.getChangingArrowIds(projectId)}
       operation={operation}
       showOnlyLeaves={showOnlyLeaves}
       // one move at a time: the next waits until the list is in the order of the first

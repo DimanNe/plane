@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import type { ReactNode } from "react";
 import { memo } from "react";
 import { clamp, groupBy, sortBy } from "lodash-es";
 // plane imports
@@ -14,6 +13,8 @@ import { cn } from "@plane/utils";
 import { BLOCK_HEIGHT } from "@/components/gantt-chart/constants";
 // local imports
 import { BAR_HEIGHT } from "./bar";
+import { ARROW_LINE_LOOKS, getArrowState, getShownArrowState } from "./arrow-state";
+import type { TArrowStates } from "./arrow-state";
 import type { TTimelineView } from "./scale";
 import { BASE_DAY, getDayDistance, getDayX, MIN_BAR_WIDTH } from "./scale";
 
@@ -40,22 +41,13 @@ export type TArrowWaysProps = {
 type TPathsProps = {
   drawnArrows: TDrawnArrow[];
   schedule: TSchedule;
-  selectedArrowId: string | undefined;
+  arrowStates: TArrowStates;
   // the arrows that produce the conflict the pointer is over
   causeArrowIds: string[];
   isEditable: boolean;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
   onEndPress: (press: React.PointerEvent, arrow: TScheduleArrow, end: TArrowEnd) => void;
-};
-
-type TControlsProps = {
-  drawnArrows: TDrawnArrow[];
-  // the lines in view, in pixels from the top of the first line
-  viewTop: number;
-  viewBottom: number;
-  // `isNextBelow`: the line of the arrow's next task is under that place, not above it
-  renderControl: (arrow: TScheduleArrow, isNextBelow: boolean) => ReactNode;
 };
 
 // how far an arrow runs out of a bar and into one before it turns: past the handle at that end of the bar
@@ -71,12 +63,19 @@ const HEAD_LENGTH = 8;
 // the widest and the narrowest strip along an arrow that takes the pointer
 const HIT_WIDTH = 12;
 const MIN_HIT_WIDTH = 6;
-// the colour of an arrow: of a conflict and of what produces it, of a critical or a selected arrow, of the others
+// The colour of an arrow: of a conflict and of what produces it, of a critical or a selected arrow, of the others;
+// and of an arrow whose days count in the move that is going on, and of one that stops that move.
 const CLASS_NAMES = {
   normal: "text-placeholder",
   accent: "text-accent-primary",
   danger: "text-danger-primary",
+  changing: "text-success-primary",
+  stopping: "text-warning-primary",
 };
+// The head of an arrow, and the head of one that stops a move: with a bar across its tip, at the edge of the bar
+// that goes no further.
+const HEAD_PATH = "M 0 0 L 7 4 L 0 8 z";
+const STOPPING_HEAD_PATH = `${HEAD_PATH} M 5.5 -3 h 2.5 v 14 h -2.5 z`;
 
 // Where an arrow ends on the edge of a bar: how far under the middle of the bar, how far the next end on that edge
 // is, and how many of the other arrows of the edge turn nearer to the bar.
@@ -231,7 +230,7 @@ const getPoints = (
 /**
  * The arrows that have a way through the lines that are drawn, each with the corners of its way and with the
  * width of the strip along it that takes the pointer: narrower where its ends are close to those of other arrows.
- * Found once for all that is drawn of the arrows: their lines, their texts and their controls.
+ * Found once for all that is drawn of the arrows: their lines and their texts.
  */
 export const getDrawnArrows = (props: TArrowWaysProps): TDrawnArrow[] => {
   const endPlaces = getEndPlaces(props);
@@ -244,16 +243,16 @@ export const getDrawnArrows = (props: TArrowWaysProps): TDrawnArrow[] => {
 };
 
 const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
-  const { drawnArrows, schedule, selectedArrowId, causeArrowIds, isEditable, onClick, onHover, onEndPress } = props;
+  const { drawnArrows, schedule, arrowStates, causeArrowIds, isEditable, onClick, onHover, onEndPress } = props;
 
   return (
     <svg className="absolute top-0 left-0 h-full w-px overflow-visible">
-      {/* a head per state: a marker takes its colour from where it is defined, not from the path that ends with it */}
-      {Object.entries(CLASS_NAMES).map(([state, className]) => (
+      {/* a head per colour: a marker takes its colour from where it is defined, not from the path that ends with it */}
+      {Object.entries(CLASS_NAMES).map(([colour, className]) => (
         <marker
-          key={state}
-          id={`timeline-arrow-head-${state}`}
-          className={className}
+          key={colour}
+          id={`timeline-arrow-head-${colour}`}
+          className={cn("overflow-visible", className)}
           markerUnits="userSpaceOnUse"
           markerWidth={7}
           markerHeight={8}
@@ -261,28 +260,29 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
           refY={4}
           orient="auto"
         >
-          <path d="M 0 0 L 7 4 L 0 8 z" fill="currentColor" />
+          <path d={colour === "stopping" ? STOPPING_HEAD_PATH : HEAD_PATH} fill="currentColor" />
         </marker>
       ))}
       {drawnArrows.map(({ arrow, points, hitWidth }) => {
         const path = getPath(points);
-        const isSelected = arrow.id === selectedArrowId;
         const isConflictCause = causeArrowIds.includes(arrow.id);
-        const state =
-          isConflictCause || [...schedule.conflicts, ...schedule.apartLinks].some(({ arrowId }) => arrowId === arrow.id)
-            ? "danger"
-            : isSelected || schedule.criticalArrowIds.includes(arrow.id)
-              ? "accent"
-              : "normal";
+        const state = getArrowState(arrow.id, arrowStates);
+        const isInConflict =
+          isConflictCause ||
+          [...schedule.conflicts, ...schedule.apartLinks].some(({ arrowId }) => arrowId === arrow.id);
+        const look = ARROW_LINE_LOOKS[getShownArrowState(state, isInConflict)];
+        const isAccent = state === "selected" || schedule.criticalArrowIds.includes(arrow.id);
+        // a move of a task has its say on an arrow before what the plan says of it
+        const colour = look.colour ?? (isInConflict ? "danger" : isAccent ? "accent" : "normal");
         const ends = (["tail", "head"] as const).map((end) => [end, getEndPoint(points, end)] as const);
         return (
-          <g key={arrow.id} className={cn("group/arrow", CLASS_NAMES[state])}>
+          <g key={arrow.id} className={cn("group/arrow", CLASS_NAMES[colour])} data-state={state}>
             <path
               d={path}
               fill="none"
               stroke="currentColor"
-              strokeWidth={isSelected ? 3 : isConflictCause ? 2.5 : 1.5}
-              markerEnd={`url(#timeline-arrow-head-${state})`}
+              strokeWidth={Math.max(look.strokeWidth, isConflictCause ? 2.5 : 0)}
+              markerEnd={`url(#timeline-arrow-head-${colour})`}
             />
             <path
               d={path}
@@ -319,29 +319,7 @@ const ArrowPaths = memo(function ArrowPaths(props: TPathsProps) {
   );
 });
 
-const ArrowControls = memo(function ArrowControls(props: TControlsProps) {
-  const { drawnArrows, viewTop, viewBottom, renderControl } = props;
-
-  return drawnArrows.map(({ arrow, points }) => {
-    // on the last stretch of the arrow between the lines: in its middle, or as near to it as is in view
-    const [x, fromY] = points[points.length - 3];
-    const [, toY] = points[points.length - 2];
-    const top = Math.max(Math.min(fromY, toY), viewTop);
-    const bottom = Math.min(Math.max(fromY, toY), viewBottom);
-    return (
-      <div
-        key={arrow.id}
-        className="pointer-events-auto absolute"
-        style={{ left: x, top: clamp((fromY + toY) / 2, top, Math.max(top, bottom)) }}
-      >
-        {renderControl(arrow, toY > fromY)}
-      </div>
-    );
-  });
-});
-
-// The arrows, their texts and their controls are drawn for a scale and moved as a whole, so a pan draws none of
-// them again.
+// The arrows and their texts are drawn for a scale and moved as a whole, so a pan draws none of them again.
 export const getArrowLayerStyle = (view: TTimelineView) => ({ transform: `translateX(${getDayX(view, BASE_DAY)}px)` });
 
 /** The arrows between the bars. */
@@ -351,17 +329,6 @@ export function TimelineArrows(props: TPathsProps & { view: TTimelineView }) {
   return (
     <div className="absolute inset-y-0 left-0" style={getArrowLayerStyle(view)}>
       <ArrowPaths {...pathsProps} />
-    </div>
-  );
-}
-
-/** What `renderControl` gives for each of the arrows, at a place on the arrow: what a conflict says. */
-export function TimelineArrowControls(props: TControlsProps & { view: TTimelineView }) {
-  const { view, ...controlsProps } = props;
-
-  return (
-    <div className="absolute inset-y-0 left-0" style={getArrowLayerStyle(view)}>
-      <ArrowControls {...controlsProps} />
     </div>
   );
 }

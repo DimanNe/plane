@@ -62,12 +62,7 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
       // end -> end asks for the end, and the start follows from the duration
       link.askedStart =
         anchor + getDelayDays(delay) + (kind === "end-start" ? 1 : kind === "end-end" ? 1 - task.duration : 0);
-      // Of two arrows that ask for the same day the "in n d" decides: it is the one whose n a move of the task
-      // changes, while a linked arrow takes its previous task along whether it decides or not.
-      const isLater = !deciding || link.askedStart > deciding.askedStart;
-      const isSameDayInDays =
-        deciding?.askedStart === link.askedStart && deciding.arrow.delay === "linked" && delay !== "linked";
-      if (isLater || isSameDayInDays) deciding = link;
+      if (!deciding || link.askedStart > deciding.askedStart) deciding = link;
     }
     if (task.start !== "anchor") start[index] = toDayNumber(task.start.at);
     else if (deciding) {

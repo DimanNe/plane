@@ -12,6 +12,8 @@ type TTextProps = {
   ref?: (element: HTMLElement | null) => void;
   // what is wrong with the plan is red
   isDanger?: boolean;
+  // what the thing that the text tells of is doing now, for whoever reads the page
+  state?: string;
   // where it stands
   className?: string;
   style?: CSSProperties;
@@ -30,7 +32,17 @@ type TTextProps = {
  * parts, because a part may be something to act on by itself.
  */
 export function TimelineText(props: TTextProps) {
-  const { ref, isDanger = false, className, style, onPointerEnter, onPointerLeave, onPointerMove, children } = props;
+  const {
+    ref,
+    isDanger = false,
+    state,
+    className,
+    style,
+    onPointerEnter,
+    onPointerLeave,
+    onPointerMove,
+    children,
+  } = props;
 
   return (
     <div
@@ -41,6 +53,7 @@ export function TimelineText(props: TTextProps) {
         className
       )}
       style={style}
+      data-state={state}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       onPointerMove={onPointerMove}

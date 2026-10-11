@@ -33,6 +33,12 @@ export type TArrowMode = "linked" | "in" | "on";
 
 export type TPlan = { tasks: TScheduleTask[]; arrows: TScheduleArrow[] };
 
+/**
+ * What a move of a task comes to: the plan after it, and the arrows that stop it. An arrow stops a move when the
+ * task was asked to go further than the arrow lets its body go; it tells why the bar stays behind the pointer.
+ */
+export type TTaskMove = { plan: TPlan; stoppingArrowIds: string[] };
+
 export type TWayOut =
   | { way: "follow-arrows" }
   | { way: "move-fixed-day"; day: TDay }

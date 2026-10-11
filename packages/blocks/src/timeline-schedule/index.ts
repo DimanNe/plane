@@ -13,6 +13,8 @@ export {
   getArrowKind,
   getArrowMode,
   getLatestArrowId,
+  getTaskMove,
+  getTaskResize,
   moveTask,
   placeTask,
   removeArrow,
@@ -36,6 +38,7 @@ export type {
   TScheduleArrow,
   TScheduleTask,
   TTaskEdge,
+  TTaskMove,
   TTaskStart,
   TWayOut,
 } from "./types";

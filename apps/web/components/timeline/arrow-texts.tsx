@@ -6,16 +6,20 @@
 
 import { minBy, sortBy } from "lodash-es";
 import { memo, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 // plane imports
 import { getArrowMode, getDelayDays } from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TScheduleArrow } from "@plane/blocks/timeline-schedule";
 import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
+import { cn } from "@plane/utils";
 // components
 import { BLOCK_HEIGHT, HEADER_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 // local imports
 import { getArrowModeParts } from "./arrow-parts";
 import type { TTextPart } from "./arrow-parts";
+import { ARROW_TEXT_CLASS_NAMES, getArrowState, getShownArrowState } from "./arrow-state";
+import type { TArrowState, TArrowStates } from "./arrow-state";
 import type { TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
 import { getArrowLayerStyle, STUB } from "./arrows";
 import { BAR_HEIGHT, BAR_TOP, DATE_DISTANCE, DATE_WIDTH } from "./bar";
@@ -38,8 +42,11 @@ type Props = Omit<TArrowWaysProps, "arrows"> & {
   drawnArrows: TDrawnArrow[];
   plan: TPlan;
   schedule: TSchedule;
+  arrowStates: TArrowStates;
   // the fixed tasks that show the date of their start beside their bar
   datedTaskIds: Set<string>;
+  // the task whose bar is dragged: both its dates show, and the arrows whose days count tell them beside those
+  draggedTaskId: string | undefined;
   // the lines in view, in pixels from the top of the first line
   viewTop: number;
   viewBottom: number;
@@ -49,15 +56,18 @@ type Props = Omit<TArrowWaysProps, "arrows"> & {
   scroll: HTMLElement | null;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
+  // what an arrow has to explain while the pointer is over it, for the layer to show at the text of the arrow
+  renderCard: (arrow: TScheduleArrow, text: HTMLElement) => ReactNode;
 };
 
 // The size a text takes on the timeline, for finding it a free place. A little less than it is drawn with, so
-// that a text may touch a bar.
+// that a text may touch a bar; and the height it is drawn with.
 const TEXT_HEIGHT = 16;
+const DRAWN_TEXT_HEIGHT = 20;
 const CHARACTER_WIDTH = 6;
 // how far along its arrow from the middle a text goes for a free place, and in what steps
 const TEXT_REACH = 240;
-const TEXT_STEP = 8;
+const TEXT_STEP = 4;
 // How far around a text that the wheel turns the wheel still turns it: about a centimetre, by which a hand that
 // aims at a small text misses it.
 const WHEEL_MARGIN = 36;
@@ -118,33 +128,60 @@ const getLength = (points: TPoint[]) =>
 const isOver = (a: TRect, b: TRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
 /** What a text of a width takes when it stands with its middle at a place. */
-const getTextRect = ([x, y]: TPoint, width: number): TRect => ({
+const getTextRect = ([x, y]: TPoint, width: number, height = TEXT_HEIGHT): TRect => ({
   left: x - width / 2,
-  top: y - TEXT_HEIGHT / 2,
+  top: y - height / 2,
   right: x + width / 2,
-  bottom: y + TEXT_HEIGHT / 2,
+  bottom: y + height / 2,
 });
 
-/** What a text keeps clear of: the bars of the lines that are drawn, and the dates beside fixed tasks. */
+/**
+ * What a text that has its place keeps the next texts off: so much higher than a text is looked for with, that
+ * the next one comes no nearer than the height texts are drawn with. Two texts may not touch as a text and a bar
+ * may.
+ */
+const getPlacedTextRect = (place: TPoint, width: number): TRect =>
+  getTextRect(place, width, 2 * DRAWN_TEXT_HEIGHT - TEXT_HEIGHT);
+
+/**
+ * What a text keeps clear of: the bars of the lines that are drawn, the dates that stand beside them, and the
+ * stretch of every arrow beside the bar it leaves and beside the bar it reaches. There each arrow of an edge is
+ * pointed at by itself, and its ends are taken.
+ */
 const getTakenRects = (props: Props): TRect[] => {
-  const { days, lineIndexes, firstLine, lastLine, pxPerDay, datedTaskIds } = props;
-  const rects: TRect[] = [];
+  const { drawnArrows, days, lineIndexes, firstLine, lastLine, pxPerDay, datedTaskIds, draggedTaskId } = props;
+  const rects: TRect[] = drawnArrows.flatMap(({ points, hitWidth }) =>
+    [points.slice(0, 2), points.slice(-2)].map(([[fromX, y], [toX]]) => ({
+      left: Math.min(fromX, toX),
+      top: y - hitWidth / 2,
+      right: Math.max(fromX, toX),
+      bottom: y + hitWidth / 2,
+    }))
+  );
   for (const [taskId, lineIndex] of lineIndexes) {
     const task = days[taskId];
     if (!task || lineIndex < firstLine - 1 || lineIndex > lastLine) continue;
     const left = getDayDistance(pxPerDay, task.start);
     const right = Math.max(getDayDistance(pxPerDay, task.end + 1), left + MIN_BAR_WIDTH);
     const top = lineIndex * BLOCK_HEIGHT + BAR_TOP;
-    const dateWidth = datedTaskIds.has(taskId) ? DATE_DISTANCE + DATE_WIDTH : 0;
-    rects.push({ left: left - dateWidth, top, right, bottom: top + BAR_HEIGHT });
+    rects.push({ left, top, right, bottom: top + BAR_HEIGHT });
+    // a date is as high as a text, in the middle of the line of its bar
+    const dateTop = top + (BAR_HEIGHT - TEXT_HEIGHT) / 2;
+    const dateWidth = DATE_DISTANCE + DATE_WIDTH;
+    const isDragged = taskId === draggedTaskId;
+    if (isDragged || datedTaskIds.has(taskId))
+      rects.push({ left: left - dateWidth, top: dateTop, right: left, bottom: dateTop + TEXT_HEIGHT });
+    if (isDragged) rects.push({ left: right, top: dateTop, right: right + dateWidth, bottom: dateTop + TEXT_HEIGHT });
   }
   return rects;
 };
 
 /**
  * The place of a text on its arrow: as near to the middle of the arrow as a place is free, and clear of the ends
- * of the arrow, where the handles are. A place among the lines in view goes before one that is not; where no
- * place is free the text stands in the middle.
+ * of the arrow, where the handles are. An arrow between bars that stand close has no free place on it: its text
+ * then stands beside the bar the arrow leads to, on the line of that bar and out from the edge the arrow meets,
+ * or so beside the bar it leads from. A place among the lines in view goes before one that is not; where no
+ * place is free at all the text stands in the middle of the arrow.
  */
 const getTextPlace = (
   points: TPoint[],
@@ -155,14 +192,31 @@ const getTextPlace = (
 ): TPoint => {
   const length = getLength(points);
   let freePlace: TPoint | undefined;
+  /**
+   * A place is taken when a text there would lie on something, and also when it is outside the lines in view: the
+   * first free place of that second kind is kept for when no other is free.
+   */
+  const isTaken = (place: TPoint) => {
+    const rect = getTextRect(place, width);
+    if (takenRects.some((taken) => isOver(rect, taken))) return true;
+    freePlace ??= place;
+    return place[1] < viewTop || place[1] > viewBottom;
+  };
   for (let offset = 0; offset <= TEXT_REACH; offset += TEXT_STEP)
     for (const distance of offset ? [length / 2 + offset, length / 2 - offset] : [length / 2]) {
       if (distance < STUB || distance > length - STUB) continue;
       const place = getPointAt(points, distance);
-      const rect = getTextRect(place, width);
-      if (takenRects.some((taken) => isOver(rect, taken))) continue;
-      if (place[1] >= viewTop && place[1] <= viewBottom) return place;
-      freePlace ??= place;
+      if (!isTaken(place)) return place;
+    }
+  // beside a bar: past the handle at the edge, each place a step further out than the one before
+  const ends = [
+    [points[points.length - 1], points[points.length - 2]],
+    [points[0], points[1]],
+  ];
+  for (const [[endX, endY], [beforeX]] of ends)
+    for (let step = 0; step <= TEXT_REACH; step += TEXT_STEP) {
+      const place: TPoint = [endX - Math.sign(endX - beforeX) * (STUB + width / 2 + step), endY];
+      if (!isTaken(place)) return place;
     }
   return freePlace ?? getPointAt(points, length / 2);
 };
@@ -171,6 +225,7 @@ type TTextProps = {
   ref: (element: HTMLElement | null) => void;
   arrow: TScheduleArrow;
   text: TArrowText;
+  state: TArrowState;
   place: TPoint;
   // a click on it opens the control of its arrow
   isClickable: boolean;
@@ -178,36 +233,63 @@ type TTextProps = {
   heldPartIndex: number | undefined;
   onClick: (arrow: TScheduleArrow, click: React.MouseEvent) => void;
   onHover: (arrow: TScheduleArrow | undefined) => void;
+  renderCard: (arrow: TScheduleArrow, text: HTMLElement) => ReactNode;
 };
 
 function ArrowText(props: TTextProps) {
-  const { ref, arrow, text, place, isClickable, heldPartIndex, onClick, onHover } = props;
+  const { ref, arrow, text, state, place, isClickable, heldPartIndex, onClick, onHover, renderCard } = props;
+  // states
+  const [element, setElement] = useState<HTMLElement | null>(null);
 
   return (
-    <TimelineText
-      ref={ref}
-      isDanger={text.isDanger}
-      className="absolute -translate-x-1/2 -translate-y-1/2"
-      style={{ left: place[0], top: place[1] }}
-    >
-      {text.parts.map((part, index) => (
-        <TimelineTextPart
-          key={part.key}
-          isActionable={isClickable || !!part.turn}
-          isHeld={!!part.turn && index === heldPartIndex}
-          onClick={isClickable ? (e) => onClick(arrow, e) : undefined}
-          onPointerEnter={() => onHover(arrow)}
-          onPointerLeave={() => onHover(undefined)}
-        >
-          {part.label}
-        </TimelineTextPart>
-      ))}
-    </TimelineText>
+    <>
+      <TimelineText
+        ref={(textElement) => {
+          setElement(textElement);
+          return ref(textElement);
+        }}
+        isDanger={text.isDanger}
+        state={state}
+        className={cn(
+          "absolute -translate-x-1/2 -translate-y-1/2",
+          ARROW_TEXT_CLASS_NAMES[getShownArrowState(state, text.isDanger)]
+        )}
+        style={{ left: place[0], top: place[1] }}
+      >
+        {text.parts.map((part, index) => (
+          <TimelineTextPart
+            key={part.key}
+            isActionable={isClickable || !!part.turn}
+            isHeld={!!part.turn && index === heldPartIndex}
+            onClick={isClickable ? (e) => onClick(arrow, e) : undefined}
+            onPointerEnter={() => onHover(arrow)}
+            onPointerLeave={() => onHover(undefined)}
+          >
+            {part.label}
+          </TimelineTextPart>
+        ))}
+      </TimelineText>
+      {/* beside the text, not in it: what a text holds are its parts */}
+      {element && renderCard(arrow, element)}
+    </>
   );
 }
 
 const ArrowTexts = memo(function ArrowTexts(props: Props) {
-  const { drawnArrows, plan, schedule, viewTop, viewBottom, wheelTurn, isEditable, scroll, onClick, onHover } = props;
+  const {
+    drawnArrows,
+    plan,
+    schedule,
+    arrowStates,
+    viewTop,
+    viewBottom,
+    wheelTurn,
+    isEditable,
+    scroll,
+    onClick,
+    onHover,
+    renderCard,
+  } = props;
   // refs
   const elementsRef = useRef(new Map<string, HTMLElement>());
   // where the pointer was when the part that the wheel turns was last found
@@ -234,11 +316,11 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     text.parts.reduce((width, part) => width + (part.label.length + 2) * CHARACTER_WIDTH, 0);
   // A text that has its place is in the way of the next ones: first the one the pointer holds, then the others.
   const takenRects = getTakenRects(props);
-  if (held && heldText) takenRects.push(getTextRect(held.place, getWidth(heldText)));
+  if (held && heldText) takenRects.push(getPlacedTextRect(held.place, getWidth(heldText)));
   const placedTexts = natural.flatMap(({ arrow, points, text }) => {
     if (arrow.id === held?.arrowId) return [];
     const place = getTextPlace(points, getWidth(text), takenRects, viewTop, viewBottom);
-    takenRects.push(getTextRect(place, getWidth(text)));
+    takenRects.push(getPlacedTextRect(place, getWidth(text)));
     return [{ arrow, text, place }];
   });
   if (held && heldArrow && heldText) placedTexts.push({ arrow: heldArrow, text: heldText, place: held.place });
@@ -354,6 +436,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
       }}
       arrow={arrow}
       text={isEditable ? text : { ...text, parts: text.parts.map(({ key, label }) => ({ key, label })) }}
+      state={getArrowState(arrow.id, arrowStates)}
       place={place}
       isClickable={isEditable}
       heldPartIndex={arrow.id === held?.arrowId ? held.partIndex : undefined}
@@ -362,6 +445,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
         onClick(clickedArrow, click);
       }}
       onHover={onHover}
+      renderCard={renderCard}
     />
   ));
 });

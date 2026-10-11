@@ -15,8 +15,8 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { ArrowCollapseOutline, FullScreenOutline } from "@makeplane/propel/icons";
 import { DropIndicator } from "@plane/blocks/common";
 import { Row } from "@plane/blocks/layout";
-import { getConflictCause, moveTask, removeTask, resizeTask } from "@plane/blocks/timeline-schedule";
-import type { TPlan, TSchedule, TScheduleArrow, TTaskEdge } from "@plane/blocks/timeline-schedule";
+import { getConflictCause, getTaskMove, getTaskResize, removeTask } from "@plane/blocks/timeline-schedule";
+import type { TPlan, TSchedule, TScheduleArrow, TTaskEdge, TTaskMove } from "@plane/blocks/timeline-schedule";
 import { ALL_ISSUES } from "@plane/constants";
 import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
@@ -41,7 +41,7 @@ import useSize from "@/hooks/use-window-size";
 // local imports
 import { TimelineArrowControl } from "./arrow-control";
 import { TimelineArrowTexts } from "./arrow-texts";
-import { getDrawnArrows, TimelineArrowControls, TimelineArrows, TimelineDrawnArrow } from "./arrows";
+import { getDrawnArrows, TimelineArrows, TimelineDrawnArrow } from "./arrows";
 import { TimelineBackdrop } from "./backdrop";
 import { TimelineApartLink, TimelineConflict } from "./conflict";
 import { TimelineBarDimension } from "./dimension";
@@ -66,6 +66,8 @@ type Props = {
   // the plan and its schedule: of what is stored, or of the operation that is going on
   plan: TPlan;
   schedule: TSchedule;
+  // the arrows whose days the operation that is going on has changed
+  changingArrowIds: string[];
   operation: TTimelineOperation;
   // a day the timeline shows when it opens, besides its bars and today
   focusDate?: string | null;
@@ -95,6 +97,7 @@ const LEAVE_DELAY = 300;
 // that crosses bars on its way is over one of them.
 const BAR_HOVER_DELAY = 200;
 const NO_CAUSE: ReturnType<typeof getConflictCause> = { taskIds: [], arrowIds: [] };
+const NO_ARROW_IDS: string[] = [];
 
 /**
  * A copy of text of the timeline, also of what opens from it, carries plain text only. The browser would add the
@@ -118,6 +121,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     taskIds,
     plan: { tasks, arrows },
     schedule,
+    changingArrowIds,
     operation,
     focusDate,
     isEditable,
@@ -137,9 +141,15 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const [canvas, setCanvas] = useState<HTMLDivElement | null>(null);
   const [firstLineInView, setFirstLineInView] = useState(0);
   // The task that is dragged. When it is its line that moves: the line before which it would land, and how far
-  // it is from its place, in pixels.
-  const [drag, setDrag] = useState<{ taskId: string; lineIndex?: number; lineOffset?: number }>();
-  // the arrow the pointer is over, and the task whose bar it is over
+  // it is from its place, in pixels. When it is its bar: the arrows that stop it where it is.
+  const [drag, setDrag] = useState<{
+    taskId: string;
+    lineIndex?: number;
+    lineOffset?: number;
+    stoppingArrowIds?: string[];
+  }>();
+  // The arrow the pointer is over: at once, for how the arrow looks, and a moment late, for what it explains.
+  const [pointedArrowId, setPointedArrowId] = useState<string>();
   const [hoveredArrowId, hoverArrow, setHoveredArrowId] = useDelayedHover<string>(HOVER_DELAY, LEAVE_DELAY);
   const [hoveredTaskId, handleBarHover] = useDelayedHover<string>(BAR_HOVER_DELAY, LEAVE_DELAY);
   // the selected arrow, whose control is open, with the place of the window where it was clicked
@@ -194,14 +204,14 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
 
   /**
    * A drag of a task, in the direction of its first movement. Sideways it is an operation on the plan: `change`
-   * gives the plan for the day `getDay` reads at the pointer, and no day means the plan as it was. Up or down it
+   * gives the move for the day `getDay` reads at the pointer, and no day means the plan as it was. Up or down it
    * moves the line of the task: the line goes with the pointer and lands before the line nearest to it.
    */
   const dragTask = (
     press: TPosition,
     taskId: string,
     getDay: (position: TPosition, plan: TPlan) => string | undefined,
-    change: (plan: TPlan, day: string) => TPlan,
+    change: (plan: TPlan, day: string) => TTaskMove,
     onEnd?: () => void
   ) => {
     // the operation begins at the first movement sideways, and once: when it cannot begin, the drag changes nothing
@@ -225,8 +235,9 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
         // the plan is the same for every place of the pointer in a day
         if (day === shownDay) return;
         shownDay = day;
-        operation.preview(day ? change(plan, day) : plan);
-        setDrag({ taskId });
+        const move = day ? change(plan, day) : { plan, stoppingArrowIds: [] };
+        operation.preview(move.plan);
+        setDrag({ taskId, stoppingArrowIds: move.stoppingArrowIds });
       },
       onEnd: ({ isAborted }) => {
         setDrag(undefined);
@@ -249,14 +260,14 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
         press,
         taskId,
         ({ clientX }) => getDateOfDay(Math.round(getDayAt(clientX)) - (edge === "end" ? 1 : 0)),
-        (plan, day) => resizeTask(plan, taskId, edge, day)
+        (plan, day) => getTaskResize(plan, taskId, edge, day)
       );
     else
       dragTask(
         press,
         taskId,
         ({ clientX }) => getDateOfDay(Math.round(getDayAt(clientX) - grabbedAt)),
-        (plan, day) => moveTask(plan, taskId, day)
+        (plan, day) => getTaskMove(plan, taskId, day)
       );
   });
 
@@ -265,7 +276,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   const handleEntryPress = useLatestCallback((press: React.PointerEvent, taskId: string) => {
     if (press.button !== 0 || !isEditable) return;
     const { getPlace, getPlacedPlan, release } = followEntry(taskId);
-    dragTask(press, taskId, getPlace, getPlacedPlan, release);
+    dragTask(press, taskId, getPlace, (plan) => ({ plan: getPlacedPlan(plan), stoppingArrowIds: [] }), release);
   });
 
   // everything of the timeline that the wheel turns is turned by this one
@@ -283,7 +294,10 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     ],
   });
 
-  const handleArrowHover = useLatestCallback((arrow: TScheduleArrow | undefined) => hoverArrow(arrow?.id));
+  const handleArrowHover = useLatestCallback((arrow: TScheduleArrow | undefined) => {
+    setPointedArrowId(arrow?.id);
+    hoverArrow(arrow?.id);
+  });
 
   // one thing is selected at a time: an arrow or a task
   const handleArrowClick = useLatestCallback((arrow: TScheduleArrow, click: React.MouseEvent) => {
@@ -330,6 +344,18 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   // link that is apart what it says, with the tasks and arrows that produce it.
   const selectedArrowId = drag || link ? undefined : selectedArrow?.id;
   const explainedArrowId = drag || link || selectedArrowId ? undefined : hoveredArrowId;
+  // what each arrow is doing now; during a gesture the pointer is on nothing but what it holds
+  const stoppingArrowIds = drag?.stoppingArrowIds ?? NO_ARROW_IDS;
+  const isGestureGoingOn = !!drag || !!link;
+  const arrowStates = useMemo(
+    () => ({
+      hoveredArrowId: isGestureGoingOn ? undefined : pointedArrowId,
+      selectedArrowId,
+      changingArrowIds,
+      stoppingArrowIds,
+    }),
+    [isGestureGoingOn, pointedArrowId, selectedArrowId, changingArrowIds, stoppingArrowIds]
+  );
   const conflict = schedule.conflicts.find(({ arrowId }) => arrowId === explainedArrowId);
   const apartLink = schedule.apartLinks.find(({ arrowId }) => arrowId === explainedArrowId);
   const controlledArrow = selectedArrowId ? arrows.find((arrow) => arrow.id === selectedArrowId) : undefined;
@@ -509,7 +535,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   view={view}
                   drawnArrows={drawnArrows}
                   schedule={schedule}
-                  selectedArrowId={selectedArrowId}
+                  arrowStates={arrowStates}
                   causeArrowIds={cause.arrowIds}
                   // during a gesture no end of an arrow is taken
                   isEditable={isEditable && !drag && !link}
@@ -533,7 +559,9 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   lastLine={lastLine}
                   plan={props.plan}
                   schedule={schedule}
+                  arrowStates={arrowStates}
                   datedTaskIds={datedTaskIds}
+                  draggedTaskId={draggedTaskId}
                   viewTop={viewTop}
                   viewBottom={viewBottom}
                   wheelTurn={wheelTurn}
@@ -542,48 +570,22 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   scroll={scroll}
                   onClick={handleArrowClick}
                   onHover={handleArrowHover}
+                  renderCard={(arrow, text) => {
+                    const cardProps = {
+                      arrow,
+                      text,
+                      operation,
+                      isEditable,
+                      onClose: () => setHoveredArrowId(undefined),
+                      onPointerEnter: () => handleArrowHover(arrow),
+                      onPointerLeave: () => handleArrowHover(undefined),
+                    };
+                    if (conflict?.arrowId === arrow.id) return <TimelineConflict conflict={conflict} {...cardProps} />;
+                    if (apartLink?.arrowId !== arrow.id) return;
+                    const heldByArrow = arrows.find((other) => other.id === apartLink.heldByArrowId);
+                    return <TimelineApartLink apartLink={apartLink} heldByArrow={heldByArrow} {...cardProps} />;
+                  }}
                 />
-                {conflict && (
-                  <TimelineArrowControls
-                    view={view}
-                    drawnArrows={drawnArrows.filter(({ arrow }) => arrow.id === conflict.arrowId)}
-                    viewTop={viewTop}
-                    viewBottom={viewBottom}
-                    renderControl={(arrow, isNextBelow) => (
-                      <TimelineConflict
-                        conflict={conflict}
-                        arrow={arrow}
-                        operation={operation}
-                        isEditable={isEditable}
-                        isNextBelow={isNextBelow}
-                        onClose={() => setHoveredArrowId(undefined)}
-                        onPointerEnter={() => handleArrowHover(arrow)}
-                        onPointerLeave={() => handleArrowHover(undefined)}
-                      />
-                    )}
-                  />
-                )}
-                {apartLink && (
-                  <TimelineArrowControls
-                    view={view}
-                    drawnArrows={drawnArrows.filter(({ arrow }) => arrow.id === apartLink.arrowId)}
-                    viewTop={viewTop}
-                    viewBottom={viewBottom}
-                    renderControl={(arrow, isNextBelow) => (
-                      <TimelineApartLink
-                        apartLink={apartLink}
-                        arrow={arrow}
-                        heldByArrow={arrows.find((other) => other.id === apartLink.heldByArrowId)}
-                        operation={operation}
-                        isEditable={isEditable}
-                        isNextBelow={isNextBelow}
-                        onClose={() => setHoveredArrowId(undefined)}
-                        onPointerEnter={() => handleArrowHover(arrow)}
-                        onPointerLeave={() => handleArrowHover(undefined)}
-                      />
-                    )}
-                  />
-                )}
                 {controlledArrow && selectedArrow && (
                   <TimelineArrowControl
                     key={controlledArrow.id}

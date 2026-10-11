@@ -18,6 +18,7 @@ import type {
   TScheduleArrow,
   TScheduleTask,
   TTaskEdge,
+  TTaskMove,
   TTaskStart,
   TWayOut,
 } from "./types";
@@ -51,70 +52,124 @@ export function getArrowKind(previousEdge: TTaskEdge, nextEdge: TTaskEdge): TArr
   return kind === "start-end" ? undefined : kind;
 }
 
+/** The edge of its previous task that an arrow leads from. */
+const getPreviousEdge = (kind: TArrowKind): TTaskEdge => (kind === "start-start" ? "start" : "end");
+
 /**
- * Moves the given edges of a task to the day. Of a fixed task the day or the duration changes. A task that
- * follows its arrows stands where they ask, so something else has to take up the move, for each arrow that holds
- * a moved edge where it is:
- * - a linked arrow keeps its two edges together, so its previous task goes along as a whole, by this same rule,
- *   up a chain of linked tasks until a fixed task or an "in n d" takes up the move;
- * - of the deciding arrow, when it is "in n d", the n changes.
- * A moved edge goes no earlier than its other arrows ask for, nor before "in 0 d" on an arrow whose n changes,
- * here or up the chain. One edge alone stops where the task is one day long.
+ * Moves the given edges of a task to the day, and with them the body of the task: every task that a link joins
+ * to a moved edge, and every task that links join to those. A link keeps its two edges together whichever of its
+ * tasks is moved, so the tasks of the body go along as a whole, by the same days. No move makes a link come
+ * apart: where the body cannot go further, the moved edges stop.
+ *
+ * What takes up the move:
+ * - a task of the body that is fixed on its day gets another day;
+ * - an "in n d" that leads into the body from outside gives the days its task stands later than it asks, then
+ *   its n, down to 0, where it stops the move; a link that is apart stops the move where its edges come together;
+ * - a task that nothing holds on its later day has the n of its deciding arrow grow.
+ * What follows the body from outside follows as the plan computes. An arrow into a task that is fixed on its day
+ * is a check, and stops nothing. One edge alone stops where its task is one day long.
  */
-function moveEdges(plan: TPlan, taskId: string, edges: TTaskEdge[], day: TDay): TPlan {
+function getEdgesMove(plan: TPlan, taskId: string, edges: TTaskEdge[], day: TDay): TTaskMove {
   const task = getTask(plan, taskId);
   const schedule = computeSchedule(plan.tasks, plan.arrows);
-  const moves = (edge: TTaskEdge) => edges.includes(edge);
-  let earliest = moves("start") ? -Infinity : 1 - task.duration;
-  const latest = moves("end") ? Infinity : task.duration - 1;
-  // what takes up the move: fixed tasks up the linked chains, and "in n d" arrows
-  const movedTaskIds = new Set<string>();
-  const changedArrowIds = new Set<string>();
-  const seenIds = new Set<string>();
-  const follow = (id: string, isMoved: (edge: TTaskEdge) => boolean) => {
-    if (seenIds.has(id)) return;
-    seenIds.add(id);
-    for (const arrow of plan.arrows) {
-      if (arrow.nextId !== id || !(arrow.id in schedule.gaps) || !isMoved(getConstrainedEdge(arrow.kind))) continue;
-      // the days the task stands after what this arrow asks for
-      const room = schedule.gaps[arrow.id] - getDelayDays(arrow.delay);
-      if (arrow.delay === "linked" && room === 0) {
-        if (getTask(plan, arrow.previousId).start === "anchor") follow(arrow.previousId, () => true);
-        else movedTaskIds.add(arrow.previousId);
-      } else if (arrow.delay !== "linked" && arrow.id === schedule.decidingArrowId[id]) {
-        changedArrowIds.add(arrow.id);
-        earliest = Math.max(earliest, -arrow.delay);
-      } else earliest = Math.max(earliest, -room);
+  const followingIds = new Set(plan.tasks.flatMap((other) => (other.start === "anchor" ? [other.id] : [])));
+  const arrows = plan.arrows.flatMap((arrow) => {
+    const gap = schedule.gaps[arrow.id];
+    if (gap === undefined) return [];
+    return [{ arrow, gap, previousEdge: getPreviousEdge(arrow.kind), nextEdge: getConstrainedEdge(arrow.kind) }];
+  });
+
+  // the tasks that go along as a whole; of the moved task itself the given edges move
+  const bodyIds = new Set<string>();
+  const isMoved = (id: string, edge: TTaskEdge) => (id === taskId ? edges.includes(edge) : bodyIds.has(id));
+  // an edge of the moved task that stays is joined to the body: the body cannot move
+  let isHeldByOwnEdge = false;
+  const links = arrows.filter(
+    ({ arrow, gap }) => arrow.delay === "linked" && gap === 0 && followingIds.has(arrow.nextId)
+  );
+  const joinTasksLinkedTo = (id: string) => {
+    for (const { arrow, previousEdge, nextEdge } of links) {
+      const [ownEdge, otherId, otherEdge] =
+        arrow.nextId === id ? [nextEdge, arrow.previousId, previousEdge] : [previousEdge, arrow.nextId, nextEdge];
+      if ((arrow.nextId !== id && arrow.previousId !== id) || !isMoved(id, ownEdge) || isMoved(otherId, otherEdge))
+        continue;
+      if (otherId === taskId) isHeldByOwnEdge = true;
+      else {
+        bodyIds.add(otherId);
+        joinTasksLinkedTo(otherId);
+      }
     }
   };
-  if (task.start === "anchor") follow(taskId, moves);
+  joinTasksLinkedTo(taskId);
+
+  // the arrows that lead into the body from outside: the edge they constrain moves, the edge they lead from stays
+  const arrowsIntoBody = arrows.filter(
+    ({ arrow, previousEdge, nextEdge }) =>
+      followingIds.has(arrow.nextId) && isMoved(arrow.nextId, nextEdge) && !isMoved(arrow.previousId, previousEdge)
+  );
+  // an arrow lets its edge go as far earlier as there are days between its two edges
+  const earliest = Math.max(
+    edges.includes("start") ? -Infinity : 1 - task.duration,
+    ...arrowsIntoBody.map(({ gap }) => -gap)
+  );
+  const latest = edges.includes("end") ? Infinity : task.duration - 1;
   const wanted = toDayNumber(day) - toDayNumber(schedule.dates[taskId][edges[0]]);
-  const days = Math.min(latest, Math.max(earliest, wanted));
+  const days = isHeldByOwnEdge ? 0 : Math.min(latest, Math.max(earliest, wanted));
+
+  const delays = new Map<string, number>();
+  for (const { arrow, gap } of arrowsIntoBody)
+    if (arrow.delay !== "linked" && gap + days < arrow.delay) delays.set(arrow.id, gap + days);
+  // A task that moves later stays there when an arrow that held it holds it still: one whose two edges move
+  // together, or of the moved task one on the edge that stays. Else its deciding arrow has to ask for the later day.
+  if (days > 0)
+    for (const id of [taskId, ...bodyIds]) {
+      if (!followingIds.has(id)) continue;
+      const isHeld = arrows.some(
+        ({ arrow, gap, previousEdge, nextEdge }) =>
+          arrow.nextId === id &&
+          gap === getDelayDays(arrow.delay) &&
+          isMoved(id, nextEdge) === isMoved(arrow.previousId, previousEdge)
+      );
+      const deciding = plan.arrows.find((arrow) => arrow.id === schedule.decidingArrowId[id]);
+      if (!isHeld && deciding && deciding.delay !== "linked") delays.set(deciding.id, deciding.delay + days);
+    }
+
   const moveStart = (start: TTaskStart): TTaskStart =>
     start === "anchor" ? start : { at: toDay(toDayNumber(start.at) + days) };
   return {
-    tasks: plan.tasks.map((other) => {
-      if (other === task)
-        return {
-          ...task,
-          duration: task.duration + (moves("end") ? days : 0) - (moves("start") ? days : 0),
-          start: moves("start") ? moveStart(task.start) : task.start,
-        };
-      return movedTaskIds.has(other.id) ? { ...other, start: moveStart(other.start) } : other;
-    }),
-    arrows: plan.arrows.map((arrow) =>
-      changedArrowIds.has(arrow.id) ? { ...arrow, delay: getDelayDays(arrow.delay) + days } : arrow
-    ),
+    plan: {
+      tasks: plan.tasks.map((other) => {
+        if (other === task)
+          return {
+            ...task,
+            duration: task.duration + (edges.includes("end") ? days : 0) - (edges.includes("start") ? days : 0),
+            start: edges.includes("start") ? moveStart(task.start) : task.start,
+          };
+        return bodyIds.has(other.id) ? { ...other, start: moveStart(other.start) } : other;
+      }),
+      arrows: plan.arrows.map((arrow) =>
+        delays.has(arrow.id) ? { ...arrow, delay: delays.get(arrow.id) ?? 0 } : arrow
+      ),
+    },
+    stoppingArrowIds:
+      days > wanted ? arrowsIntoBody.flatMap(({ arrow, gap }) => (gap + days === 0 ? [arrow.id] : [])) : [],
   };
 }
 
 /** A bar dragged horizontally: the task starts on the day and keeps its duration. */
-export const moveTask = (plan: TPlan, taskId: string, day: TDay): TPlan =>
-  moveEdges(plan, taskId, ["start", "end"], day);
+export const getTaskMove = (plan: TPlan, taskId: string, day: TDay): TTaskMove =>
+  getEdgesMove(plan, taskId, ["start", "end"], day);
 
 /** An edge of a bar dragged: that edge goes to the day and the other edge stays. */
+export const getTaskResize = (plan: TPlan, taskId: string, edge: TTaskEdge, day: TDay): TTaskMove =>
+  getEdgesMove(plan, taskId, [edge], day);
+
+/** The plan after a bar was dragged horizontally. */
+export const moveTask = (plan: TPlan, taskId: string, day: TDay): TPlan => getTaskMove(plan, taskId, day).plan;
+
+/** The plan after an edge of a bar was dragged. */
 export const resizeTask = (plan: TPlan, taskId: string, edge: TTaskEdge, day: TDay): TPlan =>
-  moveEdges(plan, taskId, [edge], day);
+  getTaskResize(plan, taskId, edge, day).plan;
 
 /** A task put on the timeline: it is fixed on the day, one day long unless it has a duration already. */
 export function placeTask(plan: TPlan, taskId: string, day: TDay): TPlan {

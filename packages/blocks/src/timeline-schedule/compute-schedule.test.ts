@@ -158,20 +158,6 @@ describe("computeSchedule", () => {
       },
     },
     {
-      name: "of a linked arrow and an in n d that ask for the same day the in n d decides, whichever comes first",
-      tasks: [fixed("A", 1, 3), fixed("X", 1, 2), following("B", 2)],
-      arrows: [arrow("A>B", "end-start", "linked"), arrow("X>B", "end-start", 1)],
-      expected: {
-        ...PLAIN_SCHEDULE,
-        dates: dates({ A: [1, 3], X: [1, 2], B: [4, 5] }),
-        decidingArrowId: { B: "X>B" },
-        gaps: { "A>B": 0, "X>B": 1 },
-        slack: { A: 0, X: 0, B: 0 },
-        criticalTaskIds: ["A", "X", "B"],
-        criticalArrowIds: ["A>B", "X>B"],
-      },
-    },
-    {
       name: "a linked arrow that asks a fixed task to start later than its day is a conflict that no delay ends",
       tasks: [fixed("A", 1, 3), fixed("B", 3, 2)],
       arrows: [arrow("A>B", "end-start", "linked")],
