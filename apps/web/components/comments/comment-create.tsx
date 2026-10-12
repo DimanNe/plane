@@ -96,9 +96,7 @@ export const CommentCreate = observer(function CommentCreate(props: TCommentCrea
       onKeyDown={(e) => {
         if (
           e.key === "Enter" &&
-          !e.shiftKey &&
-          !e.ctrlKey &&
-          !e.metaKey &&
+          (e.ctrlKey || e.metaKey) &&
           !isEmpty &&
           !isSubmitting &&
           editorRef.current?.isEditorReadyToDiscard()

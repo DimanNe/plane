@@ -57,7 +57,7 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
   const isDisabled = isSubmitting || isEmpty || isSubmitButtonDisabled;
 
   const onEnter = async (formData: Partial<TIssueComment>) => {
-    if (isSubmitting || !comment) return;
+    if (isSubmitting || !comment || isCommentEmpty(formData.comment_html)) return;
 
     setIsEditing(false);
 
@@ -77,7 +77,7 @@ export const CommentCardEditForm = observer(function CommentCardEditForm(props: 
     <form className="flex flex-col gap-2">
       <div
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !isEmpty) handleSubmit(onEnter)(e);
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !isEmpty) handleSubmit(onEnter)(e);
         }}
       >
         <LiteTextEditor

@@ -14,7 +14,8 @@ export const EnterKeyExtension = (onEnterKeyPress?: () => void) =>
 
     addKeyboardShortcuts(this) {
       return {
-        Enter: () => {
+        // Enter itself is the editor's: a new paragraph, the next item of a list
+        "Mod-Enter": () => {
           const { activeDropbarExtensions } = this.editor.storage.utility;
 
           if (activeDropbarExtensions.length === 0) {
