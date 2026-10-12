@@ -13,11 +13,13 @@ import { usePowerKHelpCommands } from "./help-commands";
 import { usePowerKMiscellaneousCommands } from "./miscellaneous-commands";
 import { usePowerKNavigationCommands } from "./navigation/root";
 import { usePowerKPreferencesCommands } from "./preferences-commands";
+import { usePowerKWorkItemStateCommands } from "./work-item-state-commands";
 
 export const useProjectsAppPowerKCommands = (): TPowerKCommandConfig[] => {
   const navigationCommands = usePowerKNavigationCommands();
   const creationCommands = usePowerKCreationCommands();
   const contextualCommands = usePowerKContextBasedActions();
+  const workItemStateCommands = usePowerKWorkItemStateCommands();
   const accountCommands = usePowerKAccountCommands();
   const miscellaneousCommands = usePowerKMiscellaneousCommands();
   const preferencesCommands = usePowerKPreferencesCommands();
@@ -27,6 +29,7 @@ export const useProjectsAppPowerKCommands = (): TPowerKCommandConfig[] => {
     ...navigationCommands,
     ...creationCommands,
     ...contextualCommands,
+    ...workItemStateCommands,
     ...accountCommands,
     ...miscellaneousCommands,
     ...preferencesCommands,

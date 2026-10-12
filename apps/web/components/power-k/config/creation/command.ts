@@ -18,10 +18,9 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // components
 import { EUserProjectRoles } from "@plane/types";
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
+import { useShortcutWorkItemId } from "@/components/power-k/hooks/use-shortcut-work-item";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
-import { useIssueDetail } from "@/hooks/store/use-issue-detail";
-import { useListView } from "@/hooks/store/use-list-view";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
 import { useInstance } from "@/hooks/store/use-instance";
@@ -47,8 +46,7 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
     permission: { allowPermissions },
   } = useUser();
   const { workspaceProjectIds, getPartialProjectById } = useProject();
-  const issueDetail = useIssueDetail();
-  const listView = useListView();
+  const getParentWorkItemId = useShortcutWorkItemId();
   const {
     toggleCreateIssueModal,
     toggleCreateProjectModal,
@@ -74,14 +72,6 @@ export const usePowerKCreationCommandsRecord = (): Record<TPowerKCreationCommand
 
   const getProjectDetails = (ctx: TPowerKContext) =>
     ctx.params.projectId ? getPartialProjectById(ctx.params.projectId.toString()) : undefined;
-
-  // The work item of the peek view or of the work item page, else the selected row of the list. The stores are
-  // read when a key is pressed, so moving the selection does not build the commands again.
-  const getParentWorkItemId = (ctx: TPowerKContext) =>
-    issueDetail.peekIssue?.issueId ??
-    (ctx.params.workItem
-      ? issueDetail.issue.getIssueIdByIdentifier(ctx.params.workItem.toString())
-      : listView.selectedRow?.issueId);
 
   return {
     create_work_item: {

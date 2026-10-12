@@ -33,6 +33,7 @@
     "./select": "./dist/select/index.js",
     "./skeleton": "./dist/skeleton/index.js",
     "./spinner": "./dist/spinner/index.js",
+    "./state-shortcut": "./dist/state-shortcut/index.js",
     "./timeline-schedule": "./dist/timeline-schedule/index.js",
     "./toast": "./dist/toast/index.js",
     "./types": "./dist/types/index.js",
