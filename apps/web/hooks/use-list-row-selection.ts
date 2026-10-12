@@ -25,6 +25,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
 import useKeypress from "@/hooks/use-keypress";
 import { useListRowDelete } from "@/hooks/use-list-row-delete";
+import { useListRowEdit } from "@/hooks/use-list-row-edit";
 
 type Props = {
   containerRef: React.MutableRefObject<HTMLElement | null>;
@@ -134,6 +135,7 @@ export const useListRowSelection = (props: Props) => {
     toggleIssueCollapse(row.issueId);
   };
 
+  useListRowEdit({ selectedRow: rows[selectedRowIndex], openRow });
   useKeypress("ArrowDown", (e) => moveSelection(e, 1));
   useKeypress("ArrowUp", (e) => moveSelection(e, -1));
   useKeypress("ArrowRight", (e) => toggleSelectedRow(e, true));

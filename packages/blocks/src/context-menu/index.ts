@@ -8,4 +8,5 @@ export { ContextMenu } from "./context-menu";
 export type { ContextMenuProps } from "./context-menu";
 export { ContextMenuItem } from "./context-menu-item";
 export { getRenderableItems, hasContextMenuItem, resolveItemVariant, runContextMenuItem } from "./helpers";
+export { useMenuEditKey } from "./menu-edit-key";
 export type { TContextMenuItem, TContextMenuItemVariant } from "./types";

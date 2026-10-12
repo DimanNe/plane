@@ -18,6 +18,7 @@ import { DescriptionInput } from "@/components/editor/rich-text/description-inpu
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
+import { useDescriptionCaret } from "@/hooks/use-description-caret";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // plane web hooks
 // services
@@ -55,6 +56,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
   const { getUserDetails } = useMember();
   // reload confirmation
   const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
+  const handleDescriptionEditorReady = useDescriptionCaret(issueId, editorRef, !disabled && !isArchived);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -110,6 +112,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         editorRef={editorRef}
         entityId={issue.id}
         fileAssetType={EFileAssetType.ISSUE_DESCRIPTION}
+        handleEditorReady={handleDescriptionEditorReady}
         initialValue={issueDescription}
         // a new type arrives with a description to which the server has appended the old type's values
         key={`${issue.id}-${issue.type_id}`}

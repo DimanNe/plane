@@ -7,6 +7,8 @@
 import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+// plane imports
+import { useMenuEditKey } from "@plane/blocks/context-menu";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
 // local imports
@@ -31,6 +33,8 @@ export const GlobalShortcutsProvider = observer(function GlobalShortcutsProvider
   // store hooks
   const { commandRegistry, isShortcutsListModalOpen, setActiveContext, togglePowerKModal, toggleShortcutsListModal } =
     usePowerK();
+
+  useMenuEditKey();
 
   // Detect context from URL and update store
   useEffect(() => {

@@ -58,6 +58,10 @@ type Props = {
    */
   fileAssetType: EFileAssetType;
   /**
+   * @description Editor ready handler, called with true when the editor is made and with false when it is destroyed
+   */
+  handleEditorReady?: (isReady: boolean) => void;
+  /**
    * @description Initial value, pass the actual description to initialize the editor
    */
   initialValue: string | undefined;
@@ -113,6 +117,7 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
     editorRef,
     entityId,
     fileAssetType,
+    handleEditorReady,
     initialValue,
     issueSequenceId,
     onSubmit,
@@ -245,6 +250,7 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
           workspaceId={workspaceDetails.id}
           projectId={projectId}
           dragDropEnabled
+          handleEditorReady={handleEditorReady}
           onChange={(description_json, description_html, options) => {
             if (description_html === lastSavedContent.current) return;
             setIsSubmitting("submitting");
