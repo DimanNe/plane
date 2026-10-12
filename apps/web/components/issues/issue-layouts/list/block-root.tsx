@@ -8,25 +8,26 @@ import type { MutableRefObject } from "react";
 import React, { useEffect, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { attachInstruction, extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import { observer } from "mobx-react";
 // plane helpers
 import { useOutsideClickDetector } from "@plane/hooks";
 // types
-import type { IIssueDisplayProperties, InstructionType, TIssue, TIssueMap } from "@plane/types";
+import type { IIssueDisplayProperties, TIssue, TIssueMap } from "@plane/types";
 // components
-import { DropIndicator } from "@plane/blocks/common";
 import { cn } from "@plane/utils";
 import RenderIfVisible from "@/components/core/render-if-visible-HOC";
 import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
 // hooks
+import { useListView } from "@/hooks/store/use-list-view";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
 import { HIGHLIGHT_CLASS, getIssueBlockId, isIssueNew } from "../utils";
 import { IssueBlock } from "./block";
+import { ListDropLine } from "./drop-line";
 import type { TRenderQuickActions } from "./list-view-types";
-import { isSubIssueOf } from "./utils";
+import type { TListRowDropData } from "./utils";
+import { getListRowDropPlace, isSubIssueOf } from "./utils";
 
 type Props = {
   issueId: string;
@@ -71,12 +72,12 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
     isEpic = false,
   } = props;
   // states
-  const [instruction, setInstruction] = useState<InstructionType | undefined>(undefined);
   const [isCurrentBlockDragging, setIsCurrentBlockDragging] = useState(false);
   // ref
   const issueBlockRef = useRef<HTMLDivElement | null>(null);
   // hooks
   const { isMobile } = usePlatformOS();
+  const { getRowDropPlace } = useListView();
 
   useEffect(() => {
     const blockElement = issueBlockRef.current;
@@ -87,33 +88,17 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
       dropTargetForElements({
         element: blockElement,
         canDrop: () => canDropOverIssue,
-        getData: ({ input, element, source }) => {
-          const data = { id: issueId, type: "ISSUE" };
-
-          // a drop below a work item that shows its sub-work items makes the first of them
-          return attachInstruction(data, {
-            input,
-            element,
-            currentLevel: 0,
-            indentPerLevel: 0,
-            mode: isExpanded ? "expanded" : "standard",
-            block: isSubIssueOf(issuesMap, issueId, source.data.id as string)
-              ? ["reorder-above", "reorder-below", "make-child"]
-              : [],
-          });
-        },
-        onDrag: ({ self }) => {
-          setInstruction(extractInstruction(self?.data)?.type);
-        },
-        onDragLeave: () => {
-          setInstruction(undefined);
-        },
-        onDrop: () => {
-          setInstruction(undefined);
-        },
+        getData: ({ input, element, source }): TListRowDropData => ({
+          id: issueId,
+          type: "ISSUE",
+          // a row takes neither itself nor a row it is under
+          place: isSubIssueOf(issuesMap, issueId, source.data.id as string)
+            ? undefined
+            : getListRowDropPlace(element, input.clientY, isExpanded),
+        }),
       })
     );
-  }, [issueId, issuesMap, isExpanded, issueBlockRef, canDropOverIssue, setInstruction]);
+  }, [issueId, issuesMap, isExpanded, issueBlockRef, canDropOverIssue]);
 
   useOutsideClickDetector(issueBlockRef, () => {
     issueBlockRef?.current?.classList?.remove(HIGHLIGHT_CLASS);
@@ -123,12 +108,13 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
 
   // a nested row is lower when neither it nor its siblings show sub-work items, the rows that get no space above
   const isCompact = nestingLevel > 0 && spacingTop === 0;
+  const dropPlace = getRowDropPlace(issueId, groupId);
 
   return (
     <div
       // the scroll margin keeps a row that is scrolled to clear of the group header
       className={cn("relative scroll-mt-12", {
-        "z-[1] bg-accent-primary/10 outline-2 -outline-offset-2 outline-accent-strong": instruction === "make-child",
+        "z-[1] bg-accent-primary/10 outline-2 -outline-offset-2 outline-accent-strong": dropPlace === "inside",
       })}
       ref={issueBlockRef}
       id={getIssueBlockId(issueId, groupId)}
@@ -136,9 +122,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
     >
       {/* the space above the row takes a drop above the row */}
       <div className="absolute bottom-full w-full" style={{ height: spacingTop }} />
-      <div className="absolute top-0 right-0 z-[2] pl-page-x" style={{ left: spacingLeft }}>
-        <DropIndicator isVisible={instruction === "reorder-above"} />
-      </div>
+      {dropPlace === "above" && <ListDropLine className="top-0" spacingLeft={spacingLeft} />}
       <RenderIfVisible
         key={`${issueId}`}
         root={containerRef}
@@ -168,9 +152,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
           isEpic={isEpic}
         />
       </RenderIfVisible>
-      <div className="absolute right-0 z-[2] pl-page-x" style={{ left: spacingLeft }}>
-        <DropIndicator isVisible={instruction === "reorder-below"} />
-      </div>
+      {dropPlace === "below" && <ListDropLine spacingLeft={spacingLeft} />}
     </div>
   );
 });

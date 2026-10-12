@@ -4,8 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import type { IPragmaticDropPayload, TIssueMap } from "@plane/types";
+import type { TListDropMark } from "@/store/issue/issue_list_view.store";
 import type { GroupDropLocation } from "../utils";
 import { getDestinationFromDropPayload } from "../utils";
 
@@ -73,6 +73,32 @@ export const isSubIssueOf = (issuesMap: TIssueMap, issueId: string, parentId: st
   return false;
 };
 
+type TListRowDropPlace = "above" | "below" | "inside";
+
+/** What a row tells a row that is held over it: `place` is missing where a drop does nothing. */
+export type TListRowDropData = { id: string; type: "ISSUE"; place?: TListRowDropPlace };
+
+// the share of a row's height, from its upper and from its lower edge, where a held row goes above or below it
+const ROW_EDGE_SHARE = 3 / 8;
+
+/**
+ * Where a row that is held over another row goes: above it, below it, or into it as a sub-work item. The edges
+ * take most of the row, so that the line between two rows stays while the pointer is anywhere near it; the
+ * middle is what is left for making a sub-work item. Below a row that shows its sub-work items is the place of
+ * the first of them.
+ */
+export const getListRowDropPlace = (row: Element, pointerY: number, isExpanded: boolean): TListRowDropPlace => {
+  const { top, height } = row.getBoundingClientRect();
+  const share = (pointerY - top) / height;
+  if (share < ROW_EDGE_SHARE) return "above";
+  return share > 1 - ROW_EDGE_SHARE && !isExpanded ? "below" : "inside";
+};
+
+const getRowDropData = (payload: IPragmaticDropPayload) =>
+  payload.location.current.dropTargets.find((dropTarget) => dropTarget.data.type === "ISSUE")?.data as
+    | TListRowDropData
+    | undefined;
+
 /**
  * Where a work item dropped in a list group goes: its parent, and the work item of the group it is placed before.
  * On a row it becomes the first sub-work item of that row; above or below a row, a sibling of that row; elsewhere
@@ -85,11 +111,10 @@ export const getListDropLocation = (
   issuesMap: TIssueMap
 ): GroupDropLocation | undefined => {
   const destination = getDestinationFromDropPayload(payload);
-  const rowData = payload.location.current.dropTargets.find((dropTarget) => dropTarget.data.type === "ISSUE")?.data;
-  const instruction = rowData && extractInstruction(rowData)?.type;
-  if (!destination || instruction === "instruction-blocked") return;
+  const row = getRowDropData(payload);
+  if (!destination || (row && !row.place)) return;
 
-  if (destination.id && instruction === "make-child")
+  if (destination.id && row?.place === "inside")
     return {
       ...destination,
       id: issueIds.find((issueId) => issuesMap[issueId]?.parent_id === destination.id),
@@ -101,7 +126,32 @@ export const getListDropLocation = (
   const sourceParentId = issuesMap[payload.source.data.id as string]?.parent_id;
   const parentId = isInGroup(rowParentId) ? rowParentId : isInGroup(sourceParentId) ? null : undefined;
   const nextIssueId = destination.id && issueIds[issueIds.indexOf(destination.id) + 1];
-  if (instruction === "reorder-below" && nextIssueId)
+  if (row?.place === "below" && nextIssueId)
     return { ...destination, id: nextIssueId, canAddIssueBelow: false, parentId };
-  return { ...destination, parentId };
+  return { ...destination, canAddIssueBelow: row?.place === "below", parentId };
+};
+
+/**
+ * What the list draws for a row that is held over a group. It is made from where a drop would put the row, so
+ * the picture cannot say one thing and the drop do another, and there is none where a drop changes nothing.
+ * In the manual order the place is the pointer's: a line at a row, the row that takes the held row in, or the
+ * end of the group. Any other order puts the row in its place itself, so no line is drawn: the group is marked,
+ * or the row whose sub-work item the held row becomes.
+ */
+export const getListDropMark = (
+  payload: IPragmaticDropPayload,
+  issueIds: string[],
+  issuesMap: TIssueMap,
+  isManualOrder: boolean
+): TListDropMark | undefined => {
+  const location = getListDropLocation(payload, issueIds, issuesMap);
+  if (!location) return;
+  const { groupId } = location;
+  const row = getRowDropData(payload);
+  if (isManualOrder) return { groupId, issueId: row?.id, place: row?.place ?? "end" };
+
+  const source = issuesMap[payload.source.data.id as string];
+  const parentId = location.parentId === undefined ? source?.parent_id : location.parentId;
+  if (payload.source.data.groupId === groupId && (parentId ?? null) === (source?.parent_id ?? null)) return;
+  return { groupId, issueId: location.parentId ?? undefined, place: "inside" };
 };

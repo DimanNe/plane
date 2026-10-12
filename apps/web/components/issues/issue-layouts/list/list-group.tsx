@@ -20,6 +20,7 @@ import type {
   TIssueOrderByOptions,
   TIssue,
   IIssueDisplayProperties,
+  IPragmaticDropPayload,
   TIssueKanbanFilters,
 } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
@@ -31,6 +32,7 @@ import { useWorkFlowFDragNDrop } from "@/components/workflow";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
+import { useListView } from "@/hooks/store/use-list-view";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 // local imports
@@ -39,11 +41,12 @@ import { QuickAddIssueRoot } from "../quick-add";
 import type { GroupDropLocation } from "../utils";
 import { getIssueBlockId, getSourceFromDropPayload, highlightIssueOnDrop } from "../utils";
 import { IssueBlocksList } from "./blocks-list";
+import { ListDropLine } from "./drop-line";
 import { HeaderGroupByCard } from "./headers/group-by-card";
 import { ListGroupQuickAddButton } from "./headers/quick-add-button";
 import { highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
-import { getListDropLocation } from "./utils";
+import { getListDropLocation, getListDropMark } from "./utils";
 
 interface Props {
   groupIssueIds: string[] | undefined;
@@ -108,6 +111,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
   const groupRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
   const projectState = useProjectState();
+  const { getGroupDropPlace, setDropMark } = useListView();
 
   const {
     issues: { getGroupIssueCount, getPaginationData, getIssueLoader, getIssueIds },
@@ -185,20 +189,32 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
     if (!element) return;
 
+    // for a group that takes no drop nothing is marked: the cover over its rows says why
+    const markDropPlace = (payload: IPragmaticDropPayload) =>
+      setDropMark(
+        isWorkflowDropDisabled || group.isDropDisabled
+          ? undefined
+          : getListDropMark(payload, getIssueIds(group.id) ?? [], issuesMap, orderBy === "sort_order")
+      );
+
     return combine(
       dropTargetForElements({
         element,
         getData: () => ({ groupId: group.id, type: "COLUMN" }),
-        onDragEnter: () => {
+        onDragEnter: (payload) => {
           setIsDraggingOverColumn(true);
+          markDropPlace(payload);
         },
         onDragLeave: () => {
           setIsDraggingOverColumn(false);
+          setDropMark(undefined);
         },
         onDragStart: () => {
           setIsDraggingOverColumn(true);
         },
-        onDrag: ({ source }) => {
+        onDrag: (payload) => {
+          const { source } = payload;
+          markDropPlace(payload);
           const sourceGroupId = source?.data?.groupId as string | undefined;
           const currentGroupId = group.id;
 
@@ -216,6 +232,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
         },
         onDrop: (payload) => {
           setIsDraggingOverColumn(false);
+          setDropMark(undefined);
           const source = getSourceFromDropPayload(payload);
           const destination = getListDropLocation(payload, getIssueIds(group.id) ?? [], issuesMap);
 
@@ -258,6 +275,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
   const isGroupByCreatedBy = group_by === "created_by";
   const shouldExpand = (!!groupIssueCount && isExpanded) || !group_by;
+  const dropPlace = getGroupDropPlace(group.id);
   const isQuickAddAllowed =
     enableIssueQuickAdd &&
     !disableIssueCreation &&
@@ -275,7 +293,11 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     >
       {/* The header and the input under it stay at the top of the list together while their group scrolls. */}
       <div className={cn("w-full flex-shrink-0", { "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0 })}>
-        <Row className="border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover">
+        <Row
+          className={cn("border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
+            "bg-accent-subtle outline-2 -outline-offset-2 outline-accent-strong hover:bg-accent-subtle": !!dropPlace,
+          })}
+        >
           <HeaderGroupByCard
             groupID={group.id}
             groupBy={group_by}
@@ -347,6 +369,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
               isEpic={isEpic}
             />
           )}
+          {dropPlace === "end" && <ListDropLine />}
 
           {shouldLoadMore &&
             (group_by ? (
