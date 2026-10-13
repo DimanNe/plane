@@ -27,7 +27,7 @@ export const arrow = (name: string, kind: TArrowKind, delay: TArrowDelay = 0): T
 export const dates = (days: Record<string, [number, number]>): TSchedule["dates"] =>
   Object.fromEntries(Object.entries(days).map(([id, [start, end]]) => [id, { start: day(start), end: day(end) }]));
 
-/** A schedule in which nothing is decided, asked, in conflict, able to slip or critical. */
+/** A schedule in which nothing is decided, asked, in conflict, limited at its end or critical. */
 export const PLAIN_SCHEDULE: TSchedule = {
   dates: {},
   decidingArrowId: {},

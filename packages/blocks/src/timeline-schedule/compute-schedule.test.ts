@@ -22,6 +22,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], B: [4, 5] }),
         decidingArrowId: { B: "A>B" },
         gaps: { "A>B": 0 },
+        slack: { A: 0 },
       },
     },
     {
@@ -33,6 +34,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], B: [6, 7] }),
         decidingArrowId: { B: "A>B" },
         gaps: { "A>B": 2 },
+        slack: { A: 0 },
       },
     },
     {
@@ -66,6 +68,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], B: [2, 3] }),
         decidingArrowId: { B: "A>B" },
         gaps: { "A>B": 0 },
+        slack: { A: 0 },
       },
     },
     {
@@ -77,6 +80,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], B: [4, 5] }),
         decidingArrowId: { B: "A>B" },
         gaps: { "A>B": 2 },
+        slack: { A: 0 },
       },
     },
     {
@@ -88,6 +92,7 @@ describe("computeSchedule", () => {
         dates: { A: { start: "2026-12-30", end: "2026-12-31" }, B: { start: "2027-01-01", end: "2027-01-01" } },
         decidingArrowId: { B: "A>B" },
         gaps: { "A>B": 0 },
+        slack: { A: 0 },
       },
     },
     {
@@ -99,7 +104,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], C: [1, 5], B: [6, 7] }),
         decidingArrowId: { B: "C>B" },
         gaps: { "A>B": 2, "C>B": 0 },
-        slack: { A: 2, C: 0, B: 0 },
+        slack: { A: 2, C: 0 },
         criticalTaskIds: ["C", "B"],
         criticalArrowIds: ["C>B"],
       },
@@ -113,7 +118,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], C: [2, 3], B: [4, 5] }),
         decidingArrowId: { B: "C>B" },
         gaps: { "C>B": 0, "A>B": 0 },
-        slack: { A: 0, C: 0, B: 0 },
+        slack: { A: 0, C: 0 },
         criticalTaskIds: ["A", "C", "B"],
         criticalArrowIds: ["C>B", "A>B"],
       },
@@ -127,7 +132,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 3], B: [4, 5], C: [4, 5] }),
         decidingArrowId: { B: "A>B", C: "A>C" },
         gaps: { "A>B": 0, "A>C": 0 },
-        slack: { A: 0, B: 0, C: 0 },
+        slack: { A: 0 },
         criticalTaskIds: ["A", "B", "C"],
         criticalArrowIds: ["A>B", "A>C"],
       },
@@ -142,7 +147,7 @@ describe("computeSchedule", () => {
         decidingArrowId: { B: "X>B" },
         gaps: { "A>B": 4, "X>B": 1 },
         apartLinks: [{ arrowId: "A>B", taskId: "B", days: 4, heldByArrowId: "X>B" }],
-        slack: { A: 4, X: 0, B: 0 },
+        slack: { A: 4, X: 0 },
         criticalTaskIds: ["X", "B"],
         criticalArrowIds: ["X>B"],
       },
@@ -155,6 +160,7 @@ describe("computeSchedule", () => {
         ...PLAIN_SCHEDULE,
         dates: dates({ A: [1, 3], B: [8, 9] }),
         gaps: { "A>B": 4 },
+        slack: { A: 4 },
       },
     },
     {
@@ -175,6 +181,7 @@ describe("computeSchedule", () => {
             waysOut: [{ way: "follow-arrows" }, { way: "move-fixed-day", day: day(4) }, { way: "remove-arrow" }],
           },
         ],
+        slack: { A: 0 },
       },
     },
     {
@@ -195,6 +202,7 @@ describe("computeSchedule", () => {
             waysOut: [{ way: "follow-arrows" }, { way: "move-fixed-day", day: day(4) }, { way: "remove-arrow" }],
           },
         ],
+        slack: { A: 0 },
       },
     },
     {
@@ -220,13 +228,14 @@ describe("computeSchedule", () => {
             ],
           },
         ],
+        slack: { A: 0 },
       },
     },
     {
       name: "an arrow that asks a fixed task for the day it is fixed on is no conflict",
       tasks: [fixed("A", 1, 3), fixed("B", 4, 2)],
       arrows: [arrow("A>B", "end-start")],
-      expected: { ...PLAIN_SCHEDULE, dates: dates({ A: [1, 3], B: [4, 5] }), gaps: { "A>B": 0 } },
+      expected: { ...PLAIN_SCHEDULE, dates: dates({ A: [1, 3], B: [4, 5] }), gaps: { "A>B": 0 }, slack: { A: 0 } },
     },
     {
       name: "a conflict of a start -> start arrow counts from the previous start",
@@ -266,6 +275,7 @@ describe("computeSchedule", () => {
             waysOut: [{ way: "follow-arrows" }, { way: "move-fixed-day", day: day(4) }, { way: "remove-arrow" }],
           },
         ],
+        slack: { A: 0 },
       },
     },
     {
@@ -275,7 +285,7 @@ describe("computeSchedule", () => {
       expected: { ...PLAIN_SCHEDULE, dates: dates({ B: [3, 4] }) },
     },
     {
-      name: "tasks connected two by two have no slack and nothing critical",
+      name: "of tasks connected two by two nothing is critical",
       tasks: [fixed("A", 1, 1), following("B", 1), fixed("C", 1, 1), following("D", 1)],
       arrows: [arrow("A>B", "end-start"), arrow("C>D", "end-start")],
       expected: {
@@ -283,10 +293,11 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 1], B: [2, 2], C: [1, 1], D: [2, 2] }),
         decidingArrowId: { B: "A>B", D: "C>D" },
         gaps: { "A>B": 0, "C>D": 0 },
+        slack: { A: 0, C: 0 },
       },
     },
     {
-      name: "the chain that decides a group's last end is critical, and a task beside it can slip up to that end",
+      name: "the chain that decides a group's last end is critical, and a task beside it is not",
       tasks: [fixed("A", 1, 2), following("B", 5), following("C", 1)],
       arrows: [arrow("A>B", "end-start"), arrow("A>C", "end-start")],
       expected: {
@@ -294,13 +305,13 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 2], B: [3, 7], C: [3, 3] }),
         decidingArrowId: { B: "A>B", C: "A>C" },
         gaps: { "A>B": 0, "A>C": 0 },
-        slack: { A: 0, B: 0, C: 4 },
+        slack: { A: 0 },
         criticalTaskIds: ["A", "B"],
         criticalArrowIds: ["A>B"],
       },
     },
     {
-      name: "slack is counted in each group from that group's own last end",
+      name: "what is critical is decided in each group by that group's own last end",
       tasks: [
         fixed("A", 1, 1),
         following("B", 1),
@@ -320,13 +331,13 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 1], B: [2, 2], C: [2, 4], D: [10, 10], E: [11, 11], F: [11, 15] }),
         decidingArrowId: { B: "A>B", C: "A>C", E: "D>E", F: "D>F" },
         gaps: { "A>B": 0, "A>C": 0, "D>E": 0, "D>F": 0 },
-        slack: { A: 0, B: 2, C: 0, D: 0, E: 4, F: 0 },
+        slack: { A: 0, D: 0 },
         criticalTaskIds: ["A", "C", "D", "F"],
         criticalArrowIds: ["A>C", "D>F"],
       },
     },
     {
-      name: "a task before a fixed task can slip until its arrow would become a conflict",
+      name: "a task before a fixed task is not critical while its arrow could ask for a later day without a conflict",
       tasks: [fixed("A", 1, 2), fixed("B", 6, 2), following("C", 1)],
       arrows: [arrow("A>B", "end-start"), arrow("B>C", "end-start")],
       expected: {
@@ -334,13 +345,13 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 2], B: [6, 7], C: [8, 8] }),
         decidingArrowId: { C: "B>C" },
         gaps: { "A>B": 3, "B>C": 0 },
-        slack: { A: 3, B: 0, C: 0 },
+        slack: { A: 3, B: 0 },
         criticalTaskIds: ["B", "C"],
         criticalArrowIds: ["B>C"],
       },
     },
     {
-      name: "a task whose arrow into a fixed task is a conflict already cannot slip",
+      name: "a task whose arrow into a fixed task is a conflict already is critical",
       tasks: [fixed("A", 1, 5), fixed("B", 3, 2), following("C", 2)],
       arrows: [arrow("A>B", "end-start"), arrow("B>C", "end-start")],
       expected: {
@@ -358,7 +369,7 @@ describe("computeSchedule", () => {
             waysOut: [{ way: "follow-arrows" }, { way: "move-fixed-day", day: day(6) }, { way: "remove-arrow" }],
           },
         ],
-        slack: { A: 0, B: 0, C: 0 },
+        slack: { A: 0, B: 0 },
         criticalTaskIds: ["A", "B", "C"],
         criticalArrowIds: ["B>C"],
       },
@@ -372,7 +383,7 @@ describe("computeSchedule", () => {
         dates: dates({ A: [1, 2], B: [3, 4], C: [5, 5] }),
         decidingArrowId: { C: "B>C" },
         gaps: { "A>B": 0, "B>C": 0 },
-        slack: { A: 0, B: 0, C: 0 },
+        slack: { A: 0, B: 0 },
         criticalTaskIds: ["A", "B", "C"],
         criticalArrowIds: ["A>B", "B>C"],
       },

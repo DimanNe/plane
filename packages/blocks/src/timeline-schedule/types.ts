@@ -72,7 +72,11 @@ export type TSchedule = {
   gaps: Record<string, number>;
   conflicts: TConflict[];
   apartLinks: TApartLink[];
-  /** days a task can slip, for the tasks of a group of more than two tasks connected by arrows */
+  /**
+   * The days the end of a task can be dragged later before anything else changes: before another task gets other
+   * dates, a fixed task is too early for an arrow, or a link is further apart. A task whose end no arrow leads
+   * from and no link holds has none: nothing limits that end.
+   */
   slack: Record<string, number>;
   criticalTaskIds: string[];
   criticalArrowIds: string[];

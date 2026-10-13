@@ -15,8 +15,8 @@ type TLink = { arrow: TScheduleArrow; previous: number; next: number; askedStart
 
 /**
  * Computes the plan from its parameters: where every task stands, which arrows a fixed task contradicts, how far
- * each task can slip and which tasks and arrows are critical. The scheduling rules of the timeline are here and
- * nowhere else.
+ * the end of each task can go later and which tasks and arrows are critical. The scheduling rules of the timeline
+ * are here and nowhere else.
  *
  * An arrow takes part only when both its tasks are among `tasks`: a work item without dates is not on the
  * timeline. Throws when the arrows form a loop, and when a task follows its arrows but none leads to it; the
@@ -79,10 +79,22 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
   const gaps: TSchedule["gaps"] = {};
   const conflicts: TConflict[] = [];
   const apartLinks: TApartLink[] = [];
-  for (const { arrow, next, askedStart } of links) {
+  const slack: TSchedule["slack"] = {};
+  const limitSlack = (index: number, days: number) => {
+    const { id } = tasks[index];
+    slack[id] = Math.min(slack[id] ?? Infinity, days);
+  };
+  for (const { arrow, previous, next, askedStart } of links) {
     const gap = getDelayDays(arrow.delay) + start[next] - askedStart;
     gaps[arrow.id] = gap;
     const task = tasks[next];
+    // The end an arrow leads from can go later by the days the next task stands later than the arrow asks. A day
+    // more pushes that task; fixed on its day, the task is then too early for the arrow, and gives no day when it
+    // is so already.
+    if (arrow.kind !== "start-start") limitSlack(previous, Math.max(start[next] - askedStart, 0));
+    // A link holds the end it leads to as well: that end takes the previous task along, or, the link being apart,
+    // goes further from it.
+    if (arrow.kind === "end-end" && arrow.delay === "linked" && task.start === "anchor") limitSlack(next, 0);
     const heldByArrowId = decidingArrowId[task.id];
     if (arrow.delay === "linked" && heldByArrowId && askedStart < start[next])
       apartLinks.push({ arrowId: arrow.id, taskId: task.id, days: gap, heldByArrowId });
@@ -126,7 +138,7 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
   });
 
   // backward from the last end of each group: the latest start of every task that keeps it
-  const slack: TSchedule["slack"] = {};
+  const isCritical = tasks.map(() => false);
   const latestStart = tasks.map(() => 0);
   for (let position = order.length - 1; position >= 0; position--) {
     const index = order[position];
@@ -140,9 +152,8 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
       latest = Math.min(latest, start[index] + limit - askedStart);
     }
     latestStart[index] = latest;
-    slack[tasks[index].id] = latest - start[index];
+    isCritical[index] = latest === start[index];
   }
-  const isCritical = (index: number) => slack[tasks[index].id] === 0;
 
   return {
     dates,
@@ -151,10 +162,10 @@ export function computeSchedule(tasks: TScheduleTask[], arrows: TScheduleArrow[]
     conflicts,
     apartLinks,
     slack,
-    criticalTaskIds: tasks.filter((_task, index) => isCritical(index)).map((task) => task.id),
+    criticalTaskIds: tasks.filter((_task, index) => isCritical[index]).map((task) => task.id),
     criticalArrowIds: links
       .filter(
-        ({ previous, next, askedStart }) => isCritical(previous) && isCritical(next) && askedStart === start[next]
+        ({ previous, next, askedStart }) => isCritical[previous] && isCritical[next] && askedStart === start[next]
       )
       .map(({ arrow }) => arrow.id),
   };

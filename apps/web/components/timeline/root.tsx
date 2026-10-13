@@ -167,6 +167,7 @@ export const WorkItemsTimeline = observer(function WorkItemsTimeline(props: Prop
       taskIds={taskIds}
       plan={schedule.getPlan(projectId)}
       schedule={schedule.getSchedule(projectId)}
+      isOperationGoingOn={schedule.operation?.projectId === projectId}
       changingArrowIds={schedule.getChangingArrowIds(projectId)}
       operation={operation}
       showOnlyLeaves={showOnlyLeaves}

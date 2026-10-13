@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+export { getChangedArrowIds } from "./changed-arrows";
 export { computeSchedule, getConflictCause, getDelayDays } from "./compute-schedule";
 export {
   addArrow,

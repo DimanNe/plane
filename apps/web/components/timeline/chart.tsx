@@ -66,7 +66,8 @@ type Props = {
   // the plan and its schedule: of what is stored, or of the operation that is going on
   plan: TPlan;
   schedule: TSchedule;
-  // the arrows whose days the operation that is going on has changed
+  // an operation is going on, and the arrows that it has changed
+  isOperationGoingOn: boolean;
   changingArrowIds: string[];
   operation: TTimelineOperation;
   // a day the timeline shows when it opens, besides its bars and today
@@ -121,6 +122,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
     taskIds,
     plan: { tasks, arrows },
     schedule,
+    isOperationGoingOn,
     changingArrowIds,
     operation,
     focusDate,
@@ -560,6 +562,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                   plan={props.plan}
                   schedule={schedule}
                   arrowStates={arrowStates}
+                  isOperationGoingOn={isOperationGoingOn}
                   datedTaskIds={datedTaskIds}
                   draggedTaskId={draggedTaskId}
                   viewTop={viewTop}

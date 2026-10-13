@@ -27,7 +27,7 @@ type Props = {
   // the first and the last day of the task
   start: number;
   end: number;
-  // the days the task can slip without moving the end of its group
+  // the days the end of the task can go later before anything else changes; a tail as long shows them
   slack: number;
   // the colour of the bar, and of the tail that shows the slack
   color: string;

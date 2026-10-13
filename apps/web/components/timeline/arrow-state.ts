@@ -9,7 +9,7 @@
  * - "rest": nothing;
  * - "hovered": the pointer is on its line or on its text;
  * - "selected": its control is open;
- * - "changing": the operation that is going on has changed its days, so they are counting;
+ * - "changing": the operation that is going on has changed what it asks or how long it is;
  * - "stopping": it is the reason why the bar that is dragged does not go further.
  * What the plan says of the arrow, that it is critical or in conflict, is another thing: that is its colour at
  * rest.
@@ -32,15 +32,15 @@ export const getArrowState = (arrowId: string, states: TArrowStates): TArrowStat
 };
 
 /**
- * The state that an arrow shows when the plan does not keep it: that it is red tells more than that its days
- * count, and less than that it stops the move.
+ * The state that an arrow shows when the plan does not keep it: that it is red tells more than that the
+ * operation changes it, and less than that it stops the move.
  */
 export const getShownArrowState = (state: TArrowState, isInConflict: boolean): TArrowState =>
   isInConflict && state === "changing" ? "rest" : state;
 
 /**
  * How a state looks on the line of an arrow: how strong the line is, and for a state of the move the colour that
- * takes the place of the arrow's own. Counting is green and stopping is amber: neither is the red of a conflict,
+ * takes the place of the arrow's own. Changing is green and stopping is amber: neither is the red of a conflict,
  * nor the blue of a selected arrow and of the critical arrows around them.
  */
 export const ARROW_LINE_LOOKS: Record<TArrowState, { strokeWidth: number; colour?: "changing" | "stopping" }> = {

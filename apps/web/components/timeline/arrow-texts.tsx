@@ -20,7 +20,7 @@ import { getArrowModeParts } from "./arrow-parts";
 import type { TTextPart } from "./arrow-parts";
 import { ARROW_TEXT_CLASS_NAMES, getArrowState, getShownArrowState } from "./arrow-state";
 import type { TArrowState, TArrowStates } from "./arrow-state";
-import type { TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
+import type { TArrowEnd, TArrowWaysProps, TDrawnArrow, TPoint } from "./arrows";
 import { getArrowLayerStyle, STUB } from "./arrows";
 import { BAR_HEIGHT, BAR_TOP, DATE_DISTANCE, DATE_WIDTH } from "./bar";
 import type { TTimelineView } from "./scale";
@@ -36,6 +36,15 @@ type TPosition = { clientX: number; clientY: number; target?: EventTarget | null
 
 type TArrowText = { isDanger: boolean; parts: TTextPart[] };
 
+/**
+ * Where a text stands on its arrow: on a stretch of the way of the arrow, a distance from the corner that stretch
+ * begins at; or beside the bar at an end of the arrow, a distance out from that end. A text that keeps its place
+ * goes as far as that corner or that end goes, and no further.
+ */
+type TPlaceOnArrow = { stretch: number; distance: number } | { end: TArrowEnd; distance: number };
+
+type TTextPlace = { on: TPlaceOnArrow; point: TPoint };
+
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
 
 type Props = Omit<TArrowWaysProps, "arrows"> & {
@@ -43,6 +52,8 @@ type Props = Omit<TArrowWaysProps, "arrows"> & {
   plan: TPlan;
   schedule: TSchedule;
   arrowStates: TArrowStates;
+  // an operation is going on: the plan that is drawn is its preview
+  isOperationGoingOn: boolean;
   // the fixed tasks that show the date of their start beside their bar
   datedTaskIds: Set<string>;
   // the task whose bar is dragged: both its dates show, and the arrows whose days count tell them beside those
@@ -107,23 +118,46 @@ const getArrowText = (
   };
 };
 
-/** The point of a way through the points that is at a distance from its start. */
-const getPointAt = (points: TPoint[], distance: number): TPoint => {
+const getDistance = ([x, y]: TPoint, [toX, toY]: TPoint) => Math.abs(toX - x) + Math.abs(toY - y);
+
+/** The place on a way through the points that is at a distance from its start. */
+const getPlaceAt = (points: TPoint[], distance: number): TTextPlace => {
   let rest = distance;
-  for (let index = 1; index < points.length; index++) {
-    const [x, y] = points[index - 1];
-    const [nextX, nextY] = points[index];
-    const length = Math.abs(nextX - x) + Math.abs(nextY - y);
-    if (rest <= length) return [x + ((nextX - x) * rest) / (length || 1), y + ((nextY - y) * rest) / (length || 1)];
-    rest -= length;
+  let stretch = 0;
+  // the last stretch has what the others leave
+  while (stretch < points.length - 2 && rest > getDistance(points[stretch], points[stretch + 1])) {
+    rest -= getDistance(points[stretch], points[stretch + 1]);
+    stretch += 1;
   }
-  return points[points.length - 1];
+  const [x, y] = points[stretch];
+  const [nextX, nextY] = points[stretch + 1];
+  const length = getDistance(points[stretch], points[stretch + 1]) || 1;
+  return {
+    on: { stretch, distance: rest },
+    point: [x + ((nextX - x) * rest) / length, y + ((nextY - y) * rest) / length],
+  };
+};
+
+/** The place beside the bar at an end of a way: on the line of that bar, out from the edge the arrow meets. */
+const getPlaceBeside = (points: TPoint[], end: TArrowEnd, distance: number): TTextPlace => {
+  const [[endX, endY], [beforeX]] =
+    end === "head" ? [points[points.length - 1], points[points.length - 2]] : [points[0], points[1]];
+  return { on: { end, distance }, point: [endX - Math.sign(endX - beforeX) * distance, endY] };
 };
 
 const getLength = (points: TPoint[]) =>
-  points
-    .slice(1)
-    .reduce((length, [x, y], index) => length + Math.abs(x - points[index][0]) + Math.abs(y - points[index][1]), 0);
+  points.slice(1).reduce((length, point, index) => length + getDistance(points[index], point), 0);
+
+/**
+ * The place a text had on its arrow, on the way the arrow has now. None when that way has no such place: a bar
+ * came so near that the arrow turns elsewhere, and the stretch is shorter or gone.
+ */
+const getKeptPlace = (points: TPoint[], on: TPlaceOnArrow): TTextPlace | undefined => {
+  if ("end" in on) return getPlaceBeside(points, on.end, on.distance);
+  const stretch = points.slice(on.stretch, on.stretch + 2);
+  if (stretch.length < 2 || on.distance > getLength(stretch)) return;
+  return { on, point: getPlaceAt(stretch, on.distance).point };
+};
 
 const isOver = (a: TRect, b: TRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
@@ -176,6 +210,12 @@ const getTakenRects = (props: Props): TRect[] => {
   return rects;
 };
 
+/** Whether a text of a width that stands with its middle at a point lies on nothing. */
+const isFree = (point: TPoint, width: number, takenRects: TRect[]) => {
+  const rect = getTextRect(point, width);
+  return !takenRects.some((taken) => isOver(rect, taken));
+};
+
 /**
  * The place of a text on its arrow: as near to the middle of the arrow as a place is free, and clear of the ends
  * of the arrow, where the handles are. An arrow between bars that stand close has no free place on it: its text
@@ -189,36 +229,31 @@ const getTextPlace = (
   takenRects: TRect[],
   viewTop: number,
   viewBottom: number
-): TPoint => {
+): TTextPlace => {
   const length = getLength(points);
-  let freePlace: TPoint | undefined;
+  let freePlace: TTextPlace | undefined;
   /**
    * A place is taken when a text there would lie on something, and also when it is outside the lines in view: the
    * first free place of that second kind is kept for when no other is free.
    */
-  const isTaken = (place: TPoint) => {
-    const rect = getTextRect(place, width);
-    if (takenRects.some((taken) => isOver(rect, taken))) return true;
+  const isTaken = (place: TTextPlace) => {
+    if (!isFree(place.point, width, takenRects)) return true;
     freePlace ??= place;
-    return place[1] < viewTop || place[1] > viewBottom;
+    return place.point[1] < viewTop || place.point[1] > viewBottom;
   };
   for (let offset = 0; offset <= TEXT_REACH; offset += TEXT_STEP)
     for (const distance of offset ? [length / 2 + offset, length / 2 - offset] : [length / 2]) {
       if (distance < STUB || distance > length - STUB) continue;
-      const place = getPointAt(points, distance);
+      const place = getPlaceAt(points, distance);
       if (!isTaken(place)) return place;
     }
   // beside a bar: past the handle at the edge, each place a step further out than the one before
-  const ends = [
-    [points[points.length - 1], points[points.length - 2]],
-    [points[0], points[1]],
-  ];
-  for (const [[endX, endY], [beforeX]] of ends)
+  for (const end of ["head", "tail"] as const)
     for (let step = 0; step <= TEXT_REACH; step += TEXT_STEP) {
-      const place: TPoint = [endX - Math.sign(endX - beforeX) * (STUB + width / 2 + step), endY];
+      const place = getPlaceBeside(points, end, STUB + width / 2 + step);
       if (!isTaken(place)) return place;
     }
-  return freePlace ?? getPointAt(points, length / 2);
+  return freePlace ?? getPlaceAt(points, length / 2);
 };
 
 type TTextProps = {
@@ -282,6 +317,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
     plan,
     schedule,
     arrowStates,
+    isOperationGoingOn,
     viewTop,
     viewBottom,
     wheelTurn,
@@ -293,13 +329,23 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   } = props;
   // refs
   const elementsRef = useRef(new Map<string, HTMLElement>());
+  // where each text stood on its arrow when the texts were last drawn
+  const placesRef = useRef(new Map<string, TPlaceOnArrow>());
   // where the pointer was when the part that the wheel turns was last found
   const pointRef = useRef<{ x: number; y: number }>(undefined);
   // states
   // The text whose area the pointer is in: its place, the part of it that the wheel turns there, and whether the
   // wheel turns it at all. It stays at that place while the pointer is in the area, whatever its arrow does: a
   // text that moved away from the pointer would have to be found again.
-  const [held, setHeld] = useState<{ arrowId: string; place: TPoint; partIndex: number; isForWheel: boolean }>();
+  const [heldByPointer, setHeld] = useState<{
+    arrowId: string;
+    place: TPoint;
+    partIndex: number;
+    isForWheel: boolean;
+  }>();
+  // A gesture has the pointer to itself: the text the pointer was near when it began goes with its arrow, as
+  // every other text does.
+  const held = isEditable ? heldByPointer : undefined;
   // translation
   const { t } = useTranslation();
 
@@ -318,13 +364,35 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   // A text that has its place is in the way of the next ones: first the one the pointer holds, then the others.
   const takenRects = getTakenRects(props);
   if (held && heldText) takenRects.push(getPlacedTextRect(held.place, getWidth(heldText)));
-  const placedTexts = natural.flatMap(({ arrow, points, text }) => {
-    if (arrow.id === held?.arrowId) return [];
-    const place = getTextPlace(points, getWidth(text), takenRects, viewTop, viewBottom);
-    takenRects.push(getPlacedTextRect(place, getWidth(text)));
-    return [{ arrow, text, place }];
-  });
+  const placesOnArrows = new Map<string, TPlaceOnArrow>();
+  const placedTexts: { arrow: TScheduleArrow; text: TArrowText; place: TPoint }[] = [];
+  const takePlace = (arrow: TScheduleArrow, text: TArrowText, { on, point }: TTextPlace) => {
+    placesOnArrows.set(arrow.id, on);
+    placedTexts.push({ arrow, text, place: point });
+    takenRects.push(getPlacedTextRect(point, getWidth(text)));
+  };
+  const unheldTexts = natural.filter(({ arrow }) => arrow.id !== held?.arrowId);
+  // the text that the pointer holds has its place on its arrow again when the pointer lets it go
+  const heldOn = held && placesRef.current.get(held.arrowId);
+  if (held && heldOn) placesOnArrows.set(held.arrowId, heldOn);
+  // A place is looked for from the middle of the arrow, and the middle moves when an operation makes the arrow
+  // longer or shorter: a text that looked for its place at every change would go back and forth along its arrow.
+  // During an operation a text keeps the place it has on its arrow for as long as that place is free. These
+  // texts have their places first, so that none of them loses its place to a text that looks for one.
+  if (isOperationGoingOn)
+    for (const { arrow, points, text } of unheldTexts) {
+      const on = placesRef.current.get(arrow.id);
+      const place = on && getKeptPlace(points, on);
+      if (place && isFree(place.point, getWidth(text), takenRects)) takePlace(arrow, text, place);
+    }
+  for (const { arrow, points, text } of unheldTexts)
+    if (!placesOnArrows.has(arrow.id))
+      takePlace(arrow, text, getTextPlace(points, getWidth(text), takenRects, viewTop, viewBottom));
   if (held && heldArrow && heldText) placedTexts.push({ arrow: heldArrow, text: heldText, place: held.place });
+
+  useEffect(() => {
+    placesRef.current = placesOnArrows;
+  });
 
   const getHeldPart = (arrowId: string, partIndex: number) => {
     const parts = elementsRef.current.get(arrowId)?.children;
@@ -421,7 +489,7 @@ const ArrowTexts = memo(function ArrowTexts(props: Props) {
   );
 
   // a text that went away with the pointer in its area tells nobody that the pointer has left it
-  const isHeldTextGone = !!held && !heldText;
+  const isHeldTextGone = !!heldByPointer && !heldText;
   useEffect(() => {
     if (isHeldTextGone) setHeld(undefined);
   }, [isHeldTextGone]);

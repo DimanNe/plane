@@ -8,7 +8,13 @@ import { set } from "lodash-es";
 import { action, makeObservable, observable, runInAction, when } from "mobx";
 import { computedFn } from "mobx-utils";
 // plane imports
-import { computeSchedule, getChanges, getPlan, keepLinksTogether } from "@plane/blocks/timeline-schedule";
+import {
+  computeSchedule,
+  getChangedArrowIds,
+  getChanges,
+  getPlan,
+  keepLinksTogether,
+} from "@plane/blocks/timeline-schedule";
 import type { TPlan, TSchedule, TStoredTask } from "@plane/blocks/timeline-schedule";
 import { setToast } from "@plane/blocks/toast";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -26,8 +32,12 @@ export type TTimelineOperation = {
   workspaceSlug: string;
   projectId: string;
   stored: { tasks: TStoredTask[]; dependencies: TTimelineDependency[] };
-  /** The plan the operation began with: the links that are together in it are together in every preview. */
+  /**
+   * The plan the operation began with, and its schedule: the links that are together in it are together in every
+   * preview, and an arrow that is not as it is there is one the operation has changed.
+   */
   planBefore: TPlan;
+  scheduleBefore: TSchedule;
   plan: TPlan;
   schedule: TSchedule;
   isSaving: boolean;
@@ -127,15 +137,13 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
   );
 
   /**
-   * The arrows whose days the operation that is going on has changed, and those it has added: what a move of a
-   * task makes count. None without an operation, and none while it is being saved: the gesture is over then.
+   * The arrows that the operation that is going on has changed. None without an operation, and none while it is
+   * being saved: the gesture is over then.
    */
   getChangingArrowIds = computedFn((projectId: string): string[] => {
-    if (this.operation?.projectId !== projectId || this.operation.isSaving) return NO_ARROW_IDS;
-    const storedDelays = new Map(this.getStoredPlan(projectId).arrows.map((arrow) => [arrow.id, arrow.delay]));
-    return this.operation.plan.arrows.flatMap((arrow) =>
-      storedDelays.get(arrow.id) === arrow.delay ? [] : [arrow.id]
-    );
+    const operation = this.operation;
+    if (operation?.projectId !== projectId || operation.isSaving) return NO_ARROW_IDS;
+    return getChangedArrowIds({ plan: operation.planBefore, schedule: operation.scheduleBefore }, operation);
   });
 
   /**
@@ -215,7 +223,16 @@ export class TimelineScheduleStore implements ITimelineScheduleStore {
     const plan = getPlan(stored.tasks, stored.dependencies);
     try {
       const schedule = computeSchedule(plan.tasks, plan.arrows);
-      this.operation = { workspaceSlug, projectId, stored, planBefore: plan, plan, schedule, isSaving: false };
+      this.operation = {
+        workspaceSlug,
+        projectId,
+        stored,
+        planBefore: plan,
+        scheduleBefore: schedule,
+        plan,
+        schedule,
+        isSaving: false,
+      };
       return plan;
     } catch (error) {
       // the engine names tasks by id; a person knows them by key and name

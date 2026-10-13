@@ -64,7 +64,7 @@ const HEAD_LENGTH = 8;
 const HIT_WIDTH = 12;
 const MIN_HIT_WIDTH = 6;
 // The colour of an arrow: of a conflict and of what produces it, of a critical or a selected arrow, of the others;
-// and of an arrow whose days count in the move that is going on, and of one that stops that move.
+// and of an arrow that the operation that is going on has changed, and of one that stops a move.
 const CLASS_NAMES = {
   normal: "text-placeholder",
   accent: "text-accent-primary",
