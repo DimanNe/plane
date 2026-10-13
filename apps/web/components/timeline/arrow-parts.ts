@@ -24,9 +24,10 @@ export type TTextPart = {
 type TTranslate = (key: string, params?: Record<string, unknown>) => string;
 
 /**
- * The text that tells how an arrow holds its next task, in parts: "linked"; "in" and "n d"; "on" and the day
+ * The text that tells how an arrow holds its next task, in parts: "linked"; "in" and "≥ n d"; "on" and the day
  * the task is fixed on. The first part is what the arrow is, and the wheel on it turns that. The second is the
- * number that goes with it, and the wheel on it changes the number: the days of "in n d", the day of "on".
+ * number that goes with it, and the wheel on it changes the number: the days of "in ≥ n d", the day of "on".
+ * The days are the least an arrow asks for: another arrow may hold its next task later than that.
  */
 export const getArrowModeParts = (
   arrow: TScheduleArrow,
@@ -55,7 +56,7 @@ export const getArrowModeParts = (
     modePart,
     {
       key: "value",
-      label: t("timeline.duration", { days }),
+      label: t("timeline.arrow.at_least_days", { days }),
       turn: (plan, direction) => changeArrow(plan, arrow.id, { delay: Math.max(days + direction, 0) }),
     },
   ];

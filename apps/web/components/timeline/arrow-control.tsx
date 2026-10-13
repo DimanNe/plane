@@ -173,6 +173,7 @@ export function TimelineArrowControl(props: Props) {
               >
                 {t("timeline.arrow.in")}
               </button>
+              {t("timeline.arrow.at_least")}
               <input
                 type="number"
                 min={0}

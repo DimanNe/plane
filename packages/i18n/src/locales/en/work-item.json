@@ -442,6 +442,8 @@
       "apart": "{days} d apart",
       "too_early": "{days} d too early",
       "in": "in",
+      "at_least": "≥",
+      "at_least_days": "≥ {days} d",
       "days": "d",
       "on": "on",
       "delay": "Delay in days",
@@ -456,7 +458,7 @@
     "apart": {
       "sentence": "{task} is linked to {previous}, but stands {days, plural, one {# day} other {# days}} later than the link puts it: the arrow from {other} asks for that.",
       "ways_out": {
-        "in-days": "Make this arrow in {days} d",
+        "in-days": "Make this arrow in ≥ {days} d",
         "remove-arrow": "Remove this arrow"
       }
     },
