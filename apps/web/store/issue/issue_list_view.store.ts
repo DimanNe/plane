@@ -35,6 +35,12 @@ export interface IIssueListViewStore {
   awaitDescriptionCaret: (issueId: string) => void;
   /** Ends the wait and returns what was typed during it. */
   takeTypedForDescription: () => string;
+  /**
+   * The state keys have changed the selected line of this work item, and the change is being stored. If it sends
+   * the line to another group, the selection is left at the place of the line, for the line that takes it.
+   */
+  leaveSelectionAtPlaceOf: (issueId: string, change: Promise<unknown>) => void;
+  isSelectionLeftAtPlaceOf: (issueId: string) => boolean;
   setDropMark: (mark: TListDropMark | undefined) => void;
 }
 
@@ -43,6 +49,7 @@ export class IssueListViewStore implements IIssueListViewStore {
   selectedRow: IIssueListViewStore["selectedRow"] = undefined;
   descriptionAwaitingCaret: string | undefined = undefined;
   private typedForDescription = "";
+  private issueIdOfPlaceToKeep: string | undefined = undefined;
   dropMark: TListDropMark | undefined = undefined;
 
   constructor() {
@@ -107,6 +114,18 @@ export class IssueListViewStore implements IIssueListViewStore {
     e.stopImmediatePropagation();
     if (e.key.length === 1) this.typedForDescription += e.key;
   };
+
+  // Only while the change is being stored: a line that this change does not move, and that goes to another group
+  // later for another reason, takes the selection with it as every line does.
+  leaveSelectionAtPlaceOf = (issueId: string, change: Promise<unknown>) => {
+    const forget = () => {
+      if (this.issueIdOfPlaceToKeep === issueId) this.issueIdOfPlaceToKeep = undefined;
+    };
+    this.issueIdOfPlaceToKeep = issueId;
+    void change.then(forget, forget);
+  };
+
+  isSelectionLeftAtPlaceOf = (issueId: string) => this.issueIdOfPlaceToKeep === issueId;
 
   setDropMark = (mark: TListDropMark | undefined) => {
     this.dropMark = mark;

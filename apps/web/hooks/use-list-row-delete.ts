@@ -113,14 +113,23 @@ export const useListRowDelete = (props: Props) => {
   });
 
   /**
+   * The row that stands where the selected row last stood, now that its work item has gone from there: deleted,
+   * or in another group. Where the list ends before that place, the last row.
+   */
+  const getRowAtSelectedPlace = useLatestCallback((goneIssueId: string) => {
+    const otherRows = rows.filter((row) => row.issueId !== goneIssueId);
+    return otherRows[Math.min(lastSelectedRowIndexRef.current, otherRows.length - 1)];
+  });
+
+  /**
    * The row where the work item stood that the key deleted, or the last row. Nothing for a work item that left
    * the list another way, or that is still there: the question may have been answered with Cancel, and the work
    * item may leave the list later for another reason, such as a filter.
    */
   const getRowInPlaceOf = useLatestCallback((issueId: string) => {
     if (keyedIssueIdRef.current !== issueId || issuesMap[issueId]) return undefined;
-    return rows[Math.min(lastSelectedRowIndexRef.current, rows.length - 1)];
+    return getRowAtSelectedPlace(issueId);
   });
 
-  return { getRowInPlaceOf };
+  return { getRowInPlaceOf, getRowAtSelectedPlace };
 };

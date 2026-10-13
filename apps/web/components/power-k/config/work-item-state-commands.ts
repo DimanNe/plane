@@ -18,9 +18,11 @@ import { getWorkItemPropertyErrorMessage } from "@plane/utils";
 import { resolveShortcutKey } from "@/components/power-k/core/shortcut-handler";
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 import { useShortcutWorkItemId } from "@/components/power-k/hooks/use-shortcut-work-item";
+import { closeStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
 import { leavePictureOfChoice, PALETTE_MENU, STATE_SELECT_MENU } from "@/components/power-k/menu-picture";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useListView } from "@/hooks/store/use-list-view";
 import { usePowerK } from "@/hooks/store/use-power-k";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -40,6 +42,7 @@ type TStateMenuPlace = TStateMenuOfKey["place"] | "palette";
 export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
   // store hooks
   const issueDetail = useIssueDetail();
+  const listView = useListView();
   const powerK = usePowerK();
   const { getProjectStates } = useProjectState();
   const { allowPermissions } = useUserPermissions();
@@ -115,8 +118,7 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
     e: KeyboardEvent,
     ctx: TPowerKContext,
     workItem: TIssue,
-    menu: TStateMenuOfKey | "palette",
-    focusedBefore: HTMLElement | undefined
+    menu: TStateMenuOfKey | "palette"
   ) => {
     const key = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey ? undefined : resolveShortcutKey(e, null);
     const shortcut = STATE_SHORTCUTS.find((stateShortcut) => stateShortcut.key === key);
@@ -132,13 +134,10 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
     if (!state) return;
     leavePictureOfChoice(menu === "palette" ? PALETTE_MENU : STATE_SELECT_MENU, state.name);
     if (menu === "palette") ctx.closePalette();
-    else {
-      powerK.setStateMenuOfKey(undefined);
-      // the keys that follow are for where the focus was, not for the menu that is closing
-      if (focusedBefore) focusedBefore.focus({ preventScroll: true });
-      else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    }
-    void setState(ctx, workItem, state);
+    else closeStateMenuOfKey(powerK);
+    const change = setState(ctx, workItem, state);
+    // with the list alone the keys go on down the group: the selection does not go away with the line
+    if (menu !== "palette" && menu.place === "list") listView.leaveSelectionAtPlaceOf(workItem.id, change);
   };
 
   const openStateMenu = (ctx: TPowerKContext) => {
@@ -147,14 +146,14 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
     if (!workItem || !place) return;
     const focused = document.activeElement;
     const focusedBefore = focused instanceof HTMLElement && focused !== document.body ? focused : undefined;
-    const menu = place === "palette" ? place : { workItemId: workItem.id, place, hadFocus: !!focusedBefore };
+    const menu = place === "palette" ? place : { workItemId: workItem.id, place, focusedBefore };
     if (menu === "palette") {
       powerK.togglePowerKModal(true);
       ctx.setActiveCommand(powerK.commandRegistry.getCommand("change_work_item_state") ?? null);
       ctx.setActivePage("update-work-item-state");
     } else powerK.setStateMenuOfKey(menu);
     // The letter chooses whenever it comes, as long as it is the first key and the menu is still open.
-    document.addEventListener("keydown", (e) => chooseStateByKey(e, ctx, workItem, menu, focusedBefore), {
+    document.addEventListener("keydown", (e) => chooseStateByKey(e, ctx, workItem, menu), {
       capture: true,
       once: true,
     });

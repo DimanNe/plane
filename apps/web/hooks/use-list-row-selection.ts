@@ -48,7 +48,8 @@ export const useListRowSelection = (props: Props) => {
   // router
   const { workspaceSlug } = useParams();
   // store hooks
-  const { collapsedIssueIds, selectedRow, setSelectedRow, toggleIssueCollapse } = useListView();
+  const { collapsedIssueIds, selectedRow, setSelectedRow, toggleIssueCollapse, isSelectionLeftAtPlaceOf } =
+    useListView();
   const { peekIssue, setPeekIssue } = useIssueDetail();
 
   // the rows in the order the list shows them
@@ -64,7 +65,12 @@ export const useListRowSelection = (props: Props) => {
   );
   const selectedIssueGroupId = rows.find((row) => row.issueId === selectedRow?.issueId)?.groupId;
 
-  const { getRowInPlaceOf } = useListRowDelete({ containerRef, rows, selectedRowIndex, issuesMap });
+  const { getRowInPlaceOf, getRowAtSelectedPlace } = useListRowDelete({
+    containerRef,
+    rows,
+    selectedRowIndex,
+    issuesMap,
+  });
   // the work item view beside the list shows the row that took the place of the one it showed
   const openRowInPlaceOf = useLatestCallback((issueId: string, row: TListRow) => {
     if (peekIssue?.issueId === issueId) openRow(row);
@@ -72,17 +78,33 @@ export const useListRowSelection = (props: Props) => {
 
   // A selected work item that moved to another group stays selected there, one that left the list is dropped.
   // One that the Delete key removed leaves the selection to the row that took its place, so that the arrow keys
-  // go on from there.
+  // go on from there. So does one that the state keys sent to another group: S and a letter, pressed again, then
+  // work down the group it left. Where no other row is, the selection stays with it.
   useEffect(() => {
     if (!selectedRow || selectedRowIndex !== -1) return;
     if (selectedIssueGroupId) {
-      setSelectedRow({ issueId: selectedRow.issueId, groupId: selectedIssueGroupId });
+      const rowInPlace = isSelectionLeftAtPlaceOf(selectedRow.issueId)
+        ? getRowAtSelectedPlace(selectedRow.issueId)
+        : undefined;
+      setSelectedRow({
+        issueId: rowInPlace?.issueId ?? selectedRow.issueId,
+        groupId: rowInPlace?.groupId ?? selectedIssueGroupId,
+      });
       return;
     }
     const rowInPlace = getRowInPlaceOf(selectedRow.issueId);
     setSelectedRow(rowInPlace && { issueId: rowInPlace.issueId, groupId: rowInPlace.groupId });
     if (rowInPlace) openRowInPlaceOf(selectedRow.issueId, rowInPlace);
-  }, [selectedRow, selectedRowIndex, selectedIssueGroupId, setSelectedRow, getRowInPlaceOf, openRowInPlaceOf]);
+  }, [
+    selectedRow,
+    selectedRowIndex,
+    selectedIssueGroupId,
+    setSelectedRow,
+    getRowInPlaceOf,
+    getRowAtSelectedPlace,
+    isSelectionLeftAtPlaceOf,
+    openRowInPlaceOf,
+  ]);
 
   // without a list nothing is selected
   useEffect(() => () => setSelectedRow(undefined), [setSelectedRow]);

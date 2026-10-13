@@ -12,10 +12,9 @@ import type { TPowerKContextType, TPowerKPageType } from "@/components/power-k/c
 
 /**
  * The state menu of a work item that the key S holds open: of its selected line of the list, or of the peek view.
- * `hadFocus`: something had the focus when S was pressed. The focus goes back there when the menu closes; when
- * nothing had it, it goes nowhere, so that the next key is still a shortcut.
+ * `focusedBefore`: what had the focus when S was pressed, for the focus to go back to when the menu closes.
  */
-export type TStateMenuOfKey = { workItemId: string; place: "list" | "peek"; hadFocus: boolean };
+export type TStateMenuOfKey = { workItemId: string; place: "list" | "peek"; focusedBefore: HTMLElement | undefined };
 
 export interface IBasePowerKStore {
   // observables

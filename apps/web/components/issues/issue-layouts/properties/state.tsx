@@ -12,6 +12,8 @@ import type { TIssue } from "@plane/types";
 import { StateSelect } from "@/components/dropdowns/state/state-select";
 import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
 import type { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
+// hooks
+import { useListView } from "@/hooks/store/use-list-view";
 
 type TIssuePropertyState = {
   issue: TIssue;
@@ -31,6 +33,8 @@ const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
  */
 export const IssuePropertyState = observer(function IssuePropertyState(props: TIssuePropertyState) {
   const { issue, updateIssue, isReadOnly, stateMenuOfKey } = props;
+  // store hooks
+  const { leaveSelectionAtPlaceOf } = useListView();
 
   return (
     // oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions
@@ -42,7 +46,11 @@ export const IssuePropertyState = observer(function IssuePropertyState(props: TI
     >
       <StateSelect
         value={issue.state_id}
-        onChange={(stateId) => updateIssue?.(issue.project_id, issue.id, { state_id: stateId })}
+        onChange={(stateId) => {
+          const change = updateIssue?.(issue.project_id, issue.id, { state_id: stateId });
+          // chosen by hand in the menu that the key S opened: as chosen there by its letter
+          if (change && stateMenuOfKey.open) leaveSelectionAtPlaceOf(issue.id, change);
+        }}
         projectId={issue.project_id ?? undefined}
         disabled={isReadOnly}
         variant="icon-sm"
