@@ -47,6 +47,7 @@ import { ListGroupQuickAddButton } from "./headers/quick-add-button";
 import { getListGroupHeaderId, highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
 import { getListDropLocation, getListDropMark } from "./utils";
+import { getWorkItemDataOfGroup } from "./work-item-data-of-group";
 
 interface Props {
   groupIssueIds: string[] | undefined;
@@ -153,36 +154,8 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     return true;
   };
 
-  const prePopulateQuickAddData = (groupByKey: string | null, value: any) => {
-    const defaultState = projectState.projectStates?.find((state) => state.default);
-    let preloadedData: object = { state_id: defaultState?.id };
-
-    if (groupByKey === null) {
-      preloadedData = { ...preloadedData };
-    } else {
-      if (groupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: value };
-      } else if (groupByKey === "priority") {
-        preloadedData = { ...preloadedData, priority: value };
-      } else if (groupByKey === "labels" && value != "None") {
-        preloadedData = { ...preloadedData, label_ids: [value] };
-      } else if (groupByKey === "assignees" && value != "None") {
-        preloadedData = { ...preloadedData, assignee_ids: [value] };
-      } else if (groupByKey === "cycle" && value != "None") {
-        preloadedData = { ...preloadedData, cycle_id: value };
-      } else if (groupByKey === "module" && value != "None") {
-        preloadedData = { ...preloadedData, module_ids: [value] };
-      } else if (groupByKey === "milestone") {
-        preloadedData = { ...preloadedData, milestone_id: value === "None" ? null : value };
-      } else if (groupByKey === "created_by") {
-        preloadedData = { ...preloadedData };
-      } else {
-        preloadedData = { ...preloadedData, [groupByKey]: value };
-      }
-    }
-
-    return preloadedData;
-  };
+  const prePopulateQuickAddData = (groupByKey: string | null, value: any) =>
+    getWorkItemDataOfGroup(groupByKey, value, projectState.projectStates?.find((state) => state.default)?.id);
 
   useEffect(() => {
     const element = groupRef.current;
