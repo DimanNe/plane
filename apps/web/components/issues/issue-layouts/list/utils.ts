@@ -133,10 +133,11 @@ export const getListDropLocation = (
 
 /**
  * What the list draws for a row that is held over a group. It is made from where a drop would put the row, so
- * the picture cannot say one thing and the drop do another, and there is none where a drop changes nothing.
- * In the manual order the place is the pointer's: a line at a row, the row that takes the held row in, or the
- * end of the group. Any other order puts the row in its place itself, so no line is drawn: the group is marked,
- * or the row whose sub-work item the held row becomes.
+ * the picture cannot say one thing and the drop do another, and there is none where a drop does nothing.
+ * At a row the place is the pointer's in every order of the list: a line above or below the row, or the row that
+ * takes the held row in. An order other than the manual one then puts the dropped row where it belongs, in the
+ * group and under the parent that the line showed. Elsewhere in a group the group is marked, and in the manual
+ * order a line stands at its end, where the row lands.
  */
 export const getListDropMark = (
   payload: IPragmaticDropPayload,
@@ -146,12 +147,6 @@ export const getListDropMark = (
 ): TListDropMark | undefined => {
   const location = getListDropLocation(payload, issueIds, issuesMap);
   if (!location) return;
-  const { groupId } = location;
   const row = getRowDropData(payload);
-  if (isManualOrder) return { groupId, issueId: row?.id, place: row?.place ?? "end" };
-
-  const source = issuesMap[payload.source.data.id as string];
-  const parentId = location.parentId === undefined ? source?.parent_id : location.parentId;
-  if (payload.source.data.groupId === groupId && (parentId ?? null) === (source?.parent_id ?? null)) return;
-  return { groupId, issueId: location.parentId ?? undefined, place: "inside" };
+  return { groupId: location.groupId, issueId: row?.id, place: row?.place ?? (isManualOrder ? "end" : "inside") };
 };
