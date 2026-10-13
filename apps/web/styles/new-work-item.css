@@ -1,19 +1,32 @@
 /*
- * A work item that was just made is pointed out in the List layout; see
- * components/issues/issue-layouts/list/new-work-item-arrival.ts.
+ * The box that goes from the create dialog's place to the line of the work item the dialog has stored; see
+ * components/issues/issue-layouts/list/new-work-item-arrival.ts. It lies where the line is and is moved and
+ * scaled from the dialog's rectangle; its content is scaled the other way and so keeps its size. What reaches
+ * out of the box is cut off.
  */
-
-/*
- * The line stays tinted for a moment, then the tint fades into the line's own background. The moment is long
- * enough to find the line after the dialog has gone from over it.
- */
-.new-work-item-highlight {
-  animation: new-work-item-highlight 2400ms ease-out;
+.new-work-item-morph {
+  position: fixed;
+  z-index: 50;
+  overflow: clip;
+  transform-origin: 0 0;
+  pointer-events: none;
 }
 
-@keyframes new-work-item-highlight {
-  0%,
-  40% {
-    background-color: var(--background-color-accent-subtle);
-  }
+.new-work-item-morph-surface {
+  position: absolute;
+  inset: 0;
+}
+
+.new-work-item-morph-content,
+.new-work-item-morph-dialog,
+.new-work-item-morph-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+/* the dialog's picture has left the box when the box arrives */
+.new-work-item-morph-dialog {
+  opacity: 0;
 }

@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // Plane imports
 import { Dialog, DialogContent } from "@makeplane/propel/components/dialog";
+import { ALL_ISSUES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { setToast } from "@plane/blocks/toast";
 import type { TBaseIssue, TIssue } from "@plane/types";
@@ -20,6 +21,7 @@ import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useListView } from "@/hooks/store/use-list-view";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
@@ -30,7 +32,11 @@ import { FileService } from "@/services/file.service";
 const fileService = new FileService();
 // local imports
 import { useCreateIssueToastActions } from "../create-issue-toast-action-items";
-import { closeDialogAndPointOutNewWorkItem, highlightNewWorkItem } from "../issue-layouts/list/new-work-item-arrival";
+import {
+  closeDialogAndPointOutNewWorkItem,
+  hasListLine,
+  highlightNewWorkItem,
+} from "../issue-layouts/list/new-work-item-arrival";
 import { DraftIssueLayout } from "./draft-issue-layout";
 import { IssueFormRoot } from "./form";
 import type { IssueFormProps } from "./form";
@@ -83,6 +89,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   const { allowedProjectIds, handleCreateUpdatePropertyValues, handleCreateSubWorkItem, setIssuePropertyValueErrors } =
     useIssueModal();
   const { getProjectByIdentifier } = useProject();
+  const { setSelectedRow } = useListView();
   // current store details
   const { createIssue, updateIssue } = useIssuesActions(storeType);
   // propel: toast actions cross the boundary as data, never as JSX
@@ -251,7 +258,10 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
             : undefined,
       });
       if (createMore) highlightNewWorkItem(response.id);
-      else closeDialogAndPointOutNewWorkItem(response, handleClose);
+      else closeDialogAndPointOutNewWorkItem(response, dialogPopupRef.current, handleClose);
+      // The arrow keys go on from the new line. After a sub-work item its parent stays selected, for the next one.
+      if (!response.parent_id && hasListLine(response.id))
+        setSelectedRow({ issueId: response.id, groupId: ALL_ISSUES });
       if (createMore && issueTitleRef) issueTitleRef?.current?.focus();
       setDescription("<p></p>");
       setChangesMade(null);

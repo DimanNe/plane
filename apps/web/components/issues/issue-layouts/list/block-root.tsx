@@ -16,7 +16,6 @@ import type { IIssueDisplayProperties, TIssue, TIssueMap } from "@plane/types";
 // components
 import { cn } from "@plane/utils";
 import RenderIfVisible from "@/components/core/render-if-visible-HOC";
-import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
 // hooks
 import { useListView } from "@/hooks/store/use-list-view";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
@@ -24,6 +23,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
 import { HIGHLIGHT_CLASS, getIssueBlockId, isIssueNew } from "../utils";
 import { IssueBlock } from "./block";
+import { IssueBlockStandIn } from "./block-stand-in";
 import { ListDropLine } from "./drop-line";
 import type { TRenderQuickActions } from "./list-view-types";
 import type { TListRowDropData } from "./utils";
@@ -129,7 +129,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
         classNames={`relative ${isLastChild && !isExpanded ? "" : "border-b border-b-subtle"}`}
         verticalOffset={100}
         defaultValue={issuesMap[issueId] ? isIssueNew(issuesMap[issueId]) : false}
-        placeholderChildren={<ListLoaderItemRow shouldAnimate={false} renderForPlaceHolder defaultPropertyCount={4} />}
+        placeholderChildren={<IssueBlockStandIn nestingLevel={nestingLevel} isCompact={isCompact} />}
         shouldRecordHeights={isMobile}
       >
         <IssueBlock
