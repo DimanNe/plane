@@ -554,16 +554,26 @@ def write_caddy_config(run_dir: pl.Path) -> None:
     persist_config off
     grace_period 120s
 }}
+# The API closes a connection that has been idle for a moment. A proxy that keeps the connection for its next
+# request can send a save down it just as the API closes it, and must then answer 502: a save is not sent twice.
+# So each request to the API gets a connection of its own.
+(api) {{
+    reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]} {{
+        transport http {{
+            keepalive off
+        }}
+    }}
+}}
 :{ports[plane_config.Service.PROXY]} {{
     bind 0.0.0.0
     handle /api/* {{
-        reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]}
+        import api
     }}
     handle /auth/* {{
-        reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]}
+        import api
     }}
     handle /static/* {{
-        reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]}
+        import api
     }}
     handle /live/* {{
         reverse_proxy 127.0.0.1:{ports[plane_config.Service.LIVE]}
