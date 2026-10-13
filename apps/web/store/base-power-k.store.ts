@@ -10,6 +10,13 @@ import type { IPowerKCommandRegistry } from "@/components/power-k/core/registry"
 import { PowerKCommandRegistry } from "@/components/power-k/core/registry";
 import type { TPowerKContextType, TPowerKPageType } from "@/components/power-k/core/types";
 
+/**
+ * The state menu of a work item that the key S holds open: of its selected line of the list, or of the peek view.
+ * `hadFocus`: something had the focus when S was pressed. The focus goes back there when the menu closes; when
+ * nothing had it, it goes nowhere, so that the next key is still a shortcut.
+ */
+export type TStateMenuOfKey = { workItemId: string; place: "list" | "peek"; hadFocus: boolean };
+
 export interface IBasePowerKStore {
   // observables
   isPowerKModalOpen: boolean;
@@ -18,9 +25,11 @@ export interface IBasePowerKStore {
   activeContext: TPowerKContextType | null;
   activePage: TPowerKPageType | null;
   topNavInputRef: React.RefObject<HTMLInputElement | null> | null;
+  stateMenuOfKey: TStateMenuOfKey | undefined;
   setActiveContext: (entity: TPowerKContextType | null) => void;
   setActivePage: (page: TPowerKPageType | null) => void;
   setTopNavInputRef: (ref: React.RefObject<HTMLInputElement | null> | null) => void;
+  setStateMenuOfKey: (menu: TStateMenuOfKey | undefined) => void;
   // toggle actions
   togglePowerKModal: (value?: boolean) => void;
   toggleShortcutsListModal: (value?: boolean) => void;
@@ -34,6 +43,7 @@ export class BasePowerKStore implements IBasePowerKStore {
   activeContext: TPowerKContextType | null = null;
   activePage: TPowerKPageType | null = null;
   topNavInputRef: React.RefObject<HTMLInputElement | null> | null = null;
+  stateMenuOfKey: TStateMenuOfKey | undefined = undefined;
 
   constructor() {
     makeObservable(this, {
@@ -44,12 +54,14 @@ export class BasePowerKStore implements IBasePowerKStore {
       activeContext: observable,
       activePage: observable,
       topNavInputRef: observable.ref,
+      stateMenuOfKey: observable.ref,
       // toggle actions
       togglePowerKModal: action,
       toggleShortcutsListModal: action,
       setActiveContext: action,
       setActivePage: action,
       setTopNavInputRef: action,
+      setStateMenuOfKey: action,
     });
   }
 
@@ -75,6 +87,14 @@ export class BasePowerKStore implements IBasePowerKStore {
    */
   setTopNavInputRef = (ref: React.RefObject<HTMLInputElement | null> | null) => {
     this.topNavInputRef = ref;
+  };
+
+  /**
+   * Sets the state menu that the key S holds open
+   * @param menu
+   */
+  setStateMenuOfKey = (menu: TStateMenuOfKey | undefined) => {
+    this.stateMenuOfKey = menu;
   };
 
   /**

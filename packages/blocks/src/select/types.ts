@@ -5,7 +5,7 @@
  */
 
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
-import type { ComboboxContentSizing } from "@makeplane/propel/components/combobox";
+import type { ComboboxContentProps, ComboboxContentSizing } from "@makeplane/propel/components/combobox";
 import type { ComboboxSize } from "@makeplane/propel/elements/combobox";
 import type { PillButtonSize } from "../pill-button/helper";
 import type { IconElement } from "../types/icon";
@@ -230,6 +230,15 @@ type SelectBaseProps<T> = {
    * two-sided signal a controlled caller needs.
    */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Where the focus goes when the dropdown closes — base-ui's `finalFocus`. Base UI gives it back to what had it,
+   * and to the trigger when nothing had it. For a caller that opened the dropdown itself that second half is
+   * wrong: pass `false` then, and the focus stays with nothing.
+   *
+   * Taken as it is passed when the dropdown opens: base-ui asks for it once the popup has gone, and a caller that
+   * drives `open` has usually stopped passing its props by then.
+   */
+  finalFocus?: ComboboxContentProps["finalFocus"];
   /**
    * `z-index` for the popup's positioner. Propel's positioner is fixed at `z-50` and
    * `ComboboxContent` exposes neither a z axis nor its portal container, so a Select opened from

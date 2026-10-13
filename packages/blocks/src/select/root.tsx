@@ -99,6 +99,7 @@ export function SelectRoot<T>(props: SelectProps<T>) {
     defaultOpen = false,
     open: controlledOpen,
     onOpenChange,
+    finalFocus,
     positionerZIndex,
     errorMessage,
     searchingMessage,
@@ -171,6 +172,8 @@ export function SelectRoot<T>(props: SelectProps<T>) {
   // (rather than live `value`) keeps options from jumping to the top mid-interaction — they reorder
   // on the next open instead, matching the rest of the dropdowns.
   const [pinnedSelected, setPinnedSelected] = useState<T[]>([]);
+  // `finalFocus` as it was passed when the dropdown opened — see the prop.
+  const [finalFocusAtOpen, setFinalFocusAtOpen] = useState<typeof finalFocus>();
 
   // Open state is uncontrolled by default; a caller that needs to open the picker itself passes
   // `open` (and `onOpenChange` to hear about the user's own opens and closes).
@@ -280,6 +283,7 @@ export function SelectRoot<T>(props: SelectProps<T>) {
       if (open) {
         setIsEngineMounted(true);
         setPinnedSelected(selected);
+        setFinalFocusAtOpen(() => finalFocus);
         if (isInfinite) onInfiniteOpen();
       } else {
         if (isInfinite) onInfiniteClose();
@@ -287,7 +291,7 @@ export function SelectRoot<T>(props: SelectProps<T>) {
         onClose?.();
       }
     },
-    [isInfinite, onInfiniteOpen, onInfiniteClose, onClose, selected]
+    [isInfinite, onInfiniteOpen, onInfiniteClose, onClose, selected, finalFocus]
   );
 
   const handleOpenChange = useCallback(
@@ -487,6 +491,7 @@ export function SelectRoot<T>(props: SelectProps<T>) {
         side={dropdownPlacement?.side}
         align={dropdownPlacement?.align}
         data-prevent-outside-click
+        finalFocus={finalFocusAtOpen}
         search={searchSlot}
         footer={footer}
       >

@@ -161,8 +161,6 @@ export class ShortcutHandler {
   private togglePalette: () => void;
   private layoutMap: TKeyboardLayoutMap | null = null;
   private isEnabled = true;
-  // Whether the key that started the pending sequence has also run its own shortcut (see handleKeyOrSequence)
-  private hasSequenceStartRun = false;
 
   constructor(
     registry: IPowerKCommandRegistry,
@@ -231,13 +229,6 @@ export class ShortcutHandler {
       return;
     }
 
-    // What the first key of the sequence opened (S: the chooser of states) has the focus by now, and the second
-    // key is still the sequence's
-    if (this.hasSequenceStartRun && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-      this.handleKeyOrSequence(e);
-      return;
-    }
-
     // Keys typed into inputs and widgets never trigger shortcuts, nor continue a sequence
     if (isTypingInInput(e.target)) {
       this.resetSequence();
@@ -291,7 +282,6 @@ export class ShortcutHandler {
     const sequenceCommand = sequenceCommandId ? this.registry.getCommand(sequenceCommandId) : undefined;
     if (sequenceCommand && this.canExecuteCommand(sequenceCommand)) {
       e.preventDefault();
-      if (this.hasSequenceStartRun) ctx.closePalette();
       this.executeCommand(sequenceCommand);
       this.resetSequence();
       return;
@@ -299,16 +289,17 @@ export class ShortcutHandler {
 
     // The buffer can still become a sequence - wait for the next key
     if (hasSequencePrefix(sequenceMap, this.sequence)) {
-      this.scheduleSequenceReset();
-      // A key that is a shortcut by itself as well (S opens the chooser of states, S D sets a state) does not
-      // make the person wait to see which was meant: its own shortcut runs at once, and a second key that
-      // completes the sequence closes what the first one opened.
+      // A key that is a shortcut by itself as well (S opens the menu of states, S D sets a state) does not make
+      // the person wait to see which was meant: its own shortcut runs at once, and the key after it is for what
+      // that shortcut opened.
       const shortcutCommand = this.sequence.length === 1 ? this.registry.findByShortcut(ctx, key) : undefined;
       if (shortcutCommand && this.canExecuteCommand(shortcutCommand)) {
         e.preventDefault();
+        this.resetSequence();
         this.executeCommand(shortcutCommand);
-        this.hasSequenceStartRun = true;
+        return;
       }
+      this.scheduleSequenceReset();
       return;
     }
 
@@ -351,7 +342,6 @@ export class ShortcutHandler {
    */
   private resetSequence(): void {
     this.sequence = "";
-    this.hasSequenceStartRun = false;
     if (this.sequenceTimeout) {
       window.clearTimeout(this.sequenceTimeout);
       this.sequenceTimeout = null;

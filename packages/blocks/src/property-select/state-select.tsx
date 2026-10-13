@@ -52,6 +52,10 @@ export type StateSelectProps = {
   testId?: string;
   /** Tab order of the trigger, for forms that sequence focus explicitly (e.g. the work item create modal). */
   tabIndex?: number;
+  /** For a caller that opens the dropdown itself — see `SelectProps` for the three. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  finalFocus?: boolean;
 };
 
 /**
@@ -76,6 +80,9 @@ export function StateSelect(props: StateSelectProps) {
     icon: StateIcon = StateGroupIcon,
     testId,
     tabIndex,
+    open,
+    onOpenChange,
+    finalFocus,
   } = props;
 
   const { variant } = props;
@@ -91,6 +98,9 @@ export function StateSelect(props: StateSelectProps) {
       placeholder={placeholder}
       searchPlaceholder={searchPlaceholder}
       onClose={onClose}
+      open={open}
+      onOpenChange={onOpenChange}
+      finalFocus={finalFocus}
       pinSelected={false}
       getOptionValue={(state) => state.id}
       getOptionLabel={(state) => state.name}

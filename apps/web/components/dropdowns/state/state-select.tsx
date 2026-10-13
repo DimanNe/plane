@@ -37,6 +37,10 @@ type StateSelectWebProps = {
   testId?: string;
   /** Tab order of the trigger, for forms that sequence focus explicitly (`ETabIndices`). */
   tabIndex?: number;
+  /** For the menu that a key opens — see `useStateMenuOfKey`. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  finalFocus?: boolean;
 };
 
 const toOption = (state: IState): StateOption => ({
@@ -70,6 +74,9 @@ export const StateSelect = observer(function StateSelect(props: StateSelectWebPr
     appendElement,
     testId,
     tabIndex,
+    open,
+    onOpenChange,
+    finalFocus,
   } = props;
   // router params
   const { workspaceSlug } = useParams();
@@ -124,6 +131,9 @@ export const StateSelect = observer(function StateSelect(props: StateSelectWebPr
       icon={StateCircle}
       testId={testId}
       tabIndex={tabIndex}
+      open={open}
+      onOpenChange={onOpenChange}
+      finalFocus={finalFocus}
     />
   );
 });

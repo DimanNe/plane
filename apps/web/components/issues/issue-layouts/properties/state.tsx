@@ -11,11 +11,13 @@ import type { TIssue } from "@plane/types";
 // components
 import { StateSelect } from "@/components/dropdowns/state/state-select";
 import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
+import type { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
 
 type TIssuePropertyState = {
   issue: TIssue;
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
   isReadOnly: boolean;
+  stateMenuOfKey: ReturnType<typeof useStateMenuOfKey>;
 };
 
 const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
@@ -28,7 +30,7 @@ const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
  * row itself is a link, so the click must not reach it.
  */
 export const IssuePropertyState = observer(function IssuePropertyState(props: TIssuePropertyState) {
-  const { issue, updateIssue, isReadOnly } = props;
+  const { issue, updateIssue, isReadOnly, stateMenuOfKey } = props;
 
   return (
     // oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions
@@ -46,6 +48,7 @@ export const IssuePropertyState = observer(function IssuePropertyState(props: TI
         variant="icon-sm"
         className="focus-visible:ring-inset"
         tooltip
+        {...stateMenuOfKey}
       />
     </div>
   );

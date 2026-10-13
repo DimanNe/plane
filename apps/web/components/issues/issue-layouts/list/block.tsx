@@ -26,6 +26,7 @@ import { IssueProperties } from "@/components/issues/issue-layouts/properties";
 import { IssuePropertyPriority } from "@/components/issues/issue-layouts/properties/priority";
 import { IssuePropertyState } from "@/components/issues/issue-layouts/properties/state";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -111,6 +112,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
   const isTitleEdited = getIsRowTitleEdited(issueId, groupId);
+  const stateMenuOfKey = useStateMenuOfKey("list", getIsRowSelected(issueId, groupId) ? issueId : undefined);
 
   useEffect(() => {
     const element = issueRef.current;
@@ -277,7 +279,12 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
             </div>
 
             <div className="flex flex-shrink-0 items-center gap-0.5" style={{ zoom }}>
-              <IssuePropertyState issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
+              <IssuePropertyState
+                issue={issue}
+                updateIssue={updateIssue}
+                isReadOnly={!canEditIssueProperties}
+                stateMenuOfKey={stateMenuOfKey}
+              />
               {displayProperties?.priority && (
                 <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
               )}
