@@ -52,6 +52,8 @@ data. Therefore:
   headless browser draws differently: a transition that ended there never ended in his window.
 - Typing in the list, opening a pop-up and dragging on the timeline were made fast by measuring.
   A change near them is measured again, before and after.
+- A step that depends on time can fail only because another session has the processors. Run it
+  again before concluding anything, and write the machine's load beside a time you measure.
 
 ## Tasks
 
@@ -78,3 +80,20 @@ them, shows one, and sets states and comments, for a session without the tracker
 - The fork's own Python is written like `scripts/plane_runtime.py`; upstream's files keep
   upstream's style. Texts of the interface go through i18n.
 - A failure says what failed and why. No retry machinery.
+- Nothing that the task does not ask for: no option, setting or convenience, and no guard for a
+  state that nothing can produce.
+- The web app follows upstream: data in MobX stores read through hooks, the primitives of
+  `@plane/propel`, `@plane/ui` and `@plane/blocks`, the licence header on a new file. A new text
+  gets its key in the English locale only.
+- A comment says what the code cannot: why a thing exists. It does not retell the code and holds
+  no value that the next change makes false.
+- A unit test is a table of named cases that compares whole results, is named for the rule it
+  checks, and can fail.
+- Plain English and the words Plane already uses, in code, texts and commit messages. Never
+  "pin", "gate", "lag", "load-bearing", "rides"; "row" only for a row of the list, of a table or
+  of the database.
+- The names and texts of the tasks in the owner's tracker stay in the tracker. Tests, comments
+  and commit messages use invented names.
+- No View Transition of the browser (`document.startViewTransition`). The owner's Chrome runs
+  with `--disable-frame-rate-limit`, where such a transition never ends; CSS transitions and
+  Web Animations do.
