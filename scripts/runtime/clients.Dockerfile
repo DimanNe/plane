@@ -1,15 +1,19 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.20
 FROM node:22.22.0-bookworm-slim AS build
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1 TURBO_TELEMETRY_DISABLED=1
 RUN npm install -g pnpm@11.10.0
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .gitignore ./
+# The dependencies are installed from the manifests alone, before any source is copied. node_modules is most of
+# these images, and the live and space images are this whole stage: installed after the sources, it was a new
+# layer at every change of a source file, and saving the image wrote and unpacked all of it again.
+COPY --parents packages/*/package.json apps/web/package.json apps/admin/package.json apps/space/package.json apps/live/package.json ./
+RUN --mount=type=cache,id=plane-runtime-pnpm,target=/pnpm/store pnpm install --frozen-lockfile --store-dir=/pnpm/store
 COPY packages ./packages
 COPY apps/web ./apps/web
 COPY apps/admin ./apps/admin
 COPY apps/space ./apps/space
 COPY apps/live ./apps/live
-RUN --mount=type=cache,id=plane-runtime-pnpm,target=/pnpm/store pnpm install --frozen-lockfile --store-dir=/pnpm/store
 ENV VITE_API_BASE_URL="" VITE_ADMIN_BASE_URL="" VITE_ADMIN_BASE_PATH=/god-mode VITE_SPACE_BASE_URL="" VITE_SPACE_BASE_PATH=/spaces VITE_LIVE_BASE_URL="" VITE_LIVE_BASE_PATH=/live VITE_WEB_BASE_URL=""
 RUN pnpm turbo run build --filter=web --filter=admin --filter=space --filter=live
 # As built, the live server and Spaces load a few thousand module files from node_modules at every
