@@ -1,8 +1,8 @@
 /*
- * The box that goes from the create dialog's place to the line of the work item the dialog has stored; see
- * components/issues/issue-layouts/list/new-work-item-arrival.ts. It lies where the line is and is moved and
- * scaled from the dialog's rectangle; its content is scaled the other way and so keeps its size. What reaches
- * out of the box is cut off.
+ * The box that goes to the line of a work item, from the place of the create dialog that has stored it or from
+ * the line's old place in another group; see components/issues/issue-layouts/list/new-work-item-arrival.ts. It
+ * lies where the line is and is moved and scaled from the rectangle it sets off from; its content is scaled the
+ * other way and so keeps its size. What reaches out of the box is cut off.
  */
 .new-work-item-morph {
   position: fixed;
@@ -10,6 +10,14 @@
   overflow: clip;
   transform-origin: 0 0;
   pointer-events: none;
+}
+
+/*
+ * A box that goes from one place of the list to another stays in the list: under the headers of the groups,
+ * which the lines also scroll under, and under the work item view that lies over the list.
+ */
+.new-work-item-morph-in-list {
+  z-index: 1;
 }
 
 .new-work-item-morph-surface {

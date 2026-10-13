@@ -44,7 +44,7 @@ import { IssueBlocksList } from "./blocks-list";
 import { ListDropLine } from "./drop-line";
 import { HeaderGroupByCard } from "./headers/group-by-card";
 import { ListGroupQuickAddButton } from "./headers/quick-add-button";
-import { highlightNewWorkItem } from "./new-work-item-arrival";
+import { getListGroupHeaderId, highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
 import { getListDropLocation, getListDropMark } from "./utils";
 
@@ -294,6 +294,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
       {/* The header and the input under it stay at the top of the list together while their group scrolls. */}
       <div className={cn("w-full flex-shrink-0", { "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0 })}>
         <Row
+          id={getListGroupHeaderId(group.id)}
           className={cn("border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
             "bg-accent-subtle outline-2 -outline-offset-2 outline-accent-strong hover:bg-accent-subtle": !!dropPlace,
           })}
