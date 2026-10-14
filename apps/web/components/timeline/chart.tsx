@@ -35,7 +35,9 @@ import { useListView } from "@/hooks/store/use-list-view";
 import { useUserProfile } from "@/hooks/store/user";
 import { useCurrentTime } from "@/hooks/use-current-time";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-redirection";
+import { useIssuesActions } from "@/hooks/use-issues-actions";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import useSize from "@/hooks/use-window-size";
 // local imports
@@ -166,6 +168,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
   } = useIssueDetail();
   const listView = useListView();
   const { setSelectedRow } = listView;
+  const { updateIssue } = useIssuesActions(useIssueStoreType());
   // hooks
   const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
@@ -523,6 +526,7 @@ export const TimelineChart = observer(function TimelineChart(props: Props) {
                     onHandlePress={handleHandlePress}
                     onEntryPress={handleEntryPress}
                     onClick={handleTaskClick}
+                    updateIssue={updateIssue}
                   />
                 ))}
               </TimelineDaysContext.Provider>

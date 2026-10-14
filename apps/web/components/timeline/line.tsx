@@ -17,7 +17,11 @@ import { cn, generateWorkItemLink } from "@plane/utils";
 // components
 import { BLOCK_HEIGHT, SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { TITLE_TEXT_SIZES } from "@/components/issues/issue-layouts/list/block-title";
+import { IssuePropertyPriority } from "@/components/issues/issue-layouts/properties/priority";
+import { IssuePropertyState } from "@/components/issues/issue-layouts/properties/state";
 import { getBlockViewDetails } from "@/components/issues/issue-layouts/utils";
+import { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
@@ -45,7 +49,14 @@ type Props = {
   onHandlePress: (press: React.PointerEvent, taskId: string, edge: TTaskEdge) => void;
   onEntryPress: (press: React.PointerEvent, taskId: string) => void;
   onClick: (click: React.MouseEvent, taskId: string) => void;
+  // stores the state or the priority that is chosen on the line
+  updateIssue: ComponentProps<typeof IssuePropertyState>["updateIssue"];
 };
+
+const NAME_TEXT_SIZE = "text-13";
+// The state and the priority of a line are those of the List layout, which are drawn for the title of its top-level
+// lines. Here they are as large beside the name as they are there beside that title.
+const STATE_AND_PRIORITY_ZOOM = `calc(var(--${NAME_TEXT_SIZE}) / var(--${TITLE_TEXT_SIZES[0]}))`;
 
 /**
  * The first and the last day of every task that has a bar; a task that is not on the timeline has none. The bar
@@ -76,7 +87,7 @@ function LineName(props: { taskId: string; name: string }) {
   const isPlaced = !!useContext(TimelineDaysContext)[props.taskId];
 
   return (
-    <span className={cn("grow truncate text-13 font-medium", isPlaced ? "text-primary" : "text-tertiary")}>
+    <span className={cn("grow truncate font-medium", NAME_TEXT_SIZE, isPlaced ? "text-primary" : "text-tertiary")}>
       {props.name}
     </span>
   );
@@ -90,7 +101,8 @@ function LineBar(props: Omit<ComponentProps<typeof TimelineBar>, "start" | "end"
 
 /** The line of a task: its entry in the list at the left, and its bar on the timeline when it has dates. */
 export const TimelineLine = observer(function TimelineLine(props: Props) {
-  const { taskId, lineIndex, moveOffset, onBarPress, onBarHover, onEntryPress, onClick, ...barProps } = props;
+  const { taskId, lineIndex, moveOffset, onBarPress, onBarHover, onEntryPress, onClick, updateIssue, ...barProps } =
+    props;
   // router
   const { workspaceSlug } = useParams();
   // store hooks
@@ -105,6 +117,7 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
   // derived values
   const issue = getIssueById(taskId);
   const isSelected = getIsRowSelected(taskId, ALL_ISSUES);
+  const stateMenuOfKey = useStateMenuOfKey("list", isSelected ? taskId : undefined);
   const cellClassName = cn("group-hover/line:bg-layer-transparent-hover", {
     "bg-layer-transparent-selected group-hover/line:bg-layer-transparent-selected": isSelected,
   });
@@ -151,6 +164,20 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
           variant="tertiary"
           displayProperties={issuesFilter?.issueFilters?.displayProperties}
         />
+        {/* a press on the state or the priority does not carry the line onto the timeline */}
+        <span
+          className="flex shrink-0 items-center gap-0.5"
+          style={{ zoom: STATE_AND_PRIORITY_ZOOM }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <IssuePropertyState
+            issue={issue}
+            updateIssue={updateIssue}
+            isReadOnly={!props.isEditable}
+            stateMenuOfKey={stateMenuOfKey}
+          />
+          <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!props.isEditable} />
+        </span>
         <LineName taskId={taskId} name={issue.name} />
         <LineDuration taskId={taskId} />
       </ControlLink>

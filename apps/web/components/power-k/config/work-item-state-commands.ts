@@ -12,7 +12,6 @@ import { setToast } from "@plane/blocks/toast";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IState, TIssue } from "@plane/types";
-import { EIssueLayoutTypes } from "@plane/types";
 import { getWorkItemPropertyErrorMessage } from "@plane/utils";
 // components
 import { resolveShortcutKey } from "@/components/power-k/core/shortcut-handler";
@@ -26,7 +25,7 @@ import { useListView } from "@/hooks/store/use-list-view";
 import { usePowerK } from "@/hooks/store/use-power-k";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useIssuesStore, useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // store
 import type { TStateMenuOfKey } from "@/store/base-power-k.store";
@@ -46,7 +45,6 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
   const powerK = usePowerK();
   const { getProjectStates } = useProjectState();
   const { allowPermissions } = useUserPermissions();
-  const { issuesFilter } = useIssuesStore();
   const { updateIssue } = useIssuesActions(useIssueStoreType());
   const getWorkItemId = useShortcutWorkItemId();
   // translation
@@ -100,13 +98,15 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
 
   /**
    * In the peek view its state menu, on the work item page the palette's page of states, which S has always
-   * opened there, and at the selected line of the List layout the state menu of that line. A line of the
-   * timeline has no state menu.
+   * opened there, and at the selected line of the List layout or of the timeline the state menu of that line.
+   * Both draw their lines near the visible part only. A line that is not drawn has no menu: one asked of it would
+   * open whenever the line is drawn again.
    */
   const getStateMenuPlace = (ctx: TPowerKContext): TStateMenuPlace | undefined => {
     if (issueDetail.peekIssue) return "peek";
     if (ctx.params.workItem) return "palette";
-    return issuesFilter?.issueFilters?.displayFilters?.layout === EIssueLayoutTypes.LIST ? "list" : undefined;
+    const { selectedRow } = listView;
+    return selectedRow && document.getElementById(`issue-${selectedRow.issueId}`) ? "list" : undefined;
   };
 
   /**
