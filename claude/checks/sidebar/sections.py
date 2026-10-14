@@ -181,6 +181,11 @@ def run(check: steps.Check) -> None:
         ["Projects", "Workspace", NO_HEADING],
     )
     carry_section(page, "Favorites", over="Projects", down=0.02)
+    check.expect(
+        "the section of favourites carried over the top of Projects: a line marks that place",
+        lambda: read_landing_lines(page),
+        [["Projects", "upper"]],
+    )
     page.mouse.up()
     check.expect(
         "that section is dragged as the others, and the server keeps its place too",
@@ -196,6 +201,8 @@ def run(check: steps.Check) -> None:
 
     other: ins.Project = check.project({account: ins.ROLE_ADMIN})
     page.reload()
+    # the sidebar draws its projects again when the page has loaded, and a project taken before then is let go
+    page.locator(ll.LINE).first.wait_for()
     projects: pw.Locator = section(page, "Projects")
 
     def read_projects() -> t.List[str]:
@@ -229,6 +236,14 @@ def run(check: steps.Check) -> None:
     )
     browser.press_and_carry(page, grip)
     browser.carry_to(page, browser.get_point(upper, across=0.3, down=0.1))
+    # the page may take its time to see the drag under a heavy load; a project let go before then stays
+    check.expect(
+        "a project carried over the top of another: a line marks that place",
+        lambda: projects.locator(
+            '[class~="h-[2px]"][class~="bg-accent-primary"]'
+        ).count(),
+        1,
+    )
     page.mouse.up()
     check.expect(
         "a project dragged above another stands there, and the sections did not move",

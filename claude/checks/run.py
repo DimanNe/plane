@@ -145,10 +145,23 @@ def run_check(name: str, instance: ins.Instance, is_real_window: bool) -> Outcom
     os.environ["TMPDIR"] = str(directory)
     playwright: pw.Playwright
     opened: pw.Browser
-    with pw.sync_playwright() as playwright:
-        with browser.open_browser(playwright, is_real_window, directory) as opened:
-            check: steps.Check = steps.Check(name, instance, opened, directory)
-            run_steps_of_check(check, module)
+    check: t.Optional[steps.Check] = None
+    try:
+        with pw.sync_playwright() as playwright:
+            with browser.open_browser(playwright, is_real_window, directory) as opened:
+                check = steps.Check(name, instance, opened, directory)
+                run_steps_of_check(check, module)
+    except Exception as error:
+        # a busy machine can keep the check's browser from starting or from stopping: this check fails, and the run
+        # goes on with the others
+        failed: steps.Step = steps.Step(
+            "the check's browser starts and stops", describe_error(error)
+        )
+        done: t.List[steps.Step] = check.steps if check else []
+        return Outcome(
+            name, instance.run_dir, done + [failed], time.monotonic() - start, []
+        )
+    assert check is not None
     left: t.List[str] = []
     if all(step.failure is None for step in check.steps):
         project: ins.Project

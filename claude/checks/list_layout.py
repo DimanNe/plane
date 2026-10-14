@@ -19,6 +19,11 @@ PANEL_TITLE: str = '#full-screen-portal textarea[placeholder="Work item title"]'
 MESSAGE: str = '[aria-label="Notifications"] > *'
 CREATE_DIALOG: str = '[role="dialog"]:has(button:has-text("Discard"))'
 QUESTION: str = '[role="dialog"]:has-text("Are you sure"), [role="alertdialog"]:has-text("Are you sure")'
+# An open menu of a property of a work item (state, priority, ...), and not the picture of it that a state's letter
+# leaves.
+PROPERTY_MENU: str = (
+    "[data-select-popup]:not(.menu-choice-picture, .menu-choice-picture *)"
+)
 # pixels a level of sub-work items is indented by
 INDENT: int = 24
 

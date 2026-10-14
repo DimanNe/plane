@@ -402,3 +402,11 @@ def read_work_items(instance: Instance, project: Project) -> t.Dict[str, JSONObj
         if not page["next_page_results"]:
             return found
         cursor = f"&cursor={page['next_cursor']}"
+
+
+def read_state_name(instance: Instance, project: Project, name: str) -> str:
+    """The name of the state the server has stored for the work item called `name`."""
+    states: t.Dict[str, str] = {
+        state_id: state for state, state_id in project.states.items()
+    }
+    return states[read_work_items(instance, project)[name]["state"]]

@@ -19,13 +19,6 @@ STATE_AT_LINE: str = 'button[aria-label^="State, "]'
 STATE_IN_VIEW_BESIDE: str = '#full-screen-portal button[aria-label^="State, "]'
 
 
-def read_state(check: steps.Check, project: ins.Project, name: str) -> str:
-    states: t.Dict[str, str] = {
-        state_id: state for state, state_id in project.states.items()
-    }
-    return states[ins.read_work_items(check.instance, project)[name]["state"]]
-
-
 def get_rect(locator: pw.Locator) -> t.List[float]:
     box: t.Optional[pw.FloatRect] = locator.bounding_box()
     assert box is not None
@@ -113,7 +106,10 @@ def run(check: steps.Check) -> None:
     )
     check.expect(
         f"{way}: the state is stored, and the selection is on the line that took the place",
-        lambda: (read_state(check, project, "backlog 1"), ll.read_selected(page)),
+        lambda: (
+            ins.read_state_name(check.instance, project, "backlog 1"),
+            ll.read_selected(page),
+        ),
         ("Todo", ["backlog 2"]),
     )
 
@@ -145,7 +141,10 @@ def run(check: steps.Check) -> None:
     )
     check.expect(
         f"{way}: the state is stored, and the selection stays where it was",
-        lambda: (read_state(check, project, "todo 0"), ll.read_selected(page)),
+        lambda: (
+            ins.read_state_name(check.instance, project, "todo 0"),
+            ll.read_selected(page),
+        ),
         ("Done", ["backlog 2"]),
     )
 
@@ -181,7 +180,7 @@ def run(check: steps.Check) -> None:
     check.expect(
         f"{way}: the state is stored, and the folded group counts the work item",
         lambda: (
-            read_state(check, project, "todo 1"),
+            ins.read_state_name(check.instance, project, "todo 1"),
             [group for group in ll.read_groups(page) if group[0] == "In Progress"],
         ),
         ("In Progress", [["In Progress", 31, 0, True]]),
@@ -195,7 +194,7 @@ def run(check: steps.Check) -> None:
     check.expect(
         "a line dragged to another group is stored there and shown there",
         lambda: (
-            read_state(check, project, "backlog 3"),
+            ins.read_state_name(check.instance, project, "backlog 3"),
             ["Todo", 0, "backlog 3"] in ll.read_lines(page),
         ),
         ("Todo", True),

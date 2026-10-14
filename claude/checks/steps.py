@@ -23,6 +23,22 @@ READ_AGAIN_AFTER: float = 0.05
 
 
 @dc.dataclass(frozen=True)
+class Unreadable:
+    """What a step got when its read failed: the first line of the error."""
+
+    error: str
+
+
+def read_or_say_why(read: t.Callable[[], t.Any]) -> t.Any:
+    try:
+        return read()
+    except Exception as error:
+        return Unreadable(
+            f"{type(error).__name__}: {str(error).splitlines()[0] if str(error) else ''}"
+        )
+
+
+@dc.dataclass(frozen=True)
 class Step:
     rule: str
     failure: t.Optional[str]
@@ -65,12 +81,13 @@ class Check:
         expected: t.Any,
         timeout: float = STEP_TIMEOUT,
     ) -> None:
-        """The rule holds when what `read` gives is what is expected, now or after the page has caught up."""
+        """The rule holds when what `read` gives is what is expected, now or after the page has caught up. A read
+        that cannot be made yet, of something the page has not drawn yet, is read again as well."""
         deadline: float = time.monotonic() + timeout
-        got: t.Any = read()
+        got: t.Any = read_or_say_why(read)
         while got != expected and time.monotonic() < deadline:
             time.sleep(READ_AGAIN_AFTER)
-            got = read()
+            got = read_or_say_why(read)
         if got == expected:
             self.steps.append(Step(rule, None))
         else:

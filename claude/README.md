@@ -53,7 +53,7 @@ data. Therefore:
   owner's Chrome, which `tools/offscreen_chrome.sh PORT PROFILE_DIR FLAGS...` runs unseen. A
   headless browser draws differently: a transition that ended there never ended in his window.
 - Typing in the list, opening a pop-up and dragging on the timeline were made fast by measuring.
-  A change near them is measured again, before and after.
+  A change near them is measured again, before and after, with `claude/checks/measure.py --run-dir RUN_DIR`.
 - A step that depends on time can fail only because another session has the processors. Run it
   again before concluding anything, and write the machine's load beside a time you measure.
 

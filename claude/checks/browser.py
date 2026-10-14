@@ -55,6 +55,10 @@ def open_real_window(
 ) -> t.Iterator[pw.Browser]:
     port: int = find_free_port()
     profile: pl.Path = directory / "chrome-profile"
+    # Chrome makes a socket in TMPDIR, and the path of a socket may be no longer than about a hundred characters,
+    # which the check's own directory can come near; so the window has a short one beside it
+    temporary: pl.Path = directory.parent / f"w{port}"
+    temporary.mkdir(exist_ok=True)
     log: t.BinaryIO
     with open(directory / "chrome.log", "wb") as log:
         # in a session of its own, so that the script, the compositor and Chrome are stopped together
@@ -68,14 +72,18 @@ def open_real_window(
             stdout=log,
             stderr=log,
             start_new_session=True,
+            env={**os.environ, "TMPDIR": str(temporary)},
         )
         try:
             wait_for_debugging_port(port, window)
             yield playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
         finally:
-            os.killpg(window.pid, signal.SIGTERM)
+            # a window that could not start under a heavy load has ended already, with its session
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(window.pid, signal.SIGTERM)
             window.wait()
             shutil.rmtree(profile, ignore_errors=True)
+            shutil.rmtree(temporary, ignore_errors=True)
 
 
 @contextlib.contextmanager
@@ -161,3 +169,25 @@ def carry_to(page: pw.Page, point: Point) -> None:
     page.mouse.move(point[0] - 2, point[1], steps=8)
     page.mouse.move(*point, steps=2)
     let_page_draw(page)
+
+
+def record_writes(page: pw.Page) -> t.List[str]:
+    """From now on, every request of the page that changes something on the server: method and path. Read it with
+    `read_writes`."""
+    writes: t.List[str] = []
+    page.on(
+        "request",
+        lambda request: writes.append(
+            f"{request.method} {request.url.split('/api/', 1)[-1]}"
+        )
+        if request.method not in ("GET", "HEAD", "OPTIONS") and "/api/" in request.url
+        else None,
+    )
+    return writes
+
+
+def read_writes(page: pw.Page, writes: t.List[str]) -> t.List[str]:
+    """The requests written down so far. Playwright tells of a request only while it is called, so the page is
+    asked something first."""
+    page.evaluate("() => 0")
+    return list(writes)
