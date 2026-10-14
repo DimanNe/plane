@@ -163,10 +163,13 @@ def close_message(page: pw.Page) -> None:
 
 def open_create_dialog(page: pw.Page, keys: str = "ni") -> pw.Locator:
     """N then I, or N then C for a sub-work item of the selected line; the dialog with the caret in its title."""
+    dialog: pw.Locator = page.locator(CREATE_DIALOG)
+    # The page loses keys pressed while such a dialog is still there, also one that was just saved and is about
+    # to close, which takes until the server has answered: a fault of the page that a person who types fast meets.
+    dialog.wait_for(state="detached")
     key: str
     for key in keys:
         page.keyboard.press(key)
-    dialog: pw.Locator = page.locator(CREATE_DIALOG)
     dialog.wait_for()
     page.wait_for_function("() => document.activeElement?.name === 'name'")
     return dialog

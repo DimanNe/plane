@@ -25,8 +25,9 @@ def run(check: steps.Check) -> None:
     ll.select_line(page, "backlog 01")
     ll.create_work_item(page, "made")
     check.expect(
-        "a new work item: its line is selected, tinted and in view",
+        "a new work item: the dialog is closed, and its line is selected, tinted and in view",
         lambda: (
+            page.locator(ll.CREATE_DIALOG).count(),
             ll.read_selected(page),
             ll.read_tinted(page),
             page.evaluate(
@@ -38,7 +39,7 @@ def run(check: steps.Check) -> None:
                 ll.line(page, "made").element_handle(),
             ),
         ),
-        (["made"], ["made"], True),
+        (0, ["made"], ["made"], True),
     )
     check.expect(
         "and no box was put on the page for it",

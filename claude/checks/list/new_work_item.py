@@ -101,12 +101,14 @@ def run(check: steps.Check) -> None:
     page.keyboard.type("child by the line's button")
     page.keyboard.press("Control+Enter")
     check.expect(
-        '"Add child" of a line that is not the selected one: a sub-work item of that line, and the selection stays',
+        '"Add child" of a line that is not the selected one: Ctrl+Enter makes a sub-work item of that line and '
+        "closes the dialog, and the selection stays",
         lambda: (
             read_parent(check, project, "child by the line's button"),
+            dialog.count(),
             ll.read_selected(page),
         ),
-        ("three", ["one"]),
+        ("three", 0, ["one"]),
     )
 
     ll.open_create_dialog(page)

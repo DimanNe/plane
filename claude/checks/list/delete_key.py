@@ -39,10 +39,12 @@ def check_key_of_an_administrator(check: steps.Check, account: ins.Account) -> N
     )
     page.keyboard.press("Delete")
     question.get_by_role("button", name="Delete").click()
+    # the question stays until the server has answered, and a key pressed meanwhile is lost (a fault of the page)
     check.expect(
-        "confirmed, the work item is gone from the list and from the server",
-        lambda: (ll.read_titles(page), read_stored(check, project)),
+        "confirmed, the question closes and the work item is gone from the list and from the server",
+        lambda: (question.count(), ll.read_titles(page), read_stored(check, project)),
         (
+            0,
             ["first", "second", "fourth", "fifth", "sixth"],
             ["fifth", "first", "fourth", "second", "sixth"],
         ),
