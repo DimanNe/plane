@@ -43,6 +43,8 @@ data. Therefore:
 
   `VENV` is a Python environment with the packages of `apps/api`. `ruff check` and
   `ruff format --check` on the fork's own Python files; upstream's are not all formatted.
+- `claude/checks/run.py --run-dir RUN_DIR`, and once more with `--windows`: the rules that earlier
+  tasks settled still hold. See "Checks" below.
 - In a browser on your instance, with real clicks, drags, wheel and key presses (Playwright),
   reading back through `/api/v1/` what should have been stored. What is judged by eye is looked
   at in enlarged screenshots, in the light and the dark theme. When an animation looks wrong,
@@ -54,6 +56,22 @@ data. Therefore:
   A change near them is measured again, before and after.
 - A step that depends on time can fail only because another session has the processors. Run it
   again before concluding anything, and write the machine's load beside a time you measure.
+
+## Checks
+
+`claude/checks/` holds what earlier tasks settled about the web app, one file for each rule;
+`checks/run.py --list` prints them with their rules, and `--help` says how to run some of them.
+A run needs running instances and nothing else: it makes an account and a project for every
+check, spreads the checks over the run directories it is given, and removes what passed.
+
+A check says in its first lines the rule it guards. Then it reads from top to bottom: the data it
+builds through `/api/v1/`, what a person does, with real pointer and key events, and what must
+then be true on the page and on the server. A step waits for what the page shows and never by
+the clock, unless its rule is that nothing happens. A check that reads every frame is marked
+`ALONE` and runs after the others. What two checks need is in the modules beside `run.py`.
+
+**A task that changes behaviour changes its check in the same commit**, and a task that settles
+a new rule adds a check for it.
 
 ## Tasks
 
