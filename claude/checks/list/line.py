@@ -2,7 +2,7 @@
 What a line of the list shows beside its title, and what its parts do: the priority as an icon between the
 state and the title, every label as a pill of its own, the start of the description after the title, which
 Display can switch off. No tooltip says the title again. A line has no "..." button: a right click opens its
-menu, once.
+menu, once, whose "Copy link" gives the address of the work item's own page.
 """
 
 import typing as t
@@ -160,4 +160,15 @@ def run(check: steps.Check) -> None:
     )
     page.keyboard.press("Escape")
     check.expect("one Escape closes what is open", lambda: read_menus(page), 0)
+
+    page.context.grant_permissions(
+        ["clipboard-read", "clipboard-write"], origin=check.instance.url
+    )
+    full.locator("p").first.click(button="right")
+    page.get_by_role("menuitem", name="Copy link").click()
+    check.expect(
+        '"Copy link" in the menu of a line puts the address of the work item\'s own page in the clipboard',
+        lambda: page.evaluate("navigator.clipboard.readText()"),
+        f"{check.instance.url}/{check.instance.workspace}/browse/{project.identifier}-1/",
+    )
     page.context.close()

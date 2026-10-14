@@ -17,7 +17,7 @@ page draws and runs after the others, by itself.
 A check makes its own accounts and its own projects, in a workspace of the run, and removes the projects when
 it has passed. What a failed check left stays, with the way to sign in printed beside the failure, and so does
 what a killed run left; the next run on that instance removes both first. The accounts stay, each as a row
-of the server's users. One run at a time on an instance.
+of the server's users. An instance serves one run at a time: a second run ends at once and says so.
 """
 
 import abc
@@ -46,7 +46,9 @@ CHECKS: pl.Path = pl.Path(__file__).resolve().parent
 KNOWN_PAGE_ERRORS: t.Tuple[str, ...] = (
     # at a first load: the page React was given by the server differs from the one it draws
     "Minified React error #418",
-    # a page that is left while it waits for the server lets the unanswered request fall, without a text
+    # A layout that is left while its request for the work items is under way: the store cancels that request
+    # when the next layout asks (base-issues.store.ts, clear), the service throws on what the server answered,
+    # which is nothing (issue.service.ts), and the layout that had asked does not catch it. Upstream's.
     "undefined (at ",
 )
 
@@ -242,6 +244,9 @@ class RunChecks(Command):
             name for name in names if getattr(load_check(name), "ALONE", False)
         ]
         together: t.List[str] = [name for name in names if name not in alone]
+        locks: t.List[t.TextIO] = [
+            ins.lock_instance(run_dir) for run_dir in self.run_dirs
+        ]
         instances: t.List[ins.Instance] = [
             ins.open_instance(run_dir) for run_dir in self.run_dirs
         ]
@@ -264,6 +269,9 @@ class RunChecks(Command):
             f"{time.monotonic() - start:.0f} s; "
             f"failed: {', '.join(sorted(outcome.name for outcome in failed)) or 'none'}"
         )
+        lock: t.TextIO
+        for lock in locks:
+            lock.close()
         return 1 if failed else 0
 
 

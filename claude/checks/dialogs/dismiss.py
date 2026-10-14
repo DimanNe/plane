@@ -40,6 +40,20 @@ def run(check: steps.Check) -> None:
     page.keyboard.press("Escape")
     check.expect("and on Escape", lambda: search.count(), 0)
 
+    ll.select_line(page, "one")
+    page.keyboard.press("Alt+/")
+    check.expect(
+        "Alt+/, also with a line selected, opens the command search of the top bar with the caret in it",
+        lambda: (search.count() > 0, ll.read_focus(page)),
+        (True, "input Search commands..."),
+    )
+    page.keyboard.press("Escape")
+    check.expect(
+        "and Escape closes it, leaving the line selected",
+        lambda: (search.count(), ll.read_selected(page)),
+        (0, ["one"]),
+    )
+
     ll.open_create_dialog(page)
     page.keyboard.press("Escape")
     check.expect(

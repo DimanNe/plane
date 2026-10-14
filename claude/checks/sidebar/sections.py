@@ -1,7 +1,8 @@
 """
 The sections of the sidebar can be put in another order: by their heading, or by a handle for the section
 that has none. While a section is dragged a line shows where it will land. The order is kept for the user on
-the server: it is the same after a reload and in another session.
+the server: it is the same after a reload and in another session. The section of favourites, which is there
+only with a favourite, moves as the others; a project dragged among the projects moves no section.
 """
 
 import typing as t
@@ -38,9 +39,11 @@ def read_landing_lines(page: pw.Page) -> t.List[t.List[str]]:
     return page.evaluate(LANDING_LINES_JS, [SECTION, NO_HEADING])
 
 
-def read_stored_sections(check: steps.Check, account: ins.Account) -> t.List[str]:
-    """The sections in the order the server keeps for the account, but for the one of favourites, which the
-    sidebar shows only when there are some."""
+def read_stored_sections(
+    check: steps.Check, account: ins.Account, with_favorites: bool = False
+) -> t.List[str]:
+    """The sections in the order the server keeps for the account; the one of favourites, which the sidebar
+    shows only when there are some, is left out unless asked for."""
     stored: ins.JSONObject = ins.call_app(
         check.instance.url,
         account,
@@ -50,7 +53,7 @@ def read_stored_sections(check: steps.Check, account: ins.Account) -> t.List[str
     places: t.Dict[str, float] = {
         key.removeprefix("section_"): value["sort_order"]
         for key, value in stored.items()
-        if key.startswith("section_") and key != "section_favorites"
+        if key.startswith("section_") and (with_favorites or key != "section_favorites")
     }
     return sorted(places, key=lambda name: places[name])
 
@@ -157,5 +160,79 @@ def run(check: steps.Check) -> None:
         "a click on a heading folds its section and moves nothing",
         lambda: (heading.get_attribute("aria-expanded"), read_sections(page)),
         ("false", ["Projects", "Workspace", NO_HEADING]),
+    )
+
+    ins.call_app(
+        check.instance.url,
+        account,
+        "POST",
+        f"/workspaces/{check.instance.workspace}/user-favorites/",
+        {
+            "entity_type": "project",
+            "entity_identifier": project.id,
+            "project_id": project.id,
+            "entity_data": {"name": project.name},
+        },
+    )
+    page.reload()
+    check.expect(
+        "with a favourite the sidebar has a section for favourites; the others keep their order",
+        lambda: [name for name in read_sections(page) if name != "Favorites"],
+        ["Projects", "Workspace", NO_HEADING],
+    )
+    carry_section(page, "Favorites", over="Projects", down=0.02)
+    page.mouse.up()
+    check.expect(
+        "that section is dragged as the others, and the server keeps its place too",
+        lambda: (
+            read_sections(page),
+            read_stored_sections(check, account, with_favorites=True),
+        ),
+        (
+            ["Favorites", "Projects", "Workspace", NO_HEADING],
+            ["favorites", "projects", "workspace", "personal"],
+        ),
+    )
+
+    other: ins.Project = check.project({account: ins.ROLE_ADMIN})
+    page.reload()
+    projects: pw.Locator = section(page, "Projects")
+
+    def read_projects() -> t.List[str]:
+        return [
+            name
+            for name in projects.locator("p").all_inner_texts()
+            if name in (project.name, other.name)
+        ]
+
+    check.expect(
+        "the projects of the user stand in the Projects section",
+        lambda: sorted(read_projects()),
+        sorted([project.name, other.name]),
+    )
+    before: t.List[str] = read_projects()
+    lower: pw.Locator = projects.get_by_text(before[-1], exact=True)
+    upper: pw.Locator = projects.get_by_text(before[0], exact=True)
+    # a project is taken by the handle that shows at its left while the pointer is over it
+    lower.hover()
+    box: t.Optional[pw.FloatRect] = lower.locator(
+        "xpath=ancestor::button[1]"
+    ).bounding_box()
+    assert box is not None
+    grip: browser.Point = (box["x"] - 5, box["y"] + box["height"] / 2)
+    page.wait_for_function(
+        """([x, y]) => {
+          const handle = document.elementFromPoint(x, y)?.closest('[aria-label="Drag to rearrange"]');
+          return handle && getComputedStyle(handle).opacity === '1';
+        }""",
+        arg=grip,
+    )
+    browser.press_and_carry(page, grip)
+    browser.carry_to(page, browser.get_point(upper, across=0.3, down=0.1))
+    page.mouse.up()
+    check.expect(
+        "a project dragged above another stands there, and the sections did not move",
+        lambda: (read_projects(), read_sections(page)),
+        (before[::-1], ["Favorites", "Projects", "Workspace", NO_HEADING]),
     )
     page.context.close()

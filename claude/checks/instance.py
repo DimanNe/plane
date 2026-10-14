@@ -10,6 +10,7 @@ does (members, the display of a list) is done as the account it belongs to, with
 """
 
 import dataclasses as dc
+import fcntl
 import json
 import pathlib as pl
 import secrets
@@ -209,8 +210,8 @@ def make_administrator(run_dir: pl.Path) -> t.Tuple[Account, str]:
             str(run_dir),
             "--email",
             ADMINISTRATOR_EMAIL,
-            "--password",
-            password,
+            # joined, since a drawn password can begin with "-"
+            f"--password={password}",
         ],
         check=True,
         capture_output=True,
@@ -225,6 +226,21 @@ def remove_workspaces_of_earlier_runs(url: str, administrator: Account) -> None:
     for workspace in call_app(url, administrator, "GET", "/users/me/workspaces/"):
         if workspace["slug"].startswith(WORKSPACE_PREFIX):
             call_app(url, administrator, "DELETE", f"/workspaces/{workspace['slug']}/")
+
+
+def lock_instance(run_dir: pl.Path) -> t.TextIO:
+    """Takes the instance for one run of the checks, until the file returned is closed or the run ends. A second
+    run would remove the workspace of the first, and both would fail in ways that say nothing; so it ends here."""
+    held: pl.Path = plane_runtime.resolve_run_dir(run_dir) / "checks" / "run.lock"
+    held.parent.mkdir(exist_ok=True)
+    lock: t.TextIO = open(held, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit(
+            f"A run of the checks is using the instance in {run_dir}"
+        ) from None
+    return lock
 
 
 def open_instance(run_dir: pl.Path) -> Instance:
@@ -310,7 +326,7 @@ def make_project(
     )["results"]
     return Project(
         created["id"],
-        identifier,
+        created["identifier"],
         created["name"],
         {state["name"]: state["id"] for state in states},
     )
