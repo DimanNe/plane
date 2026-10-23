@@ -3,6 +3,7 @@
 @import "./power-k.css";
 @import "./emoji.css";
 @import "./new-work-item.css";
+@import "./dialogs.css";
 @plugin "@tailwindcss/typography";
 
 /* stickies and editor colors

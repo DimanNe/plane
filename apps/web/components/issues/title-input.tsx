@@ -14,6 +14,7 @@ import type { TNameDescriptionLoader } from "@plane/types";
 import { cn } from "@plane/utils";
 import useDebounce from "@/hooks/use-debounce";
 import type { TIssueOperations } from "./issue-detail";
+import { moveCaretToDescriptionOnEnter } from "./move-caret-to-description";
 // hooks
 
 export type IssueTitleInputProps = {
@@ -26,6 +27,7 @@ export type IssueTitleInputProps = {
   projectId: string;
   issueId: string;
   containerClassName?: string;
+  moveCaretToDescription: () => void;
 };
 
 export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTitleInputProps) {
@@ -39,6 +41,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
     issueOperations,
     projectId,
     containerClassName,
+    moveCaretToDescription,
   } = props;
   const { t } = useTranslation();
   // states
@@ -156,6 +159,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
               disabled={disabled}
               value={title}
               onChange={handleTitleChange}
+              onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, moveCaretToDescription)}
               maxLength={255}
               placeholder={t("issue.title.label")}
               onFocus={() => setIsLengthVisible(true)}

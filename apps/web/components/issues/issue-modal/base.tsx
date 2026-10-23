@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isEqual, xor } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -412,7 +412,14 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   const handleDuplicateIssueModal = (value: boolean) => setIsDuplicateModalOpen(value);
 
   // don't open the modal if there are no projects
-  if (!allowedProjectIds || allowedProjectIds.length === 0 || !activeProjectId) return null;
+  const hasProject = !!allowedProjectIds && allowedProjectIds.length > 0 && !!activeProjectId;
+  // Base UI fades and scales a dialog in when its `open` turns true. This one is made only when it is to open, so it
+  // would be open from its first render and appear at once, unlike every other dialog: it renders closed once.
+  const [isRenderedClosed, setIsRenderedClosed] = useState(false);
+  useLayoutEffect(() => {
+    if (hasProject) setIsRenderedClosed(true);
+  }, [hasProject]);
+  if (!hasProject) return null;
 
   const commonIssueModalProps: IssueFormProps = {
     issueTitleRef: issueTitleRef,
@@ -448,7 +455,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen && isRenderedClosed} onOpenChange={handleOpenChange}>
       {/* A row that renders this dialog cancels the clicks it gets; a click on Save must not reach it. */}
       <DialogContent size="lg" ref={dialogPopupRef} onClick={(e) => e.stopPropagation()}>
         {withDraftIssueWrapper ? (

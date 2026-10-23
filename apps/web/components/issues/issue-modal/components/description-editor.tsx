@@ -154,7 +154,8 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
   };
 
   return (
-    <div className="relative rounded-lg border-[0.5px] border-subtle-1 bg-layer-2">
+    // No frame: the description goes on from the title as one text (see the title input).
+    <div className="relative">
       {descriptionHtmlData === undefined || !projectId ? (
         <Loader className="max-h-64 min-h-[120px] space-y-2 overflow-hidden rounded-md border border-subtle p-3 py-2 pt-3">
           <Loader.Item width="100%" height="26px" />
@@ -203,7 +204,7 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
                     project_id: projectId?.toString() ?? "",
                   })
                 }
-                containerClassName="pt-3 min-h-[120px]"
+                containerClassName="min-h-[120px] pt-1 pl-0"
                 uploadFile={async (blockId, file) => {
                   try {
                     const { asset_id } = await uploadEditorAsset({

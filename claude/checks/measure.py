@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Measures, on a running instance, what was made fast by measuring: typing in the description of a work item, the
-Display pop-up, opening the timeline of some hundreds of work items, and dragging and the wheel there. It builds its
+Display pop-up, the dialog of a new work item, opening the timeline of some hundreds of work items, and dragging and
+the wheel there. It builds its
 own data in a workspace of its own, prints the numbers with the machine's load beside them, and judges nothing: a
 change near these is measured before and after, on the same machine at the same load.
 
@@ -53,6 +54,26 @@ COUNT_FRAMES_JS: str = """
 STOP_COUNTING_JS: str = (
     "() => { cancelAnimationFrame(window.__counting); return window.__frames; }"
 )
+
+
+# From the press of I to the caret in the title of the dialog that N I opens, by the page's clock.
+TIME_TO_TITLE_JS: str = """
+() => {
+  window.__msToTitle = undefined;
+  const pressed = (event) => {
+    if (event.key !== 'i') return;
+    document.removeEventListener('keydown', pressed, true);
+    const start = performance.now();
+    const focused = (event) => {
+      if (event.target.name !== 'name') return;
+      window.__msToTitle = performance.now() - start;
+      document.removeEventListener('focusin', focused, true);
+    };
+    document.addEventListener('focusin', focused, true);
+  };
+  document.addEventListener('keydown', pressed, true);
+}
+"""
 
 
 def read_load() -> str:
@@ -154,6 +175,27 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
             page, cdp, f"the Display pop-up opened ({run})", open_pop_up, 1
         )
         measure_counters(page, cdp, f"and closed by Escape ({run})", close_pop_up, 1)
+
+    def open_dialog() -> None:
+        ll.open_create_dialog(page)
+
+    def close_dialog() -> None:
+        page.keyboard.press("Escape")
+        page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+
+    for run in range(1, 4):
+        page.evaluate(TIME_TO_TITLE_JS)
+        measure_counters(
+            page,
+            cdp,
+            f"the dialog of a new work item opened by N I ({run})",
+            open_dialog,
+            1,
+        )
+        print(
+            f"    the caret in its title {page.evaluate('() => window.__msToTitle'):.1f} ms after I"
+        )
+        measure_counters(page, cdp, f"and closed by Escape ({run})", close_dialog, 1)
     ll.select_line(page, "line 3")
     page.keyboard.press("Enter")
     page.locator(ll.PANEL_TITLE).wait_for()

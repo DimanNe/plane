@@ -17,14 +17,7 @@ import type { EditorRefApi } from "@plane/editor";
 // i18n
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@makeplane/propel/components/button";
-import {
-  DialogActions,
-  DialogBody,
-  DialogHeader,
-  DialogHeading,
-  DialogMain,
-  DialogTitle,
-} from "@makeplane/propel/components/dialog";
+import { DialogActions, DialogBody, DialogHeader, DialogMain, DialogTitle } from "@makeplane/propel/components/dialog";
 import { ConfirmDialog } from "@plane/blocks/dialog";
 import { setToast } from "@plane/blocks/toast";
 import type { TIssue, TWorkspaceDraftIssue } from "@plane/types";
@@ -397,9 +390,10 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
         >
           <DialogMain>
             <DialogHeader>
-              <DialogHeading>
+              {/* The dialog is named for screen readers only: it says no more than the dialog itself shows. */}
+              <div className="sr-only">
                 <DialogTitle>{modalTitle}</DialogTitle>
-              </DialogHeading>
+              </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-x-1">
                   <IssueProjectSelect
@@ -427,6 +421,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                 issueTitleRef={issueTitleRef}
                 formState={formState}
                 handleFormChange={handleFormChange}
+                moveCaretToDescription={() => editorRef.current?.focus("start")}
               />
             </DialogHeader>
             <DialogBody tabIndex={0} render={<div className="vertical-scrollbar scrollbar-sm" />}>

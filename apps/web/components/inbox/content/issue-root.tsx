@@ -135,6 +135,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
           issueOperations={issueOperations}
           disabled={!isEditable}
           value={issue.name}
+          moveCaretToDescription={() => editorRef.current?.focus("start")}
         />
 
         {loader === "issue-loading" || issue.description_html === undefined ? (

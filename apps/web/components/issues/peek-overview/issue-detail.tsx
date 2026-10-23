@@ -102,6 +102,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
         disabled={disabled || isArchived}
         value={issue.name}
         containerClassName={ISSUE_TITLE_SURFACE_CLASSNAME}
+        moveCaretToDescription={() => editorRef.current?.focus("start")}
       />
       <hr className={ISSUE_TITLE_SEPARATOR_CLASSNAME} />
 

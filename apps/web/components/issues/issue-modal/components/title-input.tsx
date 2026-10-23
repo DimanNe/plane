@@ -10,7 +10,7 @@ import type { Control, FormState } from "react-hook-form";
 import { Controller } from "react-hook-form";
 // plane imports
 import { Field } from "@makeplane/propel/components/field";
-import { Input, InputGroup } from "@makeplane/propel/components/input";
+import { Input } from "@makeplane/propel/components/input";
 import { ETabIndices } from "@plane/constants";
 // types
 import { useTranslation } from "@plane/i18n";
@@ -21,12 +21,15 @@ import type { TIssue } from "@plane/types";
 import { getTabIndex } from "@plane/utils";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
+// local imports
+import { moveCaretToDescriptionOnEnter } from "../../move-caret-to-description";
 
 type TIssueTitleInputProps = {
   control: Control<TIssue>;
   issueTitleRef: React.MutableRefObject<HTMLInputElement | null>;
   formState: FormState<TIssue>;
   handleFormChange: () => void;
+  moveCaretToDescription: () => void;
 };
 
 export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTitleInputProps) {
@@ -35,6 +38,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
     issueTitleRef,
     formState: { errors },
     handleFormChange,
+    moveCaretToDescription,
   } = props;
   // store hooks
   const { isMobile } = usePlatformOS();
@@ -63,7 +67,8 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
         }}
         render={({ field: { value, onChange, ref } }) => (
           <Field name="name" invalid={Boolean(errors.name)}>
-            <InputGroup size="2xl">
+            {/* No frame: the title and the description below it are one text, the title set apart by its size. */}
+            <div className="work-item-dialog-title flex w-full">
               <Input
                 size="2xl"
                 id="name"
@@ -74,12 +79,16 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
                   onChange(e.target.value);
                   handleFormChange();
                 }}
+                onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, moveCaretToDescription)}
                 ref={issueTitleRef || ref}
-                placeholder={t("title")}
+                // FOR_REVIEWER: "Work item title", the words of the view's title, in place of "Title". The description
+                // keeps its "Click to add description": the words "Add description" would be a new string to
+                // translate into every language of Plane.
+                placeholder={t("issue.title.label")}
                 autoFocus
                 tabIndex={getIndex("name")}
               />
-            </InputGroup>
+            </div>
           </Field>
         )}
       />
