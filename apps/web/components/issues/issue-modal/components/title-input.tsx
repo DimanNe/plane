@@ -89,9 +89,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
                 }}
                 onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, descriptionEditorRef)}
                 ref={issueTitleRef || ref}
-                // FOR_REVIEWER: "Work item title", the words of the view's title, in place of "Title". The description
-                // keeps its "Click to add description": the words "Add description" would be a new string to
-                // translate into every language of Plane.
+                // FOR_REVIEWER: "Work item title", the words of the view's title, in place of "Title".
                 placeholder={t("issue.title.label")}
                 autoFocus
                 tabIndex={getIndex("name")}
