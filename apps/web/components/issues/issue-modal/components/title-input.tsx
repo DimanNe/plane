@@ -14,6 +14,7 @@ import { Input } from "@makeplane/propel/components/input";
 import { ETabIndices } from "@plane/constants";
 // types
 import { useTranslation } from "@plane/i18n";
+import type { EditorRefApi } from "@plane/editor";
 import type { TIssue } from "@plane/types";
 // ui
 
@@ -22,14 +23,17 @@ import { getTabIndex } from "@plane/utils";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
-import { moveCaretToDescriptionOnEnter } from "../../move-caret-to-description";
+import {
+  moveCaretToDescriptionOnEnter,
+  useMoveCaretToTitleOnArrowUp,
+} from "../../move-caret-between-title-and-description";
 
 type TIssueTitleInputProps = {
   control: Control<TIssue>;
   issueTitleRef: React.MutableRefObject<HTMLInputElement | null>;
   formState: FormState<TIssue>;
   handleFormChange: () => void;
-  moveCaretToDescription: () => void;
+  descriptionEditorRef: React.RefObject<EditorRefApi | null>;
 };
 
 export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTitleInputProps) {
@@ -38,11 +42,12 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
     issueTitleRef,
     formState: { errors },
     handleFormChange,
-    moveCaretToDescription,
+    descriptionEditorRef,
   } = props;
   // store hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
+  useMoveCaretToTitleOnArrowUp(issueTitleRef, descriptionEditorRef);
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -82,7 +87,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
                   onChange(e.target.value);
                   handleFormChange();
                 }}
-                onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, moveCaretToDescription)}
+                onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, descriptionEditorRef)}
                 ref={issueTitleRef || ref}
                 // FOR_REVIEWER: "Work item title", the words of the view's title, in place of "Title". The description
                 // keeps its "Click to add description": the words "Add description" would be a new string to

@@ -5,16 +5,21 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import type { RefObject } from "react";
 import { observer } from "mobx-react";
 import { Field } from "@makeplane/propel/components/field";
 import { TextArea } from "@makeplane/propel/components/text-area";
+import type { EditorRefApi } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import type { TNameDescriptionLoader } from "@plane/types";
 // types
 import { cn } from "@plane/utils";
 import useDebounce from "@/hooks/use-debounce";
 import type { TIssueOperations } from "./issue-detail";
-import { moveCaretToDescriptionOnEnter } from "./move-caret-to-description";
+import {
+  moveCaretToDescriptionOnEnter,
+  useMoveCaretToTitleOnArrowUp,
+} from "./move-caret-between-title-and-description";
 // hooks
 
 export type IssueTitleInputProps = {
@@ -27,7 +32,7 @@ export type IssueTitleInputProps = {
   projectId: string;
   issueId: string;
   containerClassName?: string;
-  moveCaretToDescription: () => void;
+  descriptionEditorRef: RefObject<EditorRefApi | null>;
 };
 
 export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTitleInputProps) {
@@ -41,7 +46,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
     issueOperations,
     projectId,
     containerClassName,
-    moveCaretToDescription,
+    descriptionEditorRef,
   } = props;
   const { t } = useTranslation();
   // states
@@ -51,6 +56,8 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
   const hasUnsavedChanges = useRef(false);
   // ref to store current title value for cleanup function
   const currentTitleRef = useRef(title);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  useMoveCaretToTitleOnArrowUp(titleRef, descriptionEditorRef);
   // hooks
   const debouncedValue = useDebounce(title, 1500);
 
@@ -156,10 +163,12 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
               autoResize
               rows={1}
               id="title-input"
+              // Base UI types the ref of a field's control as an input's; this control is the textarea
+              ref={titleRef as unknown as RefObject<HTMLInputElement>}
               disabled={disabled}
               value={title}
               onChange={handleTitleChange}
-              onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, moveCaretToDescription)}
+              onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, descriptionEditorRef)}
               maxLength={255}
               placeholder={t("issue.title.label")}
               onFocus={() => setIsLengthVisible(true)}

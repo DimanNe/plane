@@ -421,7 +421,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                 issueTitleRef={issueTitleRef}
                 formState={formState}
                 handleFormChange={handleFormChange}
-                moveCaretToDescription={() => editorRef.current?.focus("start")}
+                descriptionEditorRef={editorRef}
               />
             </DialogHeader>
             <DialogBody tabIndex={0} render={<div className="vertical-scrollbar scrollbar-sm" />}>

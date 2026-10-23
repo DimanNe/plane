@@ -104,7 +104,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
           disabled={isArchived || !isEditable}
           value={issue.name}
           containerClassName={ISSUE_TITLE_SURFACE_CLASSNAME}
-          moveCaretToDescription={() => editorRef.current?.focus("start")}
+          descriptionEditorRef={editorRef}
         />
         <hr className={ISSUE_TITLE_SEPARATOR_CLASSNAME} />
 
