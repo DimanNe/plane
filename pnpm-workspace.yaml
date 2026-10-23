@@ -319,3 +319,4 @@ peerDependencyRules:
 
 patchedDependencies:
   '@makeplane/propel@0.7.3': patches/@makeplane__propel@0.7.3.patch
+  prosemirror-view@1.42.6: patches/prosemirror-view@1.42.6.patch

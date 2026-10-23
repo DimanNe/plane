@@ -1,0 +1,29 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index d52a5260a7b9924b2865053ea1e8c6484225277b..211fb89c21efe44dc523c047979bf79b44c69e9b 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -3682,7 +3682,8 @@ handlers.focus = function (view) {
+     view.domObserver.start();
+     view.focused = true;
+     setTimeout(function () {
+-      if (view.docView && view.hasFocus() && !view.domObserver.currentSelection.eq(view.domSelectionRange())) selectionToDOM(view);
++      // Plane: a key pressed since the focus has moved the caret where the person sees it; it is not put back.
++      if (view.docView && view.hasFocus() && view.input.lastKeyCodeTime < view.input.lastFocus && !view.domObserver.currentSelection.eq(view.domSelectionRange())) selectionToDOM(view);
+     }, 20);
+   }
+ };
+diff --git a/dist/index.js b/dist/index.js
+index dc0d117b85e1da3eae915b4d8ff8e5e604683861..a792fc57ee2f54dd553750e0bdcd830461253ad6 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3928,7 +3928,9 @@ handlers.focus = view => {
+         view.domObserver.start();
+         view.focused = true;
+         setTimeout(() => {
+-            if (view.docView && view.hasFocus() && !view.domObserver.currentSelection.eq(view.domSelectionRange()))
++            // Plane: a key pressed since the focus has moved the caret where the person sees it; it is not put back.
++            if (view.docView && view.hasFocus() && view.input.lastKeyCodeTime < view.input.lastFocus &&
++                !view.domObserver.currentSelection.eq(view.domSelectionRange()))
+                 selectionToDOM(view);
+         }, 20);
+     }
