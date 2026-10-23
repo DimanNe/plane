@@ -37,6 +37,8 @@ export const InboxIssueTitle = observer(function InboxIssueTitle(props: TInboxIs
           id="name"
           name="name"
           type="text"
+          // no earlier entries of fields named "name" offered over the title (see the dialog of a new work item)
+          autoComplete="off"
           value={data?.name}
           onChange={(e) => handleData("name", e.target.value)}
           placeholder={t("title")}

@@ -74,6 +74,9 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
                 id="name"
                 name="name"
                 type="text"
+                // Chrome keeps what is typed into a field named "name" on any site, people's names and earlier
+                // titles, and dropped them down over the title; a title is new text each time, as in the quick add.
+                autoComplete="off"
                 value={value}
                 onChange={(e) => {
                   onChange(e.target.value);
