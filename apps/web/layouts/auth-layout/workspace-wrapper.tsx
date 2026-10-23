@@ -40,6 +40,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useLiveUpdates } from "@/hooks/use-live-updates";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { retryWhileServerDoesNotAnswer } from "@/lib/retry-while-server-does-not-answer";
 
 interface IWorkspaceAuthWrapper {
   children: ReactNode;
@@ -77,7 +78,7 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   useSWR(
     workspaceSlug && currentWorkspace ? WORKSPACE_MEMBER_ME_INFORMATION(workspaceSlug.toString()) : null,
     workspaceSlug && currentWorkspace ? () => fetchUserWorkspaceInfo(workspaceSlug.toString()) : null,
-    { revalidateIfStale: false, revalidateOnFocus: false }
+    { revalidateIfStale: false, revalidateOnFocus: false, onErrorRetry: retryWhileServerDoesNotAnswer }
   );
   useSWR(
     workspaceSlug && currentWorkspace ? WORKSPACE_PROJECTS_ROLES_INFORMATION(workspaceSlug.toString()) : null,

@@ -39,12 +39,10 @@ def run(check: steps.Check) -> None:
         (address, True, False),
     )
     page.unroute(CURRENT_USER)
-    # The page asks again by itself after a few seconds, and later ever more seldom.
     check.expect(
         "once the server answers again, the page shows what it showed, by itself and still signed in",
         lambda: (read_page(page), ll.read_titles(page)),
         ((address, False, False), ["first"]),
-        timeout=30,
     )
     # the 502s were the check's own, not the server's
     check.server_errors[:] = [

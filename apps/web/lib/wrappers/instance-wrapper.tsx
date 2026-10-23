@@ -12,6 +12,7 @@ import { LogoSpinner } from "@/components/common/logo-spinner";
 import { InstanceNotReady, MaintenanceView } from "@/components/instance";
 // hooks
 import { useInstance } from "@/hooks/store/use-instance";
+import { retryWhileServerDoesNotAnswer } from "@/lib/retry-while-server-does-not-answer";
 
 type TInstanceWrapper = {
   children: ReactNode;
@@ -25,7 +26,7 @@ const InstanceWrapper = observer(function InstanceWrapper(props: TInstanceWrappe
   const { isLoading: isInstanceSWRLoading, error: instanceSWRError } = useSWR(
     "INSTANCE_INFORMATION",
     async () => await fetchInstanceInfo(),
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false, onErrorRetry: retryWhileServerDoesNotAnswer }
   );
 
   // loading state

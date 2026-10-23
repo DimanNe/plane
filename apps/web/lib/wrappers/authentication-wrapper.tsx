@@ -18,6 +18,7 @@ import { EPageTypes } from "@/helpers/authentication.helper";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserProfile, useUserSettings } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { retryWhileServerDoesNotAnswer } from "@/lib/retry-while-server-does-not-answer";
 
 type TPageType = EPageTypes;
 
@@ -54,11 +55,11 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
   const { loader: workspacesLoader, workspaces } = useWorkspace();
 
   // FOR_REVIEWER: asked again after a failure, as the instance's information is in InstanceWrapper, so that a page
-  // opened while the API restarts comes back by itself; it had `shouldRetryOnError: false`. This is SWR's own retry
-  // with its back-off, the one InstanceWrapper relies on, and no retry code of ours. Without it the page stays on
-  // "didn't start up correctly" until it is reloaded.
+  // opened while the API restarts comes back by itself; it had `shouldRetryOnError: false`. Without it the page stays
+  // on "didn't start up correctly" until it is reloaded.
   const { isLoading: isUserSWRLoading } = useSWR("USER_INFORMATION", async () => await fetchCurrentUser(), {
     revalidateOnFocus: false,
+    onErrorRetry: retryWhileServerDoesNotAnswer,
   });
 
   const isUserOnboard =
