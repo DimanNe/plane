@@ -274,6 +274,7 @@ class RunChecks(Command):
             # the workspace of an instance on which a check failed is kept with what that check left
             if all(outcome.run_dir != instance.run_dir for outcome in failed):
                 ins.close_instance(instance)
+        ins.stop_account_makers()
         print(
             f"{len(outcomes)} checks, {sum(len(o.steps) for o in outcomes)} steps, "
             f"{time.monotonic() - start:.0f} s; "

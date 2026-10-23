@@ -9,16 +9,22 @@ Data is built and read back through /api/v1/ with the administrator's token. Wha
 does (members, the display of a list) is done as the account it belongs to, with that account's session.
 """
 
+import concurrent.futures
 import dataclasses as dc
 import fcntl
 import http.client
 import json
+import os
 import pathlib as pl
 import secrets
+import socket
+import socketserver
 import string
 import subprocess
 import sys
 import textwrap
+import threading
+import time
 import typing as t
 import urllib.parse
 
@@ -30,42 +36,69 @@ import plane_runtime  # noqa: E402
 
 JSONObject: t.TypeAlias = t.Dict[str, t.Any]
 
-# Run by the API's own Python, as the runtime makes its first user. The server limits what one address may do in
-# a minute while it is not signed in, and a run does more:
+# Run by the API's own Python once per instance and run, and kept running until the run ends, it makes the run's
+# accounts. Made by a process of its own, an account took about 0.8 s, of which the database was about 0.06 s: the
+# process loaded all of Plane (django.setup) and exited again, and hashed the password with the hash Django keeps
+# passwords with, which is slow on purpose. Here Plane is loaded once, and the password, the same for every account
+# of the run, is hashed once. It answers each request, a line of JSON, with a line of JSON, as soon as it is made.
+# The server limits what one address may do in a minute while it is not signed in, and a run does more:
 # - the form of the sign-in page lets an address in a few times, and a run has more accounts than that; so an
 #   account is signed in where the server keeps its sessions, the way Django's test client does it;
 # - a page asks first what instance this is, a question the server answers so many times, since it reads the
 #   session for it from the cookie of its admin pages, which a user does not have; without the answer the page
 #   says that Plane did not start. So the account's session goes under that cookie's name too.
 # The account is also past the pages of a first visit.
-SIGN_IN: str = textwrap.dedent("""\
+ACCOUNT_MAKER: str = textwrap.dedent("""\
+    import concurrent.futures
     import importlib
     import json
     import sys
+    import threading
     import django
     django.setup()
     import django.conf as conf
     import django.contrib.auth as auth
+    import django.contrib.auth.hashers as hashers
     import django.http as http
     import plane.db.models as db_models
 
-    email, password = sys.argv[1:3]
-    user, _ = db_models.User.objects.get_or_create(email=email, defaults={"username": email})
-    user.set_password(password)
-    user.is_password_autoset = False
-    user.save()
-    seen: dict = dict.fromkeys(db_models.Profile(user=user).onboarding_step, True)
-    db_models.Profile.objects.update_or_create(
-        user=user, defaults={"is_onboarded": True, "is_tour_completed": True, "onboarding_step": seen}
-    )
-    request = http.HttpRequest()
-    request.session = importlib.import_module(conf.settings.SESSION_ENGINE).SessionStore()
-    auth.login(request, user, backend=conf.settings.AUTHENTICATION_BACKENDS[0])
-    request.session.save()
-    cookies: dict = dict.fromkeys(
-        (conf.settings.SESSION_COOKIE_NAME, conf.settings.ADMIN_SESSION_COOKIE_NAME), request.session.session_key
-    )
-    print(json.dumps({"user_id": str(user.id), "cookies": cookies}))
+    password_hash: str = hashers.make_password(sys.argv[1])
+    printing: threading.Lock = threading.Lock()
+
+
+    def sign_in(email: str) -> dict:
+        user, _ = db_models.User.objects.get_or_create(email=email, defaults={"username": email})
+        user.password = password_hash
+        user.is_password_autoset = False
+        user.save()
+        seen: dict = dict.fromkeys(db_models.Profile(user=user).onboarding_step, True)
+        db_models.Profile.objects.update_or_create(
+            user=user, defaults={"is_onboarded": True, "is_tour_completed": True, "onboarding_step": seen}
+        )
+        request = http.HttpRequest()
+        request.session = importlib.import_module(conf.settings.SESSION_ENGINE).SessionStore()
+        auth.login(request, user, backend=conf.settings.AUTHENTICATION_BACKENDS[0])
+        request.session.save()
+        cookies: dict = dict.fromkeys(
+            (conf.settings.SESSION_COOKIE_NAME, conf.settings.ADMIN_SESSION_COOKIE_NAME), request.session.session_key
+        )
+        return {"user_id": str(user.id), "cookies": cookies}
+
+
+    def answer(request: dict) -> None:
+        try:
+            reply: dict = {"id": request["id"], **sign_in(request["email"])}
+        except Exception as error:
+            reply = {"id": request["id"], "error": repr(error)}
+        with printing:
+            print(json.dumps(reply), flush=True)
+
+
+    print(json.dumps({"ready": True}), flush=True)
+    # several at once, since a run's checks start together and each asks for its accounts first
+    with concurrent.futures.ThreadPoolExecutor(8) as pool:
+        for line in sys.stdin:
+            pool.submit(answer, json.loads(line))
 """)
 
 # Every run on an instance signs in as this administrator, with a password it draws anew: the workspaces that
@@ -94,6 +127,10 @@ class Instance:
     api_key: str
     administrator: Account
     workspace: str
+    # where the run's account maker of this instance takes requests (see AccountMaker)
+    account_maker_address: str
+    # the password of every account of the run, the administrator's too
+    password_of_accounts: str
 
 
 @dc.dataclass(frozen=True)
@@ -174,27 +211,130 @@ def call_app(
     )
 
 
-def sign_in(run_dir: pl.Path, email: str, password: str) -> Account:
-    """Gives the account with this address a session, and makes the account when there is none."""
-    printed: str = (
-        plane_runtime.run_docker(
-            [
-                "exec",
-                plane_runtime.get_container_name(run_dir, plane_config.Service.API),
-                "python",
-                "-c",
-                SIGN_IN,
-                email,
-                password,
-            ],
-            capture=True,
+class AccountMaker:
+    """The run's account maker of one instance (see ACCOUNT_MAKER), and the socket on which the run's checks ask it
+    for accounts: they run in processes of their own, while the account maker's input and output belong to the
+    run's main process. The socket has an address and no file, and goes with the process."""
+
+    def __init__(self, run_dir: pl.Path, password: str) -> None:
+        # FOR_REVIEWER: one account takes about 7 ms here, but its threads share one interpreter lock, so the 54
+        # accounts that a run's checks ask for as they start are made one after another: the last waits about
+        # 0.4 s. Workers forked after Plane is loaded would make them side by side, at the cost of memory, which is
+        # what limits the instances a run can have; not done until that 0.4 s is on the path of the slowest check.
+        self.run_dir: pl.Path = run_dir
+        self.log: pl.Path = run_dir / "checks" / "account-maker.log"
+        self.log.parent.mkdir(exist_ok=True)
+        log: t.TextIO
+        with self.log.open("w") as log:
+            self.process: subprocess.Popen[str] = subprocess.Popen(
+                [
+                    "docker",
+                    "exec",
+                    "-i",
+                    plane_runtime.get_container_name(run_dir, plane_config.Service.API),
+                    "python",
+                    "-u",
+                    "-c",
+                    ACCOUNT_MAKER,
+                    password,
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=log,
+                text=True,
+            )
+        assert self.process.stdin is not None and self.process.stdout is not None
+        if json.loads(self.process.stdout.readline() or "{}").get("ready") is not True:
+            raise RuntimeError(
+                f"The account maker of {run_dir} did not start; see {self.log}"
+            )
+        self.writing: threading.Lock = threading.Lock()
+        self.last_id: int = 0
+        self.waiting: t.Dict[int, concurrent.futures.Future[JSONObject]] = {}
+        threading.Thread(target=self.read_answers, daemon=True).start()
+        self.address: str = (
+            f"\0plane-checks-account-maker-{os.getpid()}-"
+            + plane_runtime.get_container_name_prefix(run_dir)
         )
-        .stdout.decode()
-        .strip()
-        .splitlines()[-1]
-    )
-    signed_in: JSONObject = json.loads(printed)
-    return Account(email, password, signed_in["user_id"], signed_in["cookies"])
+        account_maker: AccountMaker = self
+
+        class AskForAccount(socketserver.StreamRequestHandler):
+            def handle(self) -> None:
+                reply: JSONObject = account_maker.ask(
+                    json.loads(self.rfile.readline())["email"]
+                )
+                self.wfile.write(json.dumps(reply).encode() + b"\n")
+
+        self.server: socketserver.ThreadingUnixStreamServer = (
+            socketserver.ThreadingUnixStreamServer(self.address, AskForAccount)
+        )
+        self.server.daemon_threads = True
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def read_answers(self) -> None:
+        assert self.process.stdout is not None
+        line: str
+        for line in self.process.stdout:
+            reply: JSONObject = json.loads(line)
+            self.waiting.pop(reply["id"]).set_result(reply)
+        # the account maker ended: nothing that is still waiting gets an answer
+        with self.writing:
+            future: concurrent.futures.Future[JSONObject]
+            for future in self.waiting.values():
+                future.set_exception(
+                    RuntimeError(
+                        f"The account maker of {self.run_dir} ended; see {self.log}"
+                    )
+                )
+            self.waiting.clear()
+
+    def ask(self, email: str) -> JSONObject:
+        """The account maker's answer for the account with this address: its id and its session, or an error."""
+        assert self.process.stdin is not None
+        future: concurrent.futures.Future[JSONObject] = concurrent.futures.Future()
+        with self.writing:
+            if self.process.poll() is not None:
+                raise RuntimeError(
+                    f"The account maker of {self.run_dir} ended; see {self.log}"
+                )
+            self.last_id += 1
+            self.waiting[self.last_id] = future
+            self.process.stdin.write(
+                json.dumps({"id": self.last_id, "email": email}) + "\n"
+            )
+            self.process.stdin.flush()
+        return future.result()
+
+    def stop(self) -> None:
+        assert self.process.stdin is not None
+        self.server.shutdown()
+        self.server.server_close()
+        # at the end of its input the account maker ends
+        self.process.stdin.close()
+        self.process.wait()
+
+
+# The account makers this process started, by run directory: only a run's main process has any.
+ACCOUNT_MAKERS: t.Dict[pl.Path, AccountMaker] = {}
+
+
+def read_account(email: str, password: str, reply: JSONObject) -> Account:
+    if "error" in reply:
+        raise RuntimeError(
+            f"The account maker could not sign in {email}: {reply['error']}"
+        )
+    return Account(email, password, reply["user_id"], reply["cookies"])
+
+
+def sign_in(instance: Instance, email: str) -> Account:
+    """Gives the account with this address a session, and makes the account when there is none: through the run's
+    account maker of the instance."""
+    connection: socket.socket
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.connect(instance.account_maker_address)
+        connection.sendall(json.dumps({"email": email}).encode() + b"\n")
+        reply: JSONObject = json.loads(connection.makefile().readline())
+    return read_account(email, instance.password_of_accounts, reply)
 
 
 def find_url(run_dir: pl.Path) -> str:
@@ -211,8 +351,8 @@ def find_url(run_dir: pl.Path) -> str:
     return f"http://localhost:{port}"
 
 
-def make_administrator(run_dir: pl.Path) -> t.Tuple[Account, str]:
-    password: str = secrets.token_urlsafe(16)
+def bootstrap_administrator(run_dir: pl.Path, password: str) -> str:
+    """Makes the run's administrator, or gives it the run's password, and gives its API token."""
     printed: str = subprocess.run(
         [
             sys.executable,
@@ -229,8 +369,7 @@ def make_administrator(run_dir: pl.Path) -> t.Tuple[Account, str]:
         capture_output=True,
         text=True,
     ).stdout
-    api_key: str = json.loads(printed.strip().splitlines()[-1])["api_key"]
-    return sign_in(run_dir, ADMINISTRATOR_EMAIL, password), api_key
+    return json.loads(printed.strip().splitlines()[-1])["api_key"]
 
 
 def remove_workspaces_of_earlier_runs(url: str, administrator: Account) -> None:
@@ -255,13 +394,37 @@ def lock_instance(run_dir: pl.Path) -> t.TextIO:
     return lock
 
 
+def wait_until_workspace_seeded(
+    url: str, administrator: Account, workspace: str
+) -> None:
+    """Plane seeds a new workspace in the background (workspace_seed) with a sample project, whose members are the
+    members of the workspace when the seeding begins. The run's accounts must join after that moment, or their
+    pages show a project that no check made; the sample project shows that the moment has passed. Accounts that
+    took a second each to make always joined later; made in milliseconds, they would join first."""
+    # there is no event to wait on from outside the server: its state is read again until it shows the project
+    deadline: float = time.monotonic() + 60
+    while not call_app(url, administrator, "GET", f"/workspaces/{workspace}/projects/"):
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"Plane did not seed the workspace {workspace}: does the instance's worker (celery) run?"
+            )
+        time.sleep(0.02)
+
+
 def open_instance(run_dir: pl.Path) -> Instance:
     """Makes the instance ready for one run: its administrator, and an empty workspace of the run's own."""
     run_dir = plane_runtime.resolve_run_dir(run_dir)
     url: str = find_url(run_dir)
-    administrator: Account
-    api_key: str
-    administrator, api_key = make_administrator(run_dir)
+    # FOR_REVIEWER: every account of a run, the administrator too, has this one password and so one hash, salt
+    # included, which is why it is hashed once. They are accounts of a run that hold nothing; a check that signs
+    # in through the form (addresses/sign_in) types this password.
+    password: str = secrets.token_urlsafe(16)
+    account_maker: AccountMaker = AccountMaker(run_dir, password)
+    ACCOUNT_MAKERS[run_dir] = account_maker
+    api_key: str = bootstrap_administrator(run_dir, password)
+    administrator: Account = read_account(
+        ADMINISTRATOR_EMAIL, password, account_maker.ask(ADMINISTRATOR_EMAIL)
+    )
     remove_workspaces_of_earlier_runs(url, administrator)
     workspace: str = WORKSPACE_PREFIX + draw_name(8)
     call_app(
@@ -271,7 +434,17 @@ def open_instance(run_dir: pl.Path) -> Instance:
         "/workspaces/",
         {"name": "Checks", "slug": workspace, "organization_size": "1"},
     )
-    return Instance(url, run_dir, api_key, administrator, workspace)
+    wait_until_workspace_seeded(url, administrator, workspace)
+    return Instance(
+        url, run_dir, api_key, administrator, workspace, account_maker.address, password
+    )
+
+
+def stop_account_makers() -> None:
+    account_maker: AccountMaker
+    for account_maker in ACCOUNT_MAKERS.values():
+        account_maker.stop()
+    ACCOUNT_MAKERS.clear()
 
 
 def close_instance(instance: Instance) -> None:
@@ -285,11 +458,7 @@ def close_instance(instance: Instance) -> None:
 
 def make_account(instance: Instance, role: int = ROLE_ADMIN) -> Account:
     """A new account that is a member of the run's workspace."""
-    account: Account = sign_in(
-        instance.run_dir,
-        f"{draw_name(12)}@plane.invalid",
-        secrets.token_urlsafe(16),
-    )
+    account: Account = sign_in(instance, f"{draw_name(12)}@plane.invalid")
     invitations: str = f"/workspaces/{instance.workspace}/invitations/"
     call_app(
         instance.url,
