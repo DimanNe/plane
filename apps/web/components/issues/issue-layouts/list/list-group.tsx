@@ -30,6 +30,7 @@ import { cn } from "@plane/utils";
 import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
 import { useWorkFlowFDragNDrop } from "@/components/workflow";
 // hooks
+import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { useListView } from "@/hooks/store/use-list-view";
@@ -43,7 +44,7 @@ import { getIssueBlockId, getSourceFromDropPayload, highlightIssueOnDrop } from 
 import { IssueBlocksList } from "./blocks-list";
 import { ListDropLine } from "./drop-line";
 import { HeaderGroupByCard } from "./headers/group-by-card";
-import { ListGroupQuickAddButton } from "./headers/quick-add-button";
+import { ListGroupNewWorkItemButton } from "./headers/new-work-item-button";
 import { getListGroupHeaderId, highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
 import { getCarriedSubIssueIds, getListDropLocation, getListDropMark } from "./utils";
@@ -115,7 +116,8 @@ export const ListGroup = observer(function ListGroup(props: Props) {
   const groupRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
   const projectState = useProjectState();
-  const { getGroupDropPlace, setDropMark } = useListView();
+  const { getGroupDropPlace, setDropMark, setGroupIdOfNewWorkItem } = useListView();
+  const { toggleCreateIssueModal } = useCommandPalette();
 
   const {
     issues: { getGroupIssueCount, getPaginationData, getIssueLoader, getIssueIds },
@@ -293,13 +295,18 @@ export const ListGroup = observer(function ListGroup(props: Props) {
             canEditProperties={canEditProperties}
             selectionHelpers={selectionHelpers}
             handleCollapsedGroups={handleCollapsedGroups}
-            quickAddButton={
+            newWorkItemButton={
               isQuickAddAllowed && (
-                <ListGroupQuickAddButton
+                <ListGroupNewWorkItemButton
                   isEpic={isEpic}
                   onClick={() => {
                     if (!isExpanded) handleCollapsedGroups(group.id);
-                    setIsQuickAddOpen(true);
+                    // FOR_REVIEWER: an epic keeps the inline input, since the dialog of N I makes a work item;
+                    // no list of this edition shows epics.
+                    if (isEpic) return setIsQuickAddOpen(true);
+                    // the dialog of N I, so that a description can be given too
+                    setGroupIdOfNewWorkItem(group.id);
+                    toggleCreateIssueModal(true);
                   }}
                 />
               )

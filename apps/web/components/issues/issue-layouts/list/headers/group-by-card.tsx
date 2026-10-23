@@ -24,11 +24,11 @@ interface IHeaderGroupByCard {
   canEditProperties: (projectId: string | undefined) => boolean;
   selectionHelpers: TSelectionHelper;
   handleCollapsedGroups: (value: string) => void;
-  quickAddButton?: React.ReactNode;
+  newWorkItemButton?: React.ReactNode;
 }
 
 export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHeaderGroupByCard) {
-  const { groupID, icon, title, count, canEditProperties, selectionHelpers, handleCollapsedGroups, quickAddButton } =
+  const { groupID, icon, title, count, canEditProperties, selectionHelpers, handleCollapsedGroups, newWorkItemButton } =
     props;
   // router
   const { projectId } = useParams();
@@ -66,7 +66,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
         >
           <div className="line-clamp-1 inline-block truncate font-medium text-primary">{title}</div>
           <div className="pl-2 text-13 font-medium text-tertiary">{count || 0}</div>
-          {quickAddButton}
+          {newWorkItemButton}
           <div className="px-2.5"></div>
         </div>
       </div>

@@ -14,10 +14,10 @@ type Props = {
 };
 
 /**
- * The "+" after the name and the count of a list group, which opens the group's inline input. It stands in the
- * part of the header that folds the group on a click, so its own click must not reach that part.
+ * The "+" after the name and the count of a list group, which opens the dialog for a new work item of the group. It
+ * stands in the part of the header that folds the group on a click, so its own click must not reach that part.
  */
-export function ListGroupQuickAddButton(props: Props) {
+export function ListGroupNewWorkItemButton(props: Props) {
   const { isEpic, onClick } = props;
   // hooks
   const { t } = useTranslation();

@@ -24,6 +24,9 @@ export interface IIssueListViewStore {
   // and kept from the shortcuts of the page.
   descriptionAwaitingCaret: string | undefined;
   dropMark: TListDropMark | undefined;
+  // The group whose "+" opened the dialog for a new work item: the work item takes what that group stands for,
+  // which an empty group or a group other than the one of the selected line can give only this way.
+  groupIdOfNewWorkItem: string | undefined;
   // computed
   getIsRowSelected: (issueId: string, groupId: string) => boolean;
   getIsRowTitleEdited: (issueId: string, groupId: string) => boolean;
@@ -42,6 +45,7 @@ export interface IIssueListViewStore {
   leaveSelectionAtPlaceOf: (issueId: string, change: Promise<unknown>) => void;
   isSelectionLeftAtPlaceOf: (issueId: string) => boolean;
   setDropMark: (mark: TListDropMark | undefined) => void;
+  setGroupIdOfNewWorkItem: (groupId: string | undefined) => void;
 }
 
 export class IssueListViewStore implements IIssueListViewStore {
@@ -51,6 +55,7 @@ export class IssueListViewStore implements IIssueListViewStore {
   private typedForDescription = "";
   private issueIdOfPlaceToKeep: string | undefined = undefined;
   dropMark: TListDropMark | undefined = undefined;
+  groupIdOfNewWorkItem: string | undefined = undefined;
 
   constructor() {
     makeObservable(this, {
@@ -59,12 +64,14 @@ export class IssueListViewStore implements IIssueListViewStore {
       descriptionAwaitingCaret: observable,
       // a row is held over the same place for many pointer moves, each of which sets the same mark again
       dropMark: observable.struct,
+      groupIdOfNewWorkItem: observable,
       // actions
       toggleIssueCollapse: action,
       setSelectedRow: action,
       awaitDescriptionCaret: action,
       takeTypedForDescription: action,
       setDropMark: action,
+      setGroupIdOfNewWorkItem: action,
     });
   }
 
@@ -129,5 +136,9 @@ export class IssueListViewStore implements IIssueListViewStore {
 
   setDropMark = (mark: TListDropMark | undefined) => {
     this.dropMark = mark;
+  };
+
+  setGroupIdOfNewWorkItem = (groupId: string | undefined) => {
+    this.groupIdOfNewWorkItem = groupId;
   };
 }

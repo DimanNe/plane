@@ -363,12 +363,12 @@ def set_display(
     instance: Instance,
     account: Account,
     project: Project,
+    of_list: str = "",
     **display_filters: t.Any,
 ) -> None:
-    """The account's choices under Display for the project, as the page keeps them on the server."""
-    path: str = (
-        f"/workspaces/{instance.workspace}/projects/{project.id}/user-properties/"
-    )
+    """The account's choices under Display for the project, as the page keeps them on the server. `of_list` is the
+    cycle or the module whose list has choices of its own, such as `cycles/ID/`."""
+    path: str = f"/workspaces/{instance.workspace}/projects/{project.id}/{of_list}user-properties/"
     kept: JSONObject = call_app(instance.url, account, "GET", path)
     call_app(
         instance.url,
