@@ -10,6 +10,7 @@ import functools
 import hashlib
 import http.client
 import io
+import ipaddress
 import json
 import os
 import pathlib as pl
@@ -56,7 +57,7 @@ ALL_IMAGES: t.Dict[plane_config.Service, str] = {
     **EXTERNAL_DEPS,
 }
 # Every service listens inside the network namespace of the instance. Only the proxy is published
-# to the host, on the port the caller names.
+# to the host, on the address and port the caller names.
 SERVICE_PORTS: t.Dict[plane_config.Service, int] = {
     plane_config.Service.PROXY: 8080,
     plane_config.Service.API: 8000,
@@ -127,6 +128,36 @@ Containers: t.TypeAlias = t.Dict[plane_config.Service, Container]
 Jobs: t.TypeAlias = t.Mapping[plane_config.Service, t.Callable[[], None]]
 DOCKER_METRICS: DockerMetrics = {"calls": 0, "wall_ms": 0.0}
 DOCKER_METRICS_LOCK: threading.Lock = threading.Lock()
+
+
+@dc.dataclass(frozen=True)
+class BindAddress:
+    host: ipaddress.IPv4Address
+    port: int
+
+    @classmethod
+    def parse(cls, text: str) -> "BindAddress":
+        # FOR_REVIEWER: IPv4 only. An IPv6 host needs brackets both in Docker's --publish and in
+        # the URLs of the readiness probes; nothing asked for it.
+        host: str
+        port: str
+        host, _, port = text.rpartition(":")
+        try:
+            address: BindAddress = cls(ipaddress.IPv4Address(host), int(port))
+        except ValueError as error:
+            raise argparse.ArgumentTypeError(
+                f"Expected IPV4:PORT, such as 127.0.0.1:12001: {text!r}: {error}"
+            )
+        if not 0 < address.port < 65536:
+            raise argparse.ArgumentTypeError(f"Port out of range: {text!r}")
+        return address
+
+    def get_host_for_local_clients(self) -> ipaddress.IPv4Address:
+        return (
+            ipaddress.IPv4Address("127.0.0.1")
+            if self.host.is_unspecified
+            else self.host
+        )
 
 
 def make_bind_mount_option(
@@ -485,6 +516,12 @@ def get_containers(
 def get_plane_environment(
     port: int, service_secrets: plane_config.ServiceSecrets
 ) -> t.Dict[str, str]:
+    # FOR_REVIEWER: the origin stays localhost whatever --bind says. Plane puts it into the
+    # redirect after sign-in and into the links of uploads, so a browser on another machine that
+    # opens http://HOST_IP:PORT is sent to its own localhost after signing in. A forwarded port
+    # (ssh -L PORT:127.0.0.1:PORT, or the VM's port forwarding) keeps it right. If the instance is
+    # to be opened by its address, it needs an --origin flag, or an origin made from a --bind
+    # host that is not 0.0.0.0.
     origin: str = f"http://localhost:{port}"
     redis_port: int = SERVICE_PORTS[plane_config.Service.REDIS]
     return {
@@ -688,8 +725,8 @@ def wait_for_service_readiness(
                 process.stdout.close()
 
 
-def check_http_service(port: int, path: str, timeout: float = 3) -> None:
-    url: str = f"http://127.0.0.1:{port}{path}"
+def check_http_service(bind: BindAddress, path: str, timeout: float = 3) -> None:
+    url: str = f"http://{bind.get_host_for_local_clients()}:{bind.port}{path}"
     response: http.client.HTTPResponse
     with open_local_url(url, timeout=min(3, timeout)) as response:
         if response.status != 200:
@@ -1188,7 +1225,7 @@ def start_minio(
 
 def start_proxy(
     run_dir: pl.Path,
-    port: int,
+    bind: BindAddress,
     image_id: str,
     network_mode: str,
     existing_container: t.Optional[Container],
@@ -1216,9 +1253,9 @@ def start_proxy(
         run_dir,
         plane_config.Service.PROXY,
         "serving initial configuration",
-        probe=lambda remaining: check_http_service(port, "/", timeout=remaining),
+        probe=lambda remaining: check_http_service(bind, "/", timeout=remaining),
     )
-    check_http_service(port, "/god-mode/")
+    check_http_service(bind, "/god-mode/")
 
 
 def get_python_service_commands(
@@ -1369,7 +1406,7 @@ def start_space(
 
 def start_network_container(
     run_dir: pl.Path,
-    port: int,
+    bind: BindAddress,
     image_id: str,
     existing_container: t.Optional[Container],
 ) -> None:
@@ -1381,14 +1418,14 @@ def start_network_container(
         entrypoint="/usr/bin/env",
         network_mode="bridge",
         existing_container=existing_container,
-        published_port=f"127.0.0.1:{port}:{SERVICE_PORTS[plane_config.Service.PROXY]}",
+        published_port=f"{bind.host}:{bind.port}:{SERVICE_PORTS[plane_config.Service.PROXY]}",
     )
 
 
 def start_plane_services(
     run_dir: pl.Path,
     config: plane_config.InstanceConfig,
-    port: int,
+    bind: BindAddress,
     image_ids: t.Dict[plane_config.Service, str],
     docker_fs: DockerFs,
     timings: Timings,
@@ -1408,11 +1445,15 @@ def start_plane_services(
         plane_config.Service.BEAT: plane_config.Service.API,
     }
     # What already runs is kept only if it is this instance as asked for: the images just built,
-    # the requested browser port, every service in the namespace of the running network container.
+    # the requested bind address, every service in the namespace of the running network container.
     if running and (
         network_container is None
         or network_container["HostConfig"]["PortBindings"]
-        != {f"{proxy_port}/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(port)}]}
+        != {
+            f"{proxy_port}/tcp": [
+                {"HostIp": str(bind.host), "HostPort": str(bind.port)}
+            ]
+        }
         or any(
             container["Image"] != image_ids[image_services.get(name, name)]
             or (
@@ -1433,7 +1474,7 @@ def start_plane_services(
     write_caddy_config(run_dir)
     start_network_container(
         run_dir,
-        port,
+        bind,
         image_ids[plane_config.Service.POSTGRES],
         containers.get(plane_config.Service.NETWORK),
     )
@@ -1442,7 +1483,9 @@ def start_plane_services(
     )
     initialized: bool = config.initialized
     api_image_id: str = image_ids[plane_config.Service.API]
-    plane_environment: t.Dict[str, str] = get_plane_environment(port, service_secrets)
+    plane_environment: t.Dict[str, str] = get_plane_environment(
+        bind.port, service_secrets
+    )
     python_service_commands: t.Dict[plane_config.Service, t.List[str]] = (
         get_python_service_commands(run_dir)
     )
@@ -1501,7 +1544,7 @@ def start_plane_services(
         plane_config.Service.PROXY: functools.partial(
             start_proxy,
             run_dir,
-            port,
+            bind,
             image_ids[plane_config.Service.PROXY],
             network_mode,
             containers.get(plane_config.Service.PROXY),
@@ -1583,7 +1626,7 @@ def start_plane_services(
             plane_config.Service.API,
             "Plane API worker ready:",
             probe=lambda remaining: check_http_service(
-                port, "/api/instances/", timeout=remaining
+                bind, "/api/instances/", timeout=remaining
             ),
         ),
         plane_config.Service.WORKER: functools.partial(
@@ -1599,10 +1642,10 @@ def start_plane_services(
             "Plane beat ready:",
         ),
         plane_config.Service.LIVE: functools.partial(
-            check_http_service, port, "/live/health/"
+            check_http_service, bind, "/live/health/"
         ),
         plane_config.Service.SPACE: functools.partial(
-            check_http_service, port, "/spaces/"
+            check_http_service, bind, "/spaces/"
         ),
     }
     run_jobs_in_parallel(
@@ -1879,7 +1922,7 @@ def build_or_pull_missing_images_and_get_ids(
 def start_network_container_and_python_services(
     image_lookup: concurrent.futures.Future[t.Dict[plane_config.Service, str]],
     run_dir: pl.Path,
-    port: int,
+    bind: BindAddress,
     service_secrets: plane_config.ServiceSecrets,
 ) -> t.Dict[plane_config.Service, str]:
     """Starts what needs only the instance configuration, so that it can run beside the
@@ -1888,14 +1931,16 @@ def start_network_container_and_python_services(
     # By its tag, so that it need not wait for the image lookup: Docker pulls this image itself
     # when it is missing, which it cannot do for the images built from the checkout.
     start_network_container(
-        run_dir, port, ALL_IMAGES[plane_config.Service.POSTGRES], None
+        run_dir, bind, ALL_IMAGES[plane_config.Service.POSTGRES], None
     )
     image_ids: t.Dict[plane_config.Service, str] = image_lookup.result()
     (run_dir / "logs").mkdir(parents=True, exist_ok=True)
     network_mode: str = "container:" + get_container_name(
         run_dir, plane_config.Service.NETWORK
     )
-    plane_environment: t.Dict[str, str] = get_plane_environment(port, service_secrets)
+    plane_environment: t.Dict[str, str] = get_plane_environment(
+        bind.port, service_secrets
+    )
     run_jobs_in_parallel(
         {
             service: functools.partial(
@@ -1955,7 +2000,7 @@ class PrepareCommand(Command):
 class StartCommand(Command):
     run_dir: pl.Path
     plane_git_path: pl.Path
-    port: int
+    bind: BindAddress
 
     def run(self) -> None:
         start_time: float = time.monotonic()
@@ -1974,7 +2019,7 @@ class StartCommand(Command):
             if config is None:
                 config = plane_config.InstanceConfig.make()
             start_plane_services(
-                run_dir, config, self.port, image_ids, docker_fs, timings
+                run_dir, config, self.bind, image_ids, docker_fs, timings
             )
         print_lifecycle_result(run_dir, "start", timings, start_time)
 
@@ -2036,7 +2081,7 @@ class ImportCommand(Command):
     run_dir: pl.Path
     input: pl.Path
     plane_git_path: pl.Path
-    port: int
+    bind: BindAddress
 
     def run(self) -> None:
         start_time: float = time.monotonic()
@@ -2076,7 +2121,7 @@ class ImportCommand(Command):
                 start_network_container_and_python_services,
                 image_lookup,
                 run_dir,
-                self.port,
+                self.bind,
                 config.secrets,
             )
             if input == pl.Path("/dev/null"):
@@ -2088,7 +2133,7 @@ class ImportCommand(Command):
             image_ids: t.Dict[plane_config.Service, str] = early_start.result()
             config.write(run_dir)
             start_plane_services(
-                run_dir, config, self.port, image_ids, docker_fs, timings
+                run_dir, config, self.bind, image_ids, docker_fs, timings
             )
         print_lifecycle_result(run_dir, "import", timings, start_time)
 
@@ -2195,10 +2240,11 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         help="Directory containing the databases, uploads, and settings for this instance.",
     )
     start_parser.add_argument(
-        "--port",
-        type=int,
+        "--bind",
+        type=BindAddress.parse,
         required=True,
-        help="Host port the browser reaches Plane on, at http://localhost:PORT. It is the only port of the instance open on the host.",
+        metavar="IPV4:PORT",
+        help="Host address and port the browser reaches Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. Plane makes its links for http://localhost:PORT, so a browser on another machine needs that port forwarded to its own localhost.",
     )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
@@ -2276,10 +2322,11 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         help="Backup file outside --run-dir, or /dev/null to delete the previous data and create an empty instance.",
     )
     import_parser.add_argument(
-        "--port",
-        type=int,
+        "--bind",
+        type=BindAddress.parse,
         required=True,
-        help="Host port the browser reaches the restored Plane on, at http://localhost:PORT. It is the only port of the instance open on the host.",
+        metavar="IPV4:PORT",
+        help="Host address and port the browser reaches the restored Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. Plane makes its links for http://localhost:PORT, so a browser on another machine needs that port forwarded to its own localhost.",
     )
     bootstrap_user_parser: argparse.ArgumentParser = subparsers.add_parser(
         "bootstrap-user",
@@ -2307,7 +2354,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         return StartCommand(
             run_dir=pl.Path(args.run_dir),
             plane_git_path=pl.Path(args.plane_git_path),
-            port=args.port,
+            bind=args.bind,
         )
     elif args.subparser_name == "stop":
         return StopCommand(run_dir=pl.Path(args.run_dir))
@@ -2325,7 +2372,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
             run_dir=pl.Path(args.run_dir),
             input=pl.Path(args.input),
             plane_git_path=pl.Path(args.plane_git_path),
-            port=args.port,
+            bind=args.bind,
         )
     elif args.subparser_name == "bootstrap-user":
         return BootstrapUserCommand(

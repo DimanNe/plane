@@ -6,13 +6,13 @@
 # runs the images that were built last, and applies their migrations to its data. So the build and the restart
 # are one step under a lock, and this is not for a machine where an instance with data that matters may be
 # started meanwhile.
-# usage: claude/tools/rebuild_and_restart.sh <run-dir> <port>
+# usage: claude/tools/rebuild_and_restart.sh <run-dir> <bind>, such as 127.0.0.1:18580
 set -eu
 RUN_DIR=$(realpath "$1")
-PORT="$2"
+BIND="$2"
 cd "$(dirname "$0")/../.."
 exec 9> /tmp/plane-local-images.lock
 flock 9
 python3 scripts/plane_runtime.py prepare
 python3 scripts/plane_runtime.py stop --run-dir "$RUN_DIR"
-python3 scripts/plane_runtime.py start --run-dir "$RUN_DIR" --port "$PORT"
+python3 scripts/plane_runtime.py start --run-dir "$RUN_DIR" --bind "$BIND"

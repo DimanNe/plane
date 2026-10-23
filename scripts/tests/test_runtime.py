@@ -1,4 +1,6 @@
+import argparse
 import errno
+import ipaddress
 import json
 import os
 import pathlib as pl
@@ -131,7 +133,10 @@ class ImportTests(unittest.TestCase):
             mock.patch("sys.stdout"),
         ):
             runtime.ImportCommand(
-                run_dir, input, pl.Path(run_dir.parent / "plane-git"), 18080
+                run_dir,
+                input,
+                pl.Path(run_dir.parent / "plane-git"),
+                runtime.BindAddress.parse("127.0.0.1:18080"),
             ).run()
 
     def test_import_replaces_everything_a_failed_import_left_in_run_dir(self) -> None:
@@ -262,6 +267,68 @@ class ServiceReadinessTests(unittest.TestCase):
             self.wait_for_readiness(b"service ready\n", b"", probe)
 
 
+class BindAddressTests(unittest.TestCase):
+    def test_parse_accepts_only_ipv4_and_port_in_range(self) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            text: str
+            expected: t.Optional[runtime.BindAddress]
+
+        tcs: t.List[Tc] = [
+            Tc(
+                "loopback",
+                "127.0.0.1:12001",
+                runtime.BindAddress(ipaddress.IPv4Address("127.0.0.1"), 12001),
+            ),
+            Tc(
+                "every interface",
+                "0.0.0.0:12001",
+                runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 12001),
+            ),
+            Tc(
+                "highest port",
+                "10.11.13.3:65535",
+                runtime.BindAddress(ipaddress.IPv4Address("10.11.13.3"), 65535),
+            ),
+            Tc("port alone", "12001", None),
+            Tc("host name", "localhost:12001", None),
+            Tc("ipv6", "[::1]:12001", None),
+            Tc("no port", "127.0.0.1:", None),
+            Tc("port zero", "127.0.0.1:0", None),
+            Tc("port above range", "127.0.0.1:65536", None),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: t.Optional[runtime.BindAddress]
+            try:
+                actual = runtime.BindAddress.parse(tc.text)
+            except argparse.ArgumentTypeError:
+                actual = None
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_local_clients_reach_every_interface_through_loopback(self) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            text: str
+            expected: ipaddress.IPv4Address
+
+        tcs: t.List[Tc] = [
+            Tc("every interface", "0.0.0.0:12001", ipaddress.IPv4Address("127.0.0.1")),
+            Tc("loopback", "127.0.0.1:12001", ipaddress.IPv4Address("127.0.0.1")),
+            Tc(
+                "one interface", "10.11.13.3:12001", ipaddress.IPv4Address("10.11.13.3")
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: ipaddress.IPv4Address = runtime.BindAddress.parse(
+                tc.text
+            ).get_host_for_local_clients()
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+
 class CommandLineTests(unittest.TestCase):
     def test_each_subcommand_parses_to_its_command(self) -> None:
         class Tc(t.NamedTuple):
@@ -272,8 +339,12 @@ class CommandLineTests(unittest.TestCase):
         tcs: t.List[Tc] = [
             Tc(["prepare"], runtime.PrepareCommand(plane_git_path)),
             Tc(
-                ["start", "--run-dir", "run", "--port", "18580"],
-                runtime.StartCommand(pl.Path("run"), plane_git_path, 18580),
+                ["start", "--run-dir", "run", "--bind", "127.0.0.1:18580"],
+                runtime.StartCommand(
+                    pl.Path("run"),
+                    plane_git_path,
+                    runtime.BindAddress(ipaddress.IPv4Address("127.0.0.1"), 18580),
+                ),
             ),
             Tc(["stop", "--run-dir", "run"], runtime.StopCommand(pl.Path("run"))),
             Tc(["status", "--run-dir", "run"], runtime.StatusCommand(pl.Path("run"))),
@@ -298,11 +369,14 @@ class CommandLineTests(unittest.TestCase):
                     "run",
                     "--input",
                     "/dev/null",
-                    "--port",
-                    "18080",
+                    "--bind",
+                    "0.0.0.0:18080",
                 ],
                 runtime.ImportCommand(
-                    pl.Path("run"), pl.Path("/dev/null"), plane_git_path, 18080
+                    pl.Path("run"),
+                    pl.Path("/dev/null"),
+                    plane_git_path,
+                    runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 18080),
                 ),
             ),
             Tc(
@@ -314,11 +388,14 @@ class CommandLineTests(unittest.TestCase):
                     "backup.zstd",
                     "--plane-git-path",
                     "plane",
-                    "--port",
-                    "18580",
+                    "--bind",
+                    "127.0.0.1:18580",
                 ],
                 runtime.ImportCommand(
-                    pl.Path("run"), pl.Path("backup.zstd"), pl.Path("plane"), 18580
+                    pl.Path("run"),
+                    pl.Path("backup.zstd"),
+                    pl.Path("plane"),
+                    runtime.BindAddress(ipaddress.IPv4Address("127.0.0.1"), 18580),
                 ),
             ),
             Tc(
@@ -342,7 +419,7 @@ class CommandLineTests(unittest.TestCase):
             actual: runtime.Command = runtime.parse_cli_command(tc.argv)
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.argv}")
 
-    def test_start_and_import_need_a_port(self) -> None:
+    def test_start_and_import_need_a_bind_address(self) -> None:
         argv: t.List[str]
         for argv in (
             ["start", "--run-dir", "run"],

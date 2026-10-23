@@ -8,8 +8,8 @@ past work: that is in the commits and in the tracker.
 
 Work is tried on an instance that holds nothing that matters, never on one that holds real
 tasks. `scripts/plane_runtime.py` makes and runs one (`--help` lists its commands): `prepare`
-builds the images, `start --run-dir DIR --port PORT` starts an instance whose data is in `DIR`,
-`bootstrap-user` gives it an administrator and prints the API token of that account.
+builds the images, `start --run-dir DIR --bind 127.0.0.1:PORT` starts an instance whose data is
+in `DIR`, `bootstrap-user` gives it an administrator and prints the API token of that account.
 
 **The image names are the same for every instance on the machine.** An instance that is started
 later, by anybody, runs the images that were built last and applies their migrations to its
@@ -26,7 +26,7 @@ data. Therefore:
 | change | tool | takes |
 |---|---|---|
 | web app | `tools/web_to_instance.sh RUN_DIR` builds the web app of the checkout it is in and copies it into the running instance | about a minute |
-| API | `tools/rebuild_and_restart.sh RUN_DIR PORT` | several minutes |
+| API | `tools/rebuild_and_restart.sh RUN_DIR 127.0.0.1:PORT` | several minutes |
 
 ## Before a change is handed over
 

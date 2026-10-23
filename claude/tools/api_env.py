@@ -118,7 +118,10 @@ def parse_arguments(arguments: t.List[str]) -> RunInApiEnvironment:
         help="directory of the running instance",
     )
     parser.add_argument(
-        "--port", type=int, required=True, help="port the instance was started with"
+        "--port",
+        type=int,
+        required=True,
+        help="port of the --bind the instance was started with",
     )
     parser.add_argument(
         "--venv",
