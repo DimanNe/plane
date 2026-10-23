@@ -7,26 +7,34 @@ past work: that is in the commits and in the tracker.
 ## An instance of your own
 
 Work is tried on an instance that holds nothing that matters, never on one that holds real
-tasks. `scripts/plane_runtime.py` makes and runs one (`--help` lists its commands): `prepare`
-builds the images, `start --run-dir DIR --bind 127.0.0.1:PORT` starts an instance whose data is
-in `DIR`, `bootstrap-user` gives it an administrator and prints the API token of that account.
+tasks. `scripts/plane_runtime.py` makes and runs one (`--help` lists its commands): `prepare
+--image-prefix NAME` builds the images, `start --run-dir DIR --bind 127.0.0.1:PORT --image-prefix
+NAME` starts an instance whose data is in `DIR`, `bootstrap-user` gives it an administrator and
+prints the API token of that account.
 
-**The image names are the same for every instance on the machine.** An instance that is started
-later, by anybody, runs the images that were built last and applies their migrations to its
-data. Therefore:
+**Images of your own.** An instance runs the images built last under its tag and applies their
+migrations to its data. Without `--image-prefix` the tag is `current`, the owner's, whose instance
+holds the tasks. So a session:
 
-- build images only for a change that needs it (the API), with `tools/rebuild_and_restart.sh`,
-  which builds and restarts your instance as one step under a lock;
-- do not build while the owner may be starting the instance that holds his tasks, and say so
-  before a round that has a migration;
-- when the round is over, build the images from the delivered code again.
+- always passes `--image-prefix NAME` to `prepare`, `start` and `import`, with a name of its own,
+  such as its task (`plane-47`). An instance runs only the images of its first start: `start`
+  refuses another prefix;
+- has its own worktree, run directories and ports, so that no session waits for another;
+- builds images only for a change that needs it (the API), with `tools/rebuild_and_restart.sh`;
+- says so in the task when a round has a migration: the owner's instance gets it when the owner
+  builds the delivered code;
+- deletes its images when the round is over, after `stop`. The stopped containers of its
+  instances still use them, and hold nothing that the run directory (absolute) does not:
+
+      docker rm $(docker ps -aq --filter label=org.plane.local.target=RUN_DIR)
+      docker image rm plane-local-{api,live,space,proxy}:NAME
 
 ## Seeing a change
 
 | change | tool | takes |
 |---|---|---|
 | web app | `tools/web_to_instance.sh RUN_DIR` builds the web app of the checkout it is in and copies it into the running instance | about a minute |
-| API | `tools/rebuild_and_restart.sh RUN_DIR 127.0.0.1:PORT` | several minutes |
+| API | `tools/rebuild_and_restart.sh RUN_DIR 127.0.0.1:PORT NAME` | several minutes |
 
 ## Before a change is handed over
 
