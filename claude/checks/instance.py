@@ -11,6 +11,7 @@ does (members, the display of a list) is done as the account it belongs to, with
 
 import dataclasses as dc
 import fcntl
+import http.client
 import json
 import pathlib as pl
 import secrets
@@ -19,8 +20,7 @@ import subprocess
 import sys
 import textwrap
 import typing as t
-import urllib.error
-import urllib.request
+import urllib.parse
 
 REPOSITORY: pl.Path = pl.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY / "scripts"))
@@ -108,24 +108,38 @@ def draw_name(length: int) -> str:
     return "".join(secrets.choice(string.ascii_lowercase) for _ in range(length))
 
 
+# The connection of this process to each address, kept for its next call. Rootless Docker's network namespace
+# tracks every connection to a published port and keeps the entry for a while after the connection has closed; on a
+# machine started with little memory, its table holds a few thousand. A connection for every call filled it, and new
+# connections to every published port, those of other instances too, were dropped until it drained: a call waited
+# up to a minute.
+CONNECTIONS: t.Dict[str, http.client.HTTPConnection] = {}
+
+
 def send(
-    url: str,
-    method: str,
-    headers: t.Dict[str, str],
-    body: t.Optional[bytes],
-    opener: urllib.request.OpenerDirector,
+    url: str, method: str, headers: t.Dict[str, str], body: t.Optional[bytes]
 ) -> t.Any:
-    request: urllib.request.Request = urllib.request.Request(
-        url, method=method, headers=headers, data=body
-    )
+    parts: urllib.parse.SplitResult = urllib.parse.urlsplit(url)
+    if parts.netloc not in CONNECTIONS:
+        CONNECTIONS[parts.netloc] = http.client.HTTPConnection(parts.netloc, timeout=60)
+    connection: http.client.HTTPConnection = CONNECTIONS[parts.netloc]
     try:
-        response: t.Any
-        with opener.open(request, timeout=60) as response:
-            text: str = response.read().decode()
-    except urllib.error.HTTPError as error:
+        connection.request(
+            method,
+            parts.path + (f"?{parts.query}" if parts.query else ""),
+            body,
+            headers,
+        )
+        response: http.client.HTTPResponse = connection.getresponse()
+        text: str = response.read().decode()
+    except Exception:
+        # a call that broke off leaves the connection unusable; the next call opens another one
+        connection.close()
+        raise
+    if not 200 <= response.status < 300:
         raise RuntimeError(
-            f"{method} {url} was answered {error.code}: {error.read().decode()[:400]}"
-        ) from None
+            f"{method} {url} was answered {response.status}: {text[:400]}"
+        )
     return json.loads(text) if text[:1] in ("{", "[") else text
 
 
@@ -138,7 +152,6 @@ def call_api(
         method,
         {"X-Api-Key": instance.api_key, "Content-Type": "application/json"},
         None if body is None else json.dumps(body).encode(),
-        urllib.request.build_opener(urllib.request.ProxyHandler({})),
     )
 
 
@@ -158,7 +171,6 @@ def call_app(
         method,
         {"Cookie": cookie, "Content-Type": "application/json"},
         None if body is None else json.dumps(body).encode(),
-        urllib.request.build_opener(urllib.request.ProxyHandler({})),
     )
 
 
