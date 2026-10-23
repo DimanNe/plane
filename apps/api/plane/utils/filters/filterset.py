@@ -3,12 +3,16 @@
 # See the LICENSE file for details.
 
 import copy
+import datetime
 
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Coalesce
+from django.db.models.lookups import LessThan
+from django.utils import timezone
 from django_filters import FilterSet, filters
 
-from plane.db.models import Issue
+from plane.db.models import Issue, StateGroup
 from .custom_property import get_custom_property_q
 
 
@@ -198,6 +202,11 @@ class IssueFilterSet(BaseFilterSet):
     updated_at__exact = filters.DateFilter(field_name="updated_at", lookup_expr="date")
     updated_at__range = DateCSVRangeFilter(field_name="updated_at", lookup_expr="date__range")
 
+    # A closed work item, completed or cancelled, closed for more than this many days. The Display option that hides
+    # closed work items sends it negated, so that it applies on the server: to the pages, to the counts of the groups
+    # and to every layout.
+    closed_for_days__gt = filters.NumberFilter(method="filter_closed_for_days_gt")
+
     class Meta:
         model = Issue
         fields = {
@@ -208,6 +217,17 @@ class IssueFilterSet(BaseFilterSet):
             "is_draft": ["exact"],
             "priority": ["exact", "in"],
         }
+
+    def filter_closed_for_days_gt(self, queryset, name, value):
+        # FOR_REVIEWER: a cancelled work item had no moment of its own, only the activity log's record of the change,
+        # which a background task writes later: a work item cancelled a moment ago could have been hidden as closed
+        # long ago. Issue.cancelled_at (migration 0129, which fills it in for what was cancelled before) is set with
+        # the change itself, as completed_at is.
+        closed_before: datetime.datetime = timezone.now() - datetime.timedelta(days=float(value))
+        return Q(
+            LessThan(Coalesce("completed_at", "cancelled_at"), closed_before),
+            state__group__in=[StateGroup.COMPLETED.value, StateGroup.CANCELLED.value],
+        )
 
     def filter_is_archived(self, queryset, name, value):
         """

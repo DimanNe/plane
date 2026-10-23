@@ -124,11 +124,15 @@ def close_old_issues():
                 issues_to_update = []
                 for issue in issues:
                     issue.state = close_state
+                    # bulk_update skips Issue.save(), which records when a work item was completed or cancelled
+                    issue._sync_completed_at_and_cancelled_at({})
                     issues_to_update.append(issue)
 
                 # Bulk Update the issues and log the activity
                 if issues_to_update:
-                    Issue.objects.bulk_update(issues_to_update, ["state"], batch_size=100)
+                    Issue.objects.bulk_update(
+                        issues_to_update, ["state", "completed_at", "cancelled_at"], batch_size=100
+                    )
                     [
                         issue_activity.delay(
                             type="issue.activity.updated",
