@@ -66,7 +66,6 @@ def run(check: steps.Check) -> None:
             write for write in browser.read_writes(page, writes) if "comment" in write
         ],
         [],
-        seconds=1,
     )
     page.keyboard.press("Control+Enter")
     check.expect(
@@ -93,7 +92,6 @@ def run(check: steps.Check) -> None:
             write for write in browser.read_writes(page, writes) if "comment" in write
         ],
         [],
-        seconds=1,
     )
     page.keyboard.type("by the button")
     page.locator("#full-screen-portal").get_by_role(
@@ -128,7 +126,6 @@ def run(check: steps.Check) -> None:
             write for write in browser.read_writes(page, writes) if "comment" in write
         ],
         [],
-        seconds=1,
     )
     page.keyboard.press("Control+Enter")
     check.expect(

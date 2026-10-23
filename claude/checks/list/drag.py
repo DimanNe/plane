@@ -142,12 +142,10 @@ def check_what_is_drawn(
     )
     before: t.Any = read_stored(check, project)
     let_go_outside(page)
-    # the rule is that nothing is stored, so the step waits for what must not come
     check.expect_stays(
         "let go outside the list, the line stays where it was",
         lambda: (ll.read_drop_marks(page), read_stored(check, project)),
         ([], before),
-        seconds=1,
     )
     ll.carry_line(page, "t other")
     ll.hold_over(page, ll.line(page, "t child two"), down=0.15)

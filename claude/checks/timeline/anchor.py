@@ -203,11 +203,9 @@ def run(check: steps.Check) -> None:
         ),
         ((None, None, None), [], []),
     )
-    # the rule is that nothing comes after Escape, so the step gives the page the time to send it
     check.expect_stays(
         "and nothing is sent",
         lambda: browser.read_writes(page, browser.read_writes(page, writes)),
         [],
-        seconds=1,
     )
     page.context.close()

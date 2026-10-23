@@ -72,7 +72,6 @@ def run(check: steps.Check) -> None:
         "the board with nothing open: S D sends nothing",
         lambda: browser.read_writes(page, writes),
         [],
-        seconds=1,
     )
     page.get_by_text("on the board", exact=True).first.click()
     page.locator(ll.PANEL_TITLE).wait_for()

@@ -136,7 +136,6 @@ def run(check: steps.Check) -> None:
     control = chart.open_arrow_control(page, "first", "second")
     control.get_by_label("Delay in days").fill("6")
     page.keyboard.press("Escape")
-    # the rule is that nothing comes after Escape, so the step gives the page the time to send it
     check.expect_stays(
         "Escape closes the control, puts the arrow back and stores nothing",
         lambda: (
@@ -146,7 +145,6 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         (None, (chart.day(7), chart.day(9), False), stored, []),
-        seconds=1,
     )
 
     control = chart.open_arrow_control(page, "first", "second")
@@ -226,7 +224,6 @@ def run(check: steps.Check) -> None:
         "Delete and Backspace typed in the number remove no arrow, and the control stays open",
         lambda: (chart.read_control(page) is not None, chart.read_arrows(page)),
         (True, [("first", "second", "end-start"), ("second", "third", "end-start")]),
-        seconds=1,
     )
     page.keyboard.press("Escape")
     control = chart.open_arrow_control(page, "second", "third")
@@ -239,7 +236,6 @@ def run(check: steps.Check) -> None:
             chart.read_stored(check.instance, project),
         ),
         (True, "selected", stored),
-        seconds=1,
     )
     page.keyboard.press("Delete")
     check.expect(

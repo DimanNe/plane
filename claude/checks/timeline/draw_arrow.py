@@ -96,7 +96,6 @@ def check_refusals(
             ([[target[0], target[1], "refuses"]], [said], drawn),
         )
         chart.let_go(page)
-        # the rule is that nothing comes, so the step gives the page the time to send it
         check.expect_stays(
             f"an arrow {way}, let go: nothing is stored and the text is gone",
             lambda: (
@@ -105,7 +104,6 @@ def check_refusals(
                 browser.read_writes(page, writes),
             ),
             (stored, [], []),
-            seconds=1,
         )
 
 
@@ -137,7 +135,6 @@ def check_ends(
             browser.read_writes(page, writes),
         ),
         (True, stored, []),
-        seconds=1,
     )
     chart.drag(
         page,
@@ -194,7 +191,6 @@ def check_ends(
             browser.read_writes(page, writes),
         ),
         (True, stored, []),
-        seconds=1,
     )
 
 
@@ -249,7 +245,6 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         ([("first", "third", "end-start")], stored, []),
-        seconds=1,
     )
     draw(
         page, chart.get_handle_point(page, "first", "end"), chart.find_empty_point(page)
@@ -263,7 +258,6 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         ([("first", "third", "end-start")], stored, []),
-        seconds=1,
     )
 
     draw(

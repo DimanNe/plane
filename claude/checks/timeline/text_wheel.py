@@ -105,7 +105,6 @@ def run(check: steps.Check) -> None:
         ],
     )
     page.keyboard.press("Escape")
-    # the rule is that nothing comes after Escape, so the step gives the page the time to send it
     check.expect_stays(
         "Escape puts everything back, and nothing was sent",
         lambda: (
@@ -114,7 +113,6 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         ("in ≥ 2 d", (chart.day(5), chart.day(7), False), px_per_day, stored, []),
-        seconds=1,
     )
     said = []
     for _ in range(3):
@@ -192,6 +190,5 @@ def run(check: steps.Check) -> None:
         "and nothing is sent",
         lambda: browser.read_writes(page, writes),
         [],
-        seconds=1,
     )
     page.context.close()

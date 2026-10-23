@@ -73,12 +73,10 @@ def run(check: steps.Check) -> None:
     )
     page.keyboard.press("Escape")
     chart.let_go(page)
-    # the rule is that nothing comes after Escape, so the step gives the page the time to send it
     check.expect_stays(
         "Escape puts the bar back on its stored days and nothing is sent",
         lambda: (read_moved(check, project, page), browser.read_writes(page, writes)),
         (((chart.day(5), chart.day(7), True), (chart.day(5), chart.day(7), True)), []),
-        seconds=1,
     )
 
     start: browser.Point = chart.get_bar_point(page, "moved")
@@ -88,7 +86,6 @@ def run(check: steps.Check) -> None:
         "a bar let go less than half a day away stays on its days and nothing is sent",
         lambda: (read_moved(check, project, page), browser.read_writes(page, writes)),
         (((chart.day(5), chart.day(7), True), (chart.day(5), chart.day(7), True)), []),
-        seconds=1,
     )
 
     chart.drag_bar(page, "moved", 2, part="end")

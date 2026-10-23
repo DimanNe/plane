@@ -114,7 +114,6 @@ def run(check: steps.Check) -> None:
     carry_to_day(page, "dropped", chart.day(4))
     page.keyboard.press("Escape")
     page.mouse.up()
-    # the rule is that nothing comes, so the step gives the page the time to send it
     check.expect_stays(
         "let go over the list, or after Escape, a task is put nowhere and nothing is sent",
         lambda: (
@@ -127,7 +126,6 @@ def run(check: steps.Check) -> None:
             ((None, None, None), (None, None, None)),
             [],
         ),
-        seconds=1,
     )
 
     page.mouse.click(
@@ -140,6 +138,5 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         (((None, None, None), (None, None, None)), []),
-        seconds=1,
     )
     page.context.close()

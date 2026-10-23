@@ -108,12 +108,10 @@ def run(check: steps.Check) -> None:
         ["taken off"],
     )
     page.keyboard.press("Backspace")
-    # the rule is that nothing comes, so the step gives the page the time to send it
     check.expect_stays(
         "Backspace takes nothing off the chart",
         lambda: (chart.read_plan(page), browser.read_writes(page, writes)),
         (drawn, []),
-        seconds=1,
     )
     page.mouse.click(*chart.get_arrow_point(page, "earlier", "taken off"))
     check.expect(
@@ -127,7 +125,6 @@ def run(check: steps.Check) -> None:
         "Delete with nothing selected takes nothing off",
         lambda: (chart.read_plan(page), browser.read_writes(page, writes)),
         (drawn, []),
-        seconds=1,
     )
 
     page.mouse.click(*chart.get_bar_point(page, "taken off"))
@@ -181,7 +178,6 @@ def run(check: steps.Check) -> None:
         "Delete on a task that is not on the chart does nothing",
         lambda: (chart.read_selected(page), browser.read_writes(page, writes)),
         (["not placed"], []),
-        seconds=1,
     )
     page.mouse.click(*chart.get_entry_point(page, "after"))
     page.keyboard.press("Delete")

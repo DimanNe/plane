@@ -92,12 +92,10 @@ def run(check: steps.Check) -> None:
     page.locator(ll.PANEL_TITLE).click()
     page.keyboard.press("ArrowUp")
     page.keyboard.press("ArrowDown")
-    # the rule is that the selection does not move, so the step gives it the time to move
     check.expect_stays(
         "arrow keys typed in the view's title are the title's",
         lambda: read_selection(page),
         (["child two"], "child two"),
-        seconds=1,
     )
     page.keyboard.press("Escape")
     page.keyboard.press("Escape")

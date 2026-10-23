@@ -70,11 +70,9 @@ def run(check: steps.Check) -> None:
         [],
     )
     page.mouse.up()
-    # the rule is that nothing is stored, so the step waits for what must not come
     check.expect_stays(
         "let go over another group, its work item keeps its state",
         lambda: ins.read_state_name(check.instance, project, "grandparent"),
         "Backlog",
-        seconds=1,
     )
     page.context.close()

@@ -90,12 +90,11 @@ def check_key_of_an_administrator(check: steps.Check, account: ins.Account) -> N
         lambda: (ll.read_titles(page), ll.read_selected(page)),
         (["first", "second"], ["second"]),
     )
-    # the rule is that the held key deletes nothing more, however long the page is given
+    # the rule is that the held key deletes nothing more
     check.expect_stays(
         "and no second one after it",
         lambda: read_stored(check, project),
         ["first", "second"],
-        seconds=1,
     )
 
     ll.select_line(page, "first")
@@ -132,7 +131,6 @@ def check_key_that_is_not_the_lists(check: steps.Check, account: ins.Account) ->
         "with no line selected the key does nothing",
         lambda: (question.count(), read_stored(check, project)),
         (0, ["kept", "other"]),
-        seconds=1,
     )
     ll.select_line(page, "kept")
     page.keyboard.press("Backspace")
@@ -140,7 +138,6 @@ def check_key_that_is_not_the_lists(check: steps.Check, account: ins.Account) ->
         "Backspace on the selected line does nothing",
         lambda: (question.count(), ll.read_selected(page), read_stored(check, project)),
         (0, ["kept"], ["kept", "other"]),
-        seconds=1,
     )
     ll.line(page, "kept").locator("p").first.click(position={"x": 8, "y": 8})
     title: pw.Locator = page.locator('input[aria-label="Work item title"]')
@@ -152,7 +149,6 @@ def check_key_that_is_not_the_lists(check: steps.Check, account: ins.Account) ->
         "in a title that is edited Delete takes a letter and no work item",
         lambda: (title.input_value(), question.count(), read_stored(check, project)),
         ("ept", 0, ["kept", "other"]),
-        seconds=1,
     )
     page.keyboard.press("Escape")
     title.wait_for(state="detached")
@@ -166,7 +162,6 @@ def check_key_that_is_not_the_lists(check: steps.Check, account: ins.Account) ->
         "with the dialog of a new work item open the key does nothing",
         lambda: (question.count(), read_stored(check, project)),
         (0, ["kept", "other"]),
-        seconds=1,
     )
     page.context.close()
 
@@ -239,7 +234,6 @@ def check_key_of_other_users(check: steps.Check, administrator: ins.Account) -> 
         "and the key neither asks a guest nor deletes",
         lambda: (question.count(), ll.read_messages(page), read_stored(check, project)),
         (0, [], ["of another"]),
-        seconds=1,
     )
     page.context.close()
 

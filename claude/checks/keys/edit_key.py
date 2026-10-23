@@ -48,7 +48,6 @@ def run(check: steps.Check) -> None:
         "with no line selected E opens nothing",
         lambda: ll.read_panel(page),
         None,
-        seconds=1,
     )
 
     ll.select_line(page, "first")

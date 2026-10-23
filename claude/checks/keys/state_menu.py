@@ -100,7 +100,6 @@ def run(check: steps.Check) -> None:
         )
     writes.clear()
     press_state_key(page, "c")
-    # the rule is that nothing is sent, so the step gives the page the time to send it
     check.expect_stays(
         "S C on a work item that is Cancelled already closes the menu and sends nothing",
         lambda: (
@@ -108,7 +107,6 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         (0, []),
-        seconds=1,
     )
 
     page.keyboard.press("s")
@@ -118,7 +116,6 @@ def run(check: steps.Check) -> None:
         "S and Arrow Down: the menu stays open as an ordinary one",
         lambda: page.locator(ll.PROPERTY_MENU).count(),
         1,
-        seconds=1,
     )
     page.keyboard.press("Escape")
     check.expect(
@@ -160,7 +157,6 @@ def run(check: steps.Check) -> None:
         "in a title that is edited S and D are letters of the title",
         lambda: (title.input_value(), page.locator(ll.PROPERTY_MENU).count()),
         ("thirdsd", 0),
-        seconds=1,
     )
     page.keyboard.press("Escape")
     page.context.close()
@@ -178,6 +174,5 @@ def run(check: steps.Check) -> None:
             ins.read_state_name(check.instance, project, "first"),
         ),
         (0, [], "Backlog"),
-        seconds=1,
     )
     page.context.close()

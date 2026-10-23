@@ -22,6 +22,7 @@ import urllib.request
 import playwright.sync_api as pw
 
 import instance as ins
+import settle
 import steps
 
 OFFSCREEN_CHROME: pl.Path = ins.REPOSITORY / "claude/tools/offscreen_chrome.sh"
@@ -123,6 +124,7 @@ def open_page(
             for name, value in account.cookies.items()
         ]
     )
+    settle.install_settle_watch(context)
     page: pw.Page = context.new_page()
     page.on(
         "pageerror",

@@ -124,12 +124,10 @@ def run(check: steps.Check) -> None:
 
     tooltip: pw.Locator = page.get_by_role("tooltip")
     full.locator("p").first.hover()
-    # the rule is that no tooltip comes, and a tooltip takes its time to come
     check.expect_stays(
         "the pointer resting on the title of a line brings no tooltip that says the title again",
         lambda: tooltip.count(),
         0,
-        seconds=2,
     )
     full.get_by_role("button", name="State").hover()
     check.expect(

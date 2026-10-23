@@ -140,7 +140,6 @@ def run(check: steps.Check) -> None:
         (chart.get_day_x(page, chart.day(5), 0.5), box["y"] + box["height"] / 2),
     )
     chart.let_go(page)
-    # the rule is that nothing comes, so the step gives the page the time to do it
     check.expect_stays(
         "a press on the state dragged onto the chart carries nothing, selects nothing and opens no menu",
         lambda: (
@@ -150,7 +149,6 @@ def run(check: steps.Check) -> None:
             len(browser.read_writes(page, writes)),
         ),
         ((None, None, None), [], 0, 2),
-        seconds=1,
     )
     page.context.close()
 
@@ -168,6 +166,5 @@ def run(check: steps.Check) -> None:
         "and a click on either opens nothing",
         lambda: page.locator(ll.PROPERTY_MENU).count(),
         0,
-        seconds=1,
     )
     page.context.close()

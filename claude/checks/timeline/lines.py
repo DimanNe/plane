@@ -156,7 +156,6 @@ def run(check: steps.Check) -> None:
     )
     page.keyboard.press("Escape")
     chart.let_go(page)
-    # the rule is that nothing comes after Escape, so the step gives the page the time to send it
     check.expect_stays(
         "Escape: the line is back, nothing is sent, and the list is in its order still",
         lambda: (
@@ -165,7 +164,6 @@ def run(check: steps.Check) -> None:
             read_order_by(check, account, project),
         ),
         (newest_first, [], "-created_at"),
-        seconds=1,
     )
 
     drag_line(page, entry, "parent")

@@ -73,7 +73,6 @@ def run(check: steps.Check) -> None:
     page.mouse.click(
         chart.get_day_x(page, chart.day(9), 0.5), chart.get_line_y(page, "second")
     )
-    # the rule is that nothing comes, so the step gives the page the time to do it
     check.expect_stays(
         "a click on the empty part of a task's line changes nothing",
         lambda: (
@@ -82,6 +81,5 @@ def run(check: steps.Check) -> None:
             browser.read_writes(page, writes),
         ),
         ((["first"], None), (chart.day(4), chart.day(6), True), []),
-        seconds=1,
     )
     page.context.close()
