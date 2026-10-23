@@ -1,0 +1,82 @@
+diff --git a/dist/elements/alert-dialog/variants.js b/dist/elements/alert-dialog/variants.js
+index 61dfc10810165996f1937215e453b829bde0e4c6..188fd6218cce0d52648c55ab4bf864c3614e68e0 100644
+--- a/dist/elements/alert-dialog/variants.js
++++ b/dist/elements/alert-dialog/variants.js
+@@ -4,7 +4,7 @@ import { overlayCloseClass } from "../../internal/overlay-frame.js";
+ import { cva, cx } from "class-variance-authority";
+ //#region src/elements/alert-dialog/variants.ts
+ const alertDialogViewportVariants = cva("fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center");
+-const alertDialogPopupVariants = cva(cx("relative flex max-h-[min(740px,calc(100dvh-2rem))] w-150 max-w-[calc(100vw-2rem)] flex-col overflow-clip", "rounded-lg border-sm border-subtle bg-surface-1 shadow-raised-300 outline-none", "origin-(--transform-origin) transition-[opacity,transform] duration-200 motion-reduce:transition-none", "data-starting-style:scale-95 data-starting-style:opacity-0", "data-ending-style:scale-95 data-ending-style:opacity-0"));
++const alertDialogPopupVariants = cva(cx("relative flex max-h-[min(740px,calc(100dvh-2rem))] w-150 max-w-[calc(100vw-2rem)] flex-col overflow-clip", "rounded-[var(--dialog-radius,var(--radius-xl))] bg-[var(--dialog-surface,var(--bg-surface-1))] shadow-[var(--dialog-shadow,var(--shadow-raised-300))] ease-[var(--dialog-ease,ease)] [--button-radius:var(--dialog-button-radius)] outline-none", "origin-(--transform-origin) transition-[opacity,transform] duration-200 motion-reduce:transition-none", "data-starting-style:scale-95 data-starting-style:opacity-0", "data-ending-style:scale-95 data-ending-style:opacity-0"));
+ const alertDialogBodyVariants = cva("flex max-h-[min(680px,calc(100dvh-2rem-3.75rem))] min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain px-5 pt-5 pb-3");
+ const alertDialogHeaderVariants = cva("flex flex-col gap-4 max-sm:text-center");
+ const alertDialogIconVariants = cva(cx(nodeSlotClass, "inline-flex items-center justify-center self-start rounded-lg p-2 [--node-size:var(--control-glyph-2xl)] max-sm:size-12 max-sm:self-center"), { variants: { variant: {
+diff --git a/dist/elements/dialog/variants.js b/dist/elements/dialog/variants.js
+index a0263830bd17dd39f5a8affb7ece2d7e37b1c577..021832731f7757e3527592760dd9cfcfe2c57970 100644
+--- a/dist/elements/dialog/variants.js
++++ b/dist/elements/dialog/variants.js
+@@ -3,7 +3,7 @@ import { nodeSlotClass } from "../../internal/node-slot.js";
+ import { cva, cx } from "class-variance-authority";
+ //#region src/elements/dialog/variants.ts
+ const dialogViewportVariants = cva("fixed inset-0 z-50 flex items-start justify-center px-4 py-20");
+-const dialogPopupVariants = cva(cx("relative flex max-h-[calc(100dvh-10rem)] max-w-[calc(100vw-2rem)] flex-col overflow-clip rounded-xl border-sm border-subtle bg-surface-1 shadow-raised-300 outline-none", "origin-(--transform-origin) transition-[opacity,transform] duration-200 motion-reduce:transition-none", "data-starting-style:scale-95 data-starting-style:opacity-0", "data-ending-style:scale-95 data-ending-style:opacity-0"), {
++const dialogPopupVariants = cva(cx("relative flex max-h-[calc(100dvh-10rem)] max-w-[calc(100vw-2rem)] flex-col overflow-clip rounded-[var(--dialog-radius,var(--radius-xl))] bg-[var(--dialog-surface,var(--bg-surface-1))] shadow-[var(--dialog-shadow,var(--shadow-raised-300))] ease-[var(--dialog-ease,ease)] [--button-radius:var(--dialog-button-radius)] outline-none", "origin-(--transform-origin) transition-[opacity,transform] duration-200 motion-reduce:transition-none", "data-starting-style:scale-95 data-starting-style:opacity-0", "data-ending-style:scale-95 data-ending-style:opacity-0"), {
+ 	variants: {
+ 		size: {
+ 			xs: "w-120",
+@@ -217,7 +217,7 @@ const dialogDescriptionVariants = cva("text-body-xs-regular text-tertiary");
+ const dialogBodyVariants = cva("min-h-0 flex-1 overflow-y-auto overscroll-contain");
+ const dialogActionsDefaultVariants = { ...dialogChromeDefaultVariants };
+ const dialogToolbarDefaultVariants = { ...dialogChromeDefaultVariants };
+-const dialogToolbarVariants = cva("flex shrink-0 items-center justify-between gap-3 border-b border-subtle", {
++const dialogToolbarVariants = cva("flex shrink-0 items-center justify-between gap-3", {
+ 	variants: {
+ 		size: dialogSizeVariants,
+ 		density: dialogDensityVariants
+@@ -225,7 +225,7 @@ const dialogToolbarVariants = cva("flex shrink-0 items-center justify-between ga
+ 	compoundVariants: dialogToolbarGutterCompounds,
+ 	defaultVariants: dialogToolbarDefaultVariants
+ });
+-const dialogActionsVariants = cva("flex shrink-0 items-center justify-end gap-3 border-t border-subtle", {
++const dialogActionsVariants = cva("flex shrink-0 items-center justify-end gap-3", {
+ 	variants: {
+ 		size: dialogSizeVariants,
+ 		density: dialogDensityVariants
+diff --git a/dist/elements/icon-button/variants.js b/dist/elements/icon-button/variants.js
+index cd2795d2f52b4fd4afce45b98a3cb0c777b4657c..41f22700586d59c4fb3454a198c83e2e3c5cf122 100644
+--- a/dist/elements/icon-button/variants.js
++++ b/dist/elements/icon-button/variants.js
+@@ -13,10 +13,10 @@ const iconButtonVariants = composeVariants(controlChromeVariants, cva("", { vari
+ 		"danger-outline": ""
+ 	},
+ 	size: {
+-		xs: "size-(--control-height-xs) rounded-(--control-radius-xs) [--node-size:var(--control-glyph-xs)] before:absolute before:-inset-0.5 before:-z-10 before:content-['']",
+-		sm: "size-(--control-height-sm) rounded-(--control-radius-sm) [--node-size:var(--control-glyph-sm)]",
+-		md: "size-(--control-height-md) rounded-(--control-radius-md) [--node-size:var(--control-glyph-md)]",
+-		lg: "size-(--control-height-lg) rounded-(--control-radius-lg) [--node-size:var(--control-glyph-lg)]"
++		xs: "size-(--control-height-xs) rounded-[var(--button-radius,var(--control-radius-xs))] [--node-size:var(--control-glyph-xs)] before:absolute before:-inset-0.5 before:-z-10 before:content-['']",
++		sm: "size-(--control-height-sm) rounded-[var(--button-radius,var(--control-radius-sm))] [--node-size:var(--control-glyph-sm)]",
++		md: "size-(--control-height-md) rounded-[var(--button-radius,var(--control-radius-md))] [--node-size:var(--control-glyph-md)]",
++		lg: "size-(--control-height-lg) rounded-[var(--button-radius,var(--control-radius-lg))] [--node-size:var(--control-glyph-lg)]"
+ 	}
+ } }));
+ //#endregion
+diff --git a/dist/internal/button-geometry.js b/dist/internal/button-geometry.js
+index 317fff9cee4e0b292b8f06a6c2a9a97ef638bb2d..df3ac9e50b7b714087f7de81429b474b46aafda1 100644
+--- a/dist/internal/button-geometry.js
++++ b/dist/internal/button-geometry.js
+@@ -3,10 +3,10 @@ import { cva, cx } from "class-variance-authority";
+ //#region src/internal/button-geometry.ts
+ const buttonGeometryVariants = cva(cx("whitespace-nowrap"), { variants: {
+ 	size: {
+-		xs: cx("h-(--control-height-xs) min-w-10 gap-(--control-gap-xs) px-(--control-padding-x-xs)", "rounded-(--control-radius-xs) text-caption-md-medium [--node-size:var(--control-glyph-xs)]", "before:absolute before:-inset-0.5 before:-z-10 before:content-['']"),
+-		sm: cx("h-(--control-height-sm) min-w-10 gap-(--control-gap-sm) px-(--control-padding-x-sm)", "rounded-(--control-radius-sm) text-body-xs-medium [--node-size:var(--control-glyph-sm)]"),
+-		md: cx("h-(--control-height-md) min-w-12 gap-(--control-gap-md) px-(--control-padding-x-md)", "rounded-(--control-radius-md) text-body-xs-medium [--node-size:var(--control-glyph-md)]"),
+-		lg: cx("h-(--control-height-lg) min-w-13 gap-(--control-gap-lg) px-(--control-padding-x-lg)", "rounded-(--control-radius-lg) text-body-sm-medium [--node-size:var(--control-glyph-lg)]")
++		xs: cx("h-(--control-height-xs) min-w-10 gap-(--control-gap-xs) px-(--control-padding-x-xs)", "rounded-[var(--button-radius,var(--control-radius-xs))] text-caption-md-medium [--node-size:var(--control-glyph-xs)]", "before:absolute before:-inset-0.5 before:-z-10 before:content-['']"),
++		sm: cx("h-(--control-height-sm) min-w-10 gap-(--control-gap-sm) px-(--control-padding-x-sm)", "rounded-[var(--button-radius,var(--control-radius-sm))] text-body-xs-medium [--node-size:var(--control-glyph-sm)]"),
++		md: cx("h-(--control-height-md) min-w-12 gap-(--control-gap-md) px-(--control-padding-x-md)", "rounded-[var(--button-radius,var(--control-radius-md))] text-body-xs-medium [--node-size:var(--control-glyph-md)]"),
++		lg: cx("h-(--control-height-lg) min-w-13 gap-(--control-gap-lg) px-(--control-padding-x-lg)", "rounded-[var(--button-radius,var(--control-radius-lg))] text-body-sm-medium [--node-size:var(--control-glyph-lg)]")
+ 	},
+ 	stretch: {
+ 		auto: "",

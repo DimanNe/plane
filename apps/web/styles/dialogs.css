@@ -2,18 +2,21 @@
  * A dialog is the one thing to look at while it is open, and nothing in it should compete with what is typed into
  * it. It stands above the dimmed page by a soft shadow and its own tone rather than by a line around it: the dimmed
  * page already sets it apart, and a line is one more edge to read. Its corners are rounder than those of the
- * controls in it, so that it reads as the one region that holds them. Inside, space parts the toolbar, the body and
- * the actions; propel's lines between them go.
+ * controls in it, so that it reads as the one region that holds them, and its buttons are round at their ends: a
+ * filled primary button then carries its colour without the hard edges of a box.
  *
- * A modal dialog of Base UI has the role "dialog" or "alertdialog" and, unlike a pop-up anchored to a control, no
- * data-side. The same picture of the dialog is what turns into the line of a new work item (new-work-item.css).
+ * propel's dialog and alert dialog take these tokens through the patch in patches/@makeplane__propel@*.patch, which
+ * also drops the lines between a dialog's toolbar, body and actions. The same picture of the dialog is what turns
+ * into the line of a new work item (new-work-item.css).
  */
 :root {
   --dialog-radius: 1rem;
+  --dialog-surface: var(--bg-surface-1);
   --dialog-shadow:
     0 0 0 1px rgb(41 47 61 / 0.05), 0 4px 10px -2px rgb(41 47 61 / 0.06), 0 24px 56px -12px rgb(41 47 61 / 0.22);
   /* fast at first, then settling: what arrives slows down into its place */
   --dialog-ease: cubic-bezier(0.2, 0, 0, 1);
+  --dialog-button-radius: 9999px;
 }
 
 /*
@@ -21,40 +24,9 @@
  * lighter surface, and a faint light edge.
  */
 [data-theme*="dark"] {
+  --dialog-surface: var(--bg-surface-2);
   --dialog-shadow:
     0 0 0 1px rgb(255 255 255 / 0.09), 0 4px 10px -2px rgb(0 0 0 / 0.4), 0 24px 56px -12px rgb(0 0 0 / 0.65);
-}
-
-:is([role="dialog"]:not([data-side]), [role="alertdialog"]) {
-  border-color: transparent;
-  border-radius: var(--dialog-radius);
-  box-shadow: var(--dialog-shadow);
-  transition-timing-function: var(--dialog-ease);
-}
-
-[data-theme*="dark"] :is([role="dialog"]:not([data-side]), [role="alertdialog"]) {
-  background-color: var(--bg-surface-2);
-}
-
-/* propel's DialogToolbar and DialogActions, known by the classes they are drawn with */
-:is([role="dialog"]:not([data-side]), [role="alertdialog"]) :is(.border-t, .border-b).border-subtle.shrink-0.gap-3 {
-  /* FOR_REVIEWER: propel (@makeplane/propel, a dependency, not in this repository) gives its dialog parts no class of
-     their own and takes no className, so this file finds them by role, data-side and the utilities they are drawn
-     with. A propel upgrade that redraws them can silently undo a rule here; dialogs/new_work_item_dialog.py would
-     notice for the work item dialog only. The alternative, wrappers of propel's dialog parts in the app, would touch
-     every one of the dialogs that use them. */
-  border-color: transparent;
-}
-
-/*
- * The buttons of a dialog, which take their corners from propel's control radius, are round at their ends: a filled
- * primary button then carries its colour without the hard edges of a box, and the buttons of a work item's
- * properties read as chips that can be taken, not as fields to fill in.
- */
-:is([role="dialog"]:not([data-side]), [role="alertdialog"]) button[class*="rounded-(--control-radius-"] {
-  /* FOR_REVIEWER: in the work item dialog this reaches Discard and Save; the buttons of its properties (Backlog,
-     Assignees, ...) are drawn by @plane/ui with corners of their own and stay as they are in this phase. */
-  border-radius: 9999px;
 }
 
 /* The title of a new work item, the first line of the text that its description goes on: a heading's size. */

@@ -316,3 +316,6 @@ peerDependencyRules:
     # strict-peer-dependencies=false.
     "react-masonry-component>react": "19"
     "use-font-face-observer>react": "19"
+
+patchedDependencies:
+  '@makeplane/propel@0.7.3': patches/@makeplane__propel@0.7.3.patch

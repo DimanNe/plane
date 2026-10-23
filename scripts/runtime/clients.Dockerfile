@@ -4,6 +4,8 @@ ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1 TURBO_TELEMETRY_DISABLED=1
 RUN npm install -g pnpm@11.10.0
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .gitignore ./
+# the patches that pnpm-workspace.yaml applies to dependencies on install
+COPY patches ./patches
 # The dependencies are installed from the manifests alone, before any source is copied. node_modules is most of
 # these images, and the live and space images are this whole stage: installed after the sources, it was a new
 # layer at every change of a source file, and saving the image wrote and unpacked all of it again.
