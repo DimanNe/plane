@@ -1,3 +1,59 @@
+diff --git a/dist/components/alert-dialog/alert-dialog-content.js b/dist/components/alert-dialog/alert-dialog-content.js
+index bad1c1f31827c1b11c6da30d6ea13af807f0d865..cd2b1aaad069cbebdbd1c86c33c89a7b0b8b2c75 100644
+--- a/dist/components/alert-dialog/alert-dialog-content.js
++++ b/dist/components/alert-dialog/alert-dialog-content.js
+@@ -4,6 +4,7 @@ import { AlertDialogPopup } from "../../elements/alert-dialog/alert-dialog-popup
+ import { AlertDialogViewport } from "../../elements/alert-dialog/alert-dialog-viewport.js";
+ import { jsx, jsxs } from "react/jsx-runtime";
+ import { AlertDialog } from "@base-ui/react/alert-dialog";
++import { useFinalFocusOfFocusBeforeOpen } from "../../internal/final-focus-of-focus-before-open.js";
+ //#region src/components/alert-dialog/alert-dialog-content.tsx
+ /**
+ * Convenience that composes the alert dialog overlay boilerplate — Base UI portal, the 25% black
+@@ -22,6 +23,7 @@ import { AlertDialog } from "@base-ui/react/alert-dialog";
+ * while unmounting.
+ */
+ function AlertDialogContent(props) {
++	const finalFocus = useFinalFocusOfFocusBeforeOpen();
+ 	return /* @__PURE__ */ jsxs(AlertDialog.Portal, { children: [/* @__PURE__ */ jsx(AlertDialog.Backdrop, {
+ 		forceRender: true,
+ 		style: (state) => state.open ? void 0 : { pointerEvents: "none" },
+@@ -29,6 +31,7 @@ function AlertDialogContent(props) {
+ 	}), /* @__PURE__ */ jsx(AlertDialog.Viewport, {
+ 		render: /* @__PURE__ */ jsx(AlertDialogViewport, {}),
+ 		children: /* @__PURE__ */ jsx(AlertDialog.Popup, {
++			finalFocus,
+ 			...props,
+ 			render: /* @__PURE__ */ jsx(AlertDialogPopup, {})
+ 		})
+diff --git a/dist/components/dialog/dialog-content.js b/dist/components/dialog/dialog-content.js
+index e39d6c11183722dca66d474749030ea0760c1ea7..01f9b8c0a0643bd7caa3af43effff7f1cd9a6ccc 100644
+--- a/dist/components/dialog/dialog-content.js
++++ b/dist/components/dialog/dialog-content.js
+@@ -3,6 +3,7 @@ import { DialogPopup } from "../../elements/dialog/dialog-popup.js";
+ import { DialogViewport } from "../../elements/dialog/dialog-viewport.js";
+ import { DialogDensityContext, DialogPanesContext, DialogSizeContext } from "./dialog-context.js";
+ import { Backdrop } from "../../internal/backdrop.js";
++import { useFinalFocusOfFocusBeforeOpen } from "../../internal/final-focus-of-focus-before-open.js";
+ import { jsx, jsxs } from "react/jsx-runtime";
+ import { Dialog } from "@base-ui/react/dialog";
+ //#region src/components/dialog/dialog-content.tsx
+@@ -18,6 +19,7 @@ import { Dialog } from "@base-ui/react/dialog";
+ * fill from a parent `DialogPanes` through the portal.
+ */
+ function DialogContent({ size = "md", height = "auto", density = "comfortable", ...props }) {
++	const finalFocus = useFinalFocusOfFocusBeforeOpen();
+ 	return /* @__PURE__ */ jsxs(Dialog.Portal, { children: [/* @__PURE__ */ jsx(Dialog.Backdrop, {
+ 		forceRender: true,
+ 		style: (state) => state.open ? void 0 : { pointerEvents: "none" },
+@@ -31,6 +33,7 @@ function DialogContent({ size = "md", height = "auto", density = "comfortable",
+ 				children: /* @__PURE__ */ jsx(DialogPanesContext.Provider, {
+ 					value: false,
+ 					children: /* @__PURE__ */ jsx(Dialog.Popup, {
++						finalFocus,
+ 						...props,
+ 						render: /* @__PURE__ */ jsx(DialogPopup, {
+ 							size,
 diff --git a/dist/elements/alert-dialog/variants.js b/dist/elements/alert-dialog/variants.js
 index 61dfc10810165996f1937215e453b829bde0e4c6..188fd6218cce0d52648c55ab4bf864c3614e68e0 100644
 --- a/dist/elements/alert-dialog/variants.js
@@ -93,3 +149,27 @@ index 317fff9cee4e0b292b8f06a6c2a9a97ef638bb2d..df3ac9e50b7b714087f7de81429b474b
  	},
  	stretch: {
  		auto: "",
+diff --git a/dist/internal/final-focus-of-focus-before-open.js b/dist/internal/final-focus-of-focus-before-open.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..8cfe68611eaabb744be992bd1014799fa71445f0
+--- /dev/null
++++ b/dist/internal/final-focus-of-focus-before-open.js
+@@ -0,0 +1,18 @@
++"use client";
++import { useState } from "react";
++//#region fork: final focus of the focus before open
++/**
++* Whether the focus goes back when a dialog closes. Base UI's default goes back to the element that had the focus when
++* the dialog opened, but where that was the page itself, as for a dialog that a key shortcut opens, it falls back to
++* the last element focused anywhere before, kept across all popups: a control far from what the person was doing,
++* such as the workspace switcher, which then opened its menu on the next arrow key. In that case the focus stays on
++* the page, so the keys that follow are the page's again; otherwise Base UI's default applies, with its rule that a
++* focus that has moved on elsewhere meanwhile is left there. That rule holds only for `true` itself, not for a
++* function, hence a value fixed as the dialog's content first renders, which is before Base UI moves the focus into it.
++*/
++function useFinalFocusOfFocusBeforeOpen() {
++	const [focusBeforeOpen] = useState(() => typeof document === "undefined" ? void 0 : document.activeElement);
++	return focusBeforeOpen === void 0 || (focusBeforeOpen !== null && focusBeforeOpen !== document.body);
++}
++//#endregion
++export { useFinalFocusOfFocusBeforeOpen };

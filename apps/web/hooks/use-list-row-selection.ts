@@ -135,11 +135,43 @@ export const useListRowSelection = (props: Props) => {
     });
   };
 
+  // The rows on either side of the last click in the list. With no row selected the arrow keys start there, at what
+  // the person was looking at, rather than at the top of the list: after a click on the header of an empty group,
+  // Arrow Down selects the first row below it, in the next group that has one.
+  const rowsAroundLastClickRef = useRef<{ below?: (typeof rows)[number]; above?: (typeof rows)[number] }>({});
+  const keepRowsAroundLastClick = useLatestCallback((e: PointerEvent) => {
+    if (!(e.target instanceof Element) || !containerRef.current?.contains(e.target)) return;
+    const rowsAroundClick: typeof rowsAroundLastClickRef.current = {};
+    for (const row of rows) {
+      // a row that is not drawn, far from the click, has no place to compare
+      const place = document.getElementById(getIssueBlockId(row.issueId, row.groupId))?.getBoundingClientRect();
+      if (!place) continue;
+      // a row under the click is on both sides of it
+      if (place.top < e.clientY) rowsAroundClick.above = row;
+      if (place.bottom > e.clientY) rowsAroundClick.below ??= row;
+    }
+    rowsAroundLastClickRef.current = rowsAroundClick;
+  });
+  useEffect(() => {
+    document.addEventListener("pointerdown", keepRowsAroundLastClick, true);
+    return () => document.removeEventListener("pointerdown", keepRowsAroundLastClick, true);
+  }, [keepRowsAroundLastClick]);
+
+  /** The row that an arrow key selects where none is: the one beside the last click that the key goes towards. */
+  const getRowBesideLastClick = (step: number) => {
+    const { below, above } = rowsAroundLastClickRef.current;
+    const besideClick = step > 0 ? (below ?? above) : (above ?? below);
+    return (
+      (besideClick && rows.find((row) => row.issueId === besideClick.issueId && row.groupId === besideClick.groupId)) ??
+      rows[0]
+    );
+  };
+
   const moveSelection = (e: KeyboardEvent, step: number) => {
     // the arrow keys also leave the title of the selected row while it is edited
     if (!isListKey(e) && !(isPlainKey(e) && selectedRow?.isEditing)) return;
     e.preventDefault();
-    const row = selectedRow ? rows[selectedRowIndex + step] : rows[0];
+    const row = selectedRow ? rows[selectedRowIndex + step] : getRowBesideLastClick(step);
     if (!row) return;
     // the input of an edited title saves the name as the focus leaves it
     if (selectedRow?.isEditing && document.activeElement instanceof HTMLElement) document.activeElement.blur();
