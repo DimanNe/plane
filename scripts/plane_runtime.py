@@ -580,6 +580,10 @@ def get_plane_environment(
         "DEBUG": "0",
         "SECRET_KEY": service_secrets[plane_config.SecretName.DJANGO],
         "DATABASE_URL": f"postgresql://plane:{service_secrets[plane_config.SecretName.POSTGRES]}@127.0.0.1:{SERVICE_PORTS[plane_config.Service.POSTGRES]}/plane",
+        # Opening a database connection was a large part of a small API request. Each thread of the API, the worker
+        # and beat keeps its connection for later requests and tasks: about twenty per instance, well under
+        # Postgres's max_connections (see start_postgres()).
+        "DATABASE_CONN_MAX_AGE": "60",
         "REDIS_URL": f"redis://127.0.0.1:{redis_port}/0",
         "AMQP_URL": f"redis://127.0.0.1:{redis_port}/1",
         "WEB_URL": origin,

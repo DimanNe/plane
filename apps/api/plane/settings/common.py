@@ -216,6 +216,9 @@ else:
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
         }
     }
+# A connection kept for later requests saves opening one, a large part of a small request; checked before reuse
+DATABASES["default"]["CONN_MAX_AGE"] = int(os.environ.get("DATABASE_CONN_MAX_AGE", "0"))
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = DATABASES["default"]["CONN_MAX_AGE"] > 0
 
 
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
