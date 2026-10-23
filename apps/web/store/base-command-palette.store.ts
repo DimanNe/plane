@@ -131,7 +131,8 @@ export class BaseCommandPaletteStore implements IBaseCommandPaletteStore {
     );
   }
   // computedFn
-  getIsProjectListOpen = computedFn((projectId: string) => this.projectListOpenMap[projectId]);
+  // a project of the sidebar shows its pages until the user folds it
+  getIsProjectListOpen = computedFn((projectId: string) => this.projectListOpenMap[projectId] ?? true);
 
   /**
    * Toggles the project list open state
@@ -140,7 +141,7 @@ export class BaseCommandPaletteStore implements IBaseCommandPaletteStore {
    */
   toggleProjectListOpen = (projectId: string, value?: boolean) => {
     if (value !== undefined) this.projectListOpenMap[projectId] = value;
-    else this.projectListOpenMap[projectId] = !this.projectListOpenMap[projectId];
+    else this.projectListOpenMap[projectId] = !this.getIsProjectListOpen(projectId);
   };
 
   /**

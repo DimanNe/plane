@@ -61,7 +61,7 @@ def run(check: steps.Check) -> None:
 
     page: pw.Page = browser.open_page(check, account, f"{workspace}/")
     sidebar: pw.Locator = page.get_by_role("complementary", name="Main sidebar")
-    sidebar.get_by_text(project.name, exact=True).click()
+    # the project is open in the sidebar, with its pages under it
     sidebar.locator(f'a[href$="/projects/{project.id}/issues/"]').click()
     check.expect(
         "the project opened from the sidebar has an address made of its identifier",
