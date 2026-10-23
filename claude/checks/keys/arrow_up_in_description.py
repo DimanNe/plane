@@ -132,13 +132,19 @@ def run(check: steps.Check) -> None:
 
     ll.select_line(page, "with text")
     page.keyboard.press("Enter")
-    check_arrow_up_from_second_line(
-        check,
-        page,
-        "in the view beside the list",
-        page.locator(ll.PANEL_TITLE),
-        page.locator("#full-screen-portal .ProseMirror", has_text="second line"),
-    )
+    # The view saves its title a moment after the last key. The work item's page, opened next, would load the title
+    # from before that save and receive the saved one while its steps run.
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and '"name"' in (response.request.post_data or "")
+    ):
+        check_arrow_up_from_second_line(
+            check,
+            page,
+            "in the view beside the list",
+            page.locator(ll.PANEL_TITLE),
+            page.locator("#full-screen-portal .ProseMirror", has_text="second line"),
+        )
 
     work_item_page: pw.Page = browser.open_page(
         check, account, f"/{check.instance.workspace}/browse/{project.identifier}-1/"

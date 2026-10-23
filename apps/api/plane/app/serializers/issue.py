@@ -46,6 +46,7 @@ from plane.db.models import (
     IssueType,
     Milestone,
 )
+from plane.utils.lost_update import prevent_lost_update
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
@@ -307,6 +308,7 @@ class IssueCreateSerializer(BaseSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        prevent_lost_update(instance, validated_data)
         assignees = validated_data.pop("assignee_ids", None)
         labels = validated_data.pop("label_ids", None)
         validated_data.update(
