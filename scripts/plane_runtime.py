@@ -6,6 +6,7 @@ import contextlib
 import csv
 import ctypes
 import dataclasses as dc
+import enum
 import functools
 import hashlib
 import http.client
@@ -70,6 +71,12 @@ SERVICE_PORTS: t.Dict[plane_config.Service, int] = {
 }
 # Tells a Python service that loaded its code to run; see apps/api/preload_and_wait.py.
 START_SIGNAL: str = "SIGURG"
+# The one instance that start --persist-auto systemd starts at every boot: a unit of the user's systemd, which
+# itself starts at boot because the user lingers (see dockerfiles/20_plane). One unit, so that persisting another
+# run directory moves it rather than adding a second instance on the same port.
+PERSIST_AUTO_UNIT_NAME: str = "plane-persist-auto.service"
+# What the unit runs: this script, in the checkout that persisted it.
+PLANE_RUNTIME_SCRIPT: pl.Path = pl.Path(__file__).resolve()
 
 
 class DockerMetrics(t.TypedDict):
@@ -153,6 +160,10 @@ class BindAddress:
             raise argparse.ArgumentTypeError(f"Port out of range: {text!r}")
         return address
 
+    def __str__(self) -> str:
+        """The text that parse() reads, as --bind takes it."""
+        return f"{self.host}:{self.port}"
+
     def get_host_for_local_clients(self) -> ipaddress.IPv4Address:
         return (
             ipaddress.IPv4Address("127.0.0.1")
@@ -171,6 +182,15 @@ def parse_image_tag(text: str) -> plane_config.ImageTag:
             f"{text!r} names the images of the instances started without --image-tag"
         )
     return plane_config.ImageTag(text)
+
+
+class PersistAuto(enum.StrEnum):
+    """What start --persist-auto does about starting the instance at boot."""
+
+    # writes the unit that starts this instance at every boot, or rewrites it with these arguments
+    SYSTEMD = "systemd"
+    # removes that unit; this start then starts the instance once, as without --persist-auto
+    NONE = "none"
 
 
 def make_bind_mount_option(
@@ -2100,6 +2120,227 @@ def print_lifecycle_result(
     )
 
 
+def get_persist_auto_unit_path() -> pl.Path:
+    return expand_home(pl.Path("~/.config/systemd/user")) / PERSIST_AUTO_UNIT_NAME
+
+
+def require_plain_systemd_argument(value: str) -> str:
+    # systemd splits ExecStart= on blanks, removes quotes and expands % specifiers and $ variables. An argument
+    # with any such character is refused rather than escaped, so that the unit reads back as it was written.
+    if not re.fullmatch(r"[A-Za-z0-9_./:@+,=-]+", value):
+        raise RuntimeError(
+            f"Cannot persist an argument with blanks, quotes, '%' or '$': {value!r}"
+        )
+    return value
+
+
+def get_persisted_start(start: "StartCommand") -> "StartCommand":
+    """The start that the persist-auto unit runs: the arguments of this one, with absolute paths."""
+    return StartCommand(
+        run_dir=resolve_run_dir(start.run_dir),
+        plane_git_path=resolve_home(start.plane_git_path),
+        bind=start.bind,
+        image_tag=start.image_tag,
+    )
+
+
+def make_persist_auto_unit(
+    start: "StartCommand", python: pl.Path, script: pl.Path
+) -> str:
+    persisted: StartCommand = get_persisted_start(start)
+    start_argv: t.List[str] = [
+        str(python),
+        str(script),
+        "start",
+        "--run-dir",
+        str(persisted.run_dir),
+        "--plane-git-path",
+        str(persisted.plane_git_path),
+        "--bind",
+        str(persisted.bind),
+    ]
+    if persisted.image_tag is not None:
+        start_argv += ["--image-tag", persisted.image_tag]
+    stop_argv: t.List[str] = [
+        str(python),
+        str(script),
+        "stop",
+        "--run-dir",
+        str(persisted.run_dir),
+    ]
+    exec_start: str = " ".join(map(require_plain_systemd_argument, start_argv))
+    exec_stop: str = " ".join(map(require_plain_systemd_argument, stop_argv))
+    # A stop waits for the processes and then for Docker, each up to STOP_TIMEOUT; systemd must not kill it first.
+    return textwrap.dedent(f"""\
+        # Written by plane_runtime.py start --persist-auto systemd, which rewrites it; --persist-auto none removes it.
+        [Unit]
+        Description=Plane of {persisted.run_dir} on {persisted.bind}, started at boot (plane_runtime.py --persist-auto)
+        Requires=docker.service
+        After=docker.service
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart={exec_start}
+        ExecReload={exec_start}
+        ExecStop={exec_stop}
+        TimeoutStopSec={2 * STOP_TIMEOUT + 30}
+
+        [Install]
+        WantedBy=default.target
+        """)
+
+
+def parse_persist_auto_unit(unit: str) -> "StartCommand":
+    """The start that a persist-auto unit runs (see make_persist_auto_unit())."""
+    line: str
+    for line in unit.splitlines():
+        if line.startswith("ExecStart="):
+            # the interpreter and the script, then the arguments of start
+            command: Command = parse_cli_command(line.split()[2:])
+            if isinstance(command, StartCommand):
+                return command
+    raise RuntimeError(f"{PERSIST_AUTO_UNIT_NAME} names no start of this script")
+
+
+def read_persist_auto_unit() -> t.Optional[str]:
+    try:
+        return get_persist_auto_unit_path().read_text()
+    except FileNotFoundError:
+        return None
+
+
+def is_running_in_persist_auto_unit() -> bool:
+    # systemd runs the unit's ExecStart=, ExecReload= and ExecStop= in the unit's control group (cgroup v2: one
+    # line, 0::PATH)
+    path: str = pl.Path("/proc/self/cgroup").read_text().split(":", 2)[2].strip()
+    return pl.PurePosixPath(path).name == PERSIST_AUTO_UNIT_NAME
+
+
+def get_persist_auto_start_of(run_dir: pl.Path) -> t.Optional["StartCommand"]:
+    """The start of the persist-auto unit, when run_dir is the instance it starts and this process is not the unit
+    itself. A command that starts or stops that instance by hand then goes through the unit, so that systemd's
+    view of it (active or inactive) stays true and systemctl keeps working."""
+    unit: t.Optional[str] = read_persist_auto_unit()
+    if unit is None or is_running_in_persist_auto_unit():
+        return None
+    persisted: StartCommand = parse_persist_auto_unit(unit)
+    return persisted if persisted.run_dir == run_dir else None
+
+
+def require_same_start_as_persisted(
+    start: "StartCommand", persisted: "StartCommand"
+) -> None:
+    if get_persisted_start(start) != persisted:
+        image_tag_option: str = (
+            "no --image-tag"
+            if persisted.image_tag is None
+            else f"--image-tag {persisted.image_tag}"
+        )
+        raise RuntimeError(
+            f"{PERSIST_AUTO_UNIT_NAME} starts {persisted.run_dir} with --bind {persisted.bind} and "
+            f"{image_tag_option}, from the checkout {persisted.plane_git_path}: pass the same, change what it "
+            "starts with start --persist-auto systemd, or stop starting it at boot with start --persist-auto none"
+        )
+
+
+def require_lingering_user() -> None:
+    # The user's systemd, and with it the persist-auto unit, starts at boot only for a user who lingers.
+    user: str = pwd.getpwuid(os.getuid()).pw_name
+    if not (pl.Path("/var/lib/systemd/linger") / user).exists():
+        raise RuntimeError(
+            f"The systemd of {user} does not start at boot: sudo loginctl enable-linger {user}"
+        )
+
+
+def run_systemctl_for_user(argv: t.Sequence[str]) -> None:
+    # systemctl finds the user's systemd through XDG_RUNTIME_DIR, which a session without a login manager, such as
+    # the VM's console, has not set.
+    environment: t.Dict[str, str] = {
+        **get_host_environment(),
+        "XDG_RUNTIME_DIR": os.environ.get(
+            "XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"
+        ),
+    }
+    result: subprocess.CompletedProcess[bytes] = subprocess.run(
+        ["systemctl", "--user", *argv],
+        stdout=sys.stderr,
+        stderr=sys.stderr,
+        env=environment,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f"systemctl --user {shlex.join(argv)} failed ({result.returncode}); see "
+            f"journalctl --user -u {PERSIST_AUTO_UNIT_NAME}"
+        )
+
+
+# A step of persisting: ("systemctl", ARGUMENTS...), ("write-unit",) or ("remove-unit",).
+PersistAutoStep = t.Tuple[str, ...]
+
+
+def get_persist_auto_steps(
+    persisted_unit: t.Optional[str], wanted_unit: t.Optional[str]
+) -> t.List[PersistAutoStep]:
+    """What makes the persist-auto unit the wanted one (None: no unit), from the unit there is. The instance the old
+    unit starts is stopped through it before the unit changes, since after a change its ExecStop= names the new
+    one."""
+    unit: str = PERSIST_AUTO_UNIT_NAME
+    if wanted_unit is None:
+        if persisted_unit is None:
+            return []
+        return [
+            ("systemctl", "stop", unit),
+            ("systemctl", "disable", unit),
+            ("remove-unit",),
+            ("systemctl", "daemon-reload"),
+        ]
+    if persisted_unit == wanted_unit:
+        # reload runs start again, which starts what is missing of a running instance and leaves the rest
+        return [("systemctl", "enable", unit), ("systemctl", "reload-or-restart", unit)]
+    stop_first: t.List[PersistAutoStep] = (
+        [] if persisted_unit is None else [("systemctl", "stop", unit)]
+    )
+    return [
+        *stop_first,
+        ("write-unit",),
+        ("systemctl", "daemon-reload"),
+        ("systemctl", "enable", unit),
+        ("systemctl", "start", unit),
+    ]
+
+
+def apply_persist_auto_steps(
+    steps: t.Sequence[PersistAutoStep], wanted_unit: t.Optional[str]
+) -> None:
+    path: pl.Path = get_persist_auto_unit_path()
+    step: PersistAutoStep
+    for step in steps:
+        if step == ("write-unit",):
+            assert wanted_unit is not None
+            path.parent.mkdir(parents=True, exist_ok=True)
+            writing: pl.Path = path.with_name(path.name + ".writing")
+            writing.write_text(wanted_unit)
+            os.replace(writing, path)
+        elif step == ("remove-unit",):
+            path.unlink(missing_ok=True)
+        else:
+            run_systemctl_for_user(step[1:])
+
+
+def print_persist_auto_result(run_dir: pl.Path, action: str) -> None:
+    print(
+        json.dumps(
+            {
+                "action": action,
+                "ok": True,
+                "through": PERSIST_AUTO_UNIT_NAME,
+                "run_dir": str(run_dir),
+            }
+        )
+    )
+
+
 class Command(abc.ABC):
     @abc.abstractmethod
     def run(self) -> None: ...
@@ -2131,10 +2372,36 @@ class StartCommand(Command):
     plane_git_path: pl.Path
     bind: BindAddress
     image_tag: t.Optional[plane_config.ImageTag]
+    persist_auto: t.Optional[PersistAuto] = None
+
+    def persist_and_start(self) -> None:
+        # FOR_REVIEWER: the unit runs the interpreter and the checkout this command ran with. If that checkout
+        # moves, the unit fails at boot (systemctl --user status says so) until start --persist-auto systemd is
+        # run again from the new place; a checkout on another branch is what the next boot runs.
+        wanted_unit: t.Optional[str] = None
+        if self.persist_auto == PersistAuto.SYSTEMD:
+            require_lingering_user()
+            wanted_unit = make_persist_auto_unit(
+                self, pl.Path(sys.executable), PLANE_RUNTIME_SCRIPT
+            )
+        apply_persist_auto_steps(
+            get_persist_auto_steps(read_persist_auto_unit(), wanted_unit), wanted_unit
+        )
+        if wanted_unit is None:
+            dc.replace(self, persist_auto=None).run()
+        else:
+            print_persist_auto_result(resolve_run_dir(self.run_dir), "start")
 
     def run(self) -> None:
+        if self.persist_auto is not None:
+            return self.persist_and_start()
         start_time: float = time.monotonic()
         run_dir: pl.Path = resolve_run_dir(self.run_dir)
+        persisted: t.Optional[StartCommand] = get_persist_auto_start_of(run_dir)
+        if persisted is not None:
+            require_same_start_as_persisted(self, persisted)
+            run_systemctl_for_user(["reload-or-restart", PERSIST_AUTO_UNIT_NAME])
+            return print_persist_auto_result(run_dir, "start")
         plane_git_path: pl.Path = resolve_home(self.plane_git_path)
         require_separate_source_and_run_directory(plane_git_path, run_dir)
         timings: Timings = make_lifecycle_timings(start_time)
@@ -2163,6 +2430,10 @@ class StopCommand(Command):
     def run(self) -> None:
         start_time: float = time.monotonic()
         run_dir: pl.Path = resolve_run_dir(self.run_dir)
+        if get_persist_auto_start_of(run_dir) is not None:
+            # the unit's ExecStop= runs this command again, from within the unit
+            run_systemctl_for_user(["stop", PERSIST_AUTO_UNIT_NAME])
+            return print_persist_auto_result(run_dir, "stop")
         timings: Timings = make_lifecycle_timings(start_time)
         stop_plane_containers(run_dir, timings).result()
         print_lifecycle_result(run_dir, "stop", timings, start_time)
@@ -2195,6 +2466,9 @@ class ExportCommand(Command):
             raise RuntimeError(
                 "Export requires an initialized instance; start it first"
             )
+        if get_persist_auto_start_of(run_dir) is not None:
+            # stopped through the unit, so that systemd knows; the instance stays stopped after the export
+            run_systemctl_for_user(["stop", PERSIST_AUTO_UNIT_NAME])
         timings: Timings = make_lifecycle_timings(start_time)
         network_container_stop: concurrent.futures.Future[None] = stop_plane_containers(
             run_dir, timings
@@ -2232,6 +2506,15 @@ class ImportCommand(Command):
         require_same_image_tag_as_instance(
             plane_config.InstanceConfig.read_existing(run_dir), self.image_tag
         )
+        persisted: t.Optional[StartCommand] = get_persist_auto_start_of(run_dir)
+        if persisted is not None:
+            # The unit starts the imported instance at the next boot, so it must be what the unit starts; it is
+            # stopped through the unit now and started through it at the end, so that systemd knows.
+            require_same_start_as_persisted(
+                StartCommand(run_dir, plane_git_path, self.bind, self.image_tag),
+                persisted,
+            )
+            run_systemctl_for_user(["stop", PERSIST_AUTO_UNIT_NAME])
         timings: Timings = make_lifecycle_timings(start_time)
         docker_fs: DockerFs
         executor: concurrent.futures.ThreadPoolExecutor
@@ -2279,6 +2562,9 @@ class ImportCommand(Command):
             start_plane_services(
                 run_dir, config, self.bind, image_ids, docker_fs, timings
             )
+        if persisted is not None:
+            # its start finds the instance running and only marks the unit active
+            run_systemctl_for_user(["start", PERSIST_AUTO_UNIT_NAME])
         print_lifecycle_result(run_dir, "import", timings, start_time)
 
 
@@ -2422,6 +2708,14 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         metavar="TAG",
         help="Run the images plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs, building them first if they are missing. An instance runs only the images of its first start.",
     )
+    # FOR_REVIEWER: "none" is the proposed way to undo --persist-auto systemd; the task did not name one. Removing it
+    # takes the value here and the branch of get_persist_auto_steps() that returns the steps for no unit.
+    start_parser.add_argument(
+        "--persist-auto",
+        type=PersistAuto,
+        choices=list(PersistAuto),
+        help=f"systemd: also start this instance at every boot, through the unit {PERSIST_AUTO_UNIT_NAME} of the user's systemd, which keeps these arguments; run again with other arguments to change them. From then on, start, stop, export and import of this run directory go through the unit, and systemctl --user start, stop, restart and status work on it. none: remove that unit, then start as without --persist-auto.",
+    )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
         help="Finish the current background job, save page edits, and stop Plane.",
@@ -2540,6 +2834,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
             plane_git_path=pl.Path(args.plane_git_path),
             bind=args.bind,
             image_tag=args.image_tag,
+            persist_auto=args.persist_auto,
         )
     elif args.subparser_name == "stop":
         return StopCommand(run_dir=pl.Path(args.run_dir))

@@ -560,6 +560,297 @@ class ImageTagTests(unittest.TestCase):
             )
 
 
+def make_start(
+    run_dir: str, bind: str, image_tag: t.Optional[str] = None
+) -> runtime.StartCommand:
+    return runtime.StartCommand(
+        pl.Path(run_dir),
+        pl.Path("/opt/plane"),
+        runtime.BindAddress.parse(bind),
+        None if image_tag is None else plane_config.ImageTag(image_tag),
+    )
+
+
+def make_persist_auto_unit(start: runtime.StartCommand) -> str:
+    return runtime.make_persist_auto_unit(
+        start,
+        pl.Path("/usr/bin/python3"),
+        pl.Path("/opt/plane/scripts/plane_runtime.py"),
+    )
+
+
+class PersistAutoTests(unittest.TestCase):
+    def test_unit_starts_and_stops_the_instance_with_the_persisted_arguments(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            start: runtime.StartCommand
+            expected: str
+
+        script: str = "/usr/bin/python3 /opt/plane/scripts/plane_runtime.py"
+        tcs: t.List[Tc] = [
+            Tc(
+                "the owner's instance, on every interface",
+                make_start("/home/owner/plane-dev", "0.0.0.0:12001"),
+                "# Written by plane_runtime.py start --persist-auto systemd, which rewrites it; --persist-auto none removes it.\n"
+                "[Unit]\n"
+                "Description=Plane of /home/owner/plane-dev on 0.0.0.0:12001, started at boot (plane_runtime.py --persist-auto)\n"
+                "Requires=docker.service\n"
+                "After=docker.service\n"
+                "\n"
+                "[Service]\n"
+                "Type=oneshot\n"
+                "RemainAfterExit=yes\n"
+                f"ExecStart={script} start --run-dir /home/owner/plane-dev --plane-git-path /opt/plane --bind 0.0.0.0:12001\n"
+                f"ExecReload={script} start --run-dir /home/owner/plane-dev --plane-git-path /opt/plane --bind 0.0.0.0:12001\n"
+                f"ExecStop={script} stop --run-dir /home/owner/plane-dev\n"
+                f"TimeoutStopSec={2 * runtime.STOP_TIMEOUT + 30}\n"
+                "\n"
+                "[Install]\n"
+                "WantedBy=default.target\n",
+            ),
+            Tc(
+                "an instance with images of its own tag",
+                make_start("/srv/checks-1", "127.0.0.1:12141", "plane-67"),
+                "# Written by plane_runtime.py start --persist-auto systemd, which rewrites it; --persist-auto none removes it.\n"
+                "[Unit]\n"
+                "Description=Plane of /srv/checks-1 on 127.0.0.1:12141, started at boot (plane_runtime.py --persist-auto)\n"
+                "Requires=docker.service\n"
+                "After=docker.service\n"
+                "\n"
+                "[Service]\n"
+                "Type=oneshot\n"
+                "RemainAfterExit=yes\n"
+                f"ExecStart={script} start --run-dir /srv/checks-1 --plane-git-path /opt/plane --bind 127.0.0.1:12141 --image-tag plane-67\n"
+                f"ExecReload={script} start --run-dir /srv/checks-1 --plane-git-path /opt/plane --bind 127.0.0.1:12141 --image-tag plane-67\n"
+                f"ExecStop={script} stop --run-dir /srv/checks-1\n"
+                f"TimeoutStopSec={2 * runtime.STOP_TIMEOUT + 30}\n"
+                "\n"
+                "[Install]\n"
+                "WantedBy=default.target\n",
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: str = make_persist_auto_unit(tc.start)
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_unit_refuses_an_argument_that_systemd_would_change(self) -> None:
+        run_dir: str
+        for run_dir in (
+            "/srv/plane dev",
+            "/srv/plane%h",
+            "/srv/plane$HOME",
+            '/srv/"plane"',
+        ):
+            with (
+                self.subTest(run_dir=run_dir),
+                self.assertRaisesRegex(RuntimeError, "Cannot persist"),
+            ):
+                make_persist_auto_unit(make_start(run_dir, "0.0.0.0:12001"))
+
+    def test_unit_reads_back_as_the_start_it_was_made_from(self) -> None:
+        start: runtime.StartCommand
+        for start in (
+            make_start("/home/owner/plane-dev", "0.0.0.0:12001"),
+            make_start("/srv/checks-1", "127.0.0.1:12141", "plane-67"),
+        ):
+            with self.subTest(start=start):
+                actual: runtime.StartCommand = runtime.parse_persist_auto_unit(
+                    make_persist_auto_unit(start)
+                )
+                self.assertEqual(actual, start)
+
+    def test_steps_turn_the_persisted_unit_into_the_wanted_one(self) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            persisted_unit: t.Optional[str]
+            wanted_unit: t.Optional[str]
+            expected: t.List[runtime.PersistAutoStep]
+
+        unit: str = runtime.PERSIST_AUTO_UNIT_NAME
+        first: str = make_persist_auto_unit(make_start("/srv/a", "0.0.0.0:12001"))
+        second: str = make_persist_auto_unit(make_start("/srv/b", "0.0.0.0:12002"))
+        tcs: t.List[Tc] = [
+            Tc(
+                "first persisted",
+                None,
+                first,
+                [
+                    ("write-unit",),
+                    ("systemctl", "daemon-reload"),
+                    ("systemctl", "enable", unit),
+                    ("systemctl", "start", unit),
+                ],
+            ),
+            Tc(
+                "persisted again with the same arguments",
+                first,
+                first,
+                [
+                    ("systemctl", "enable", unit),
+                    ("systemctl", "reload-or-restart", unit),
+                ],
+            ),
+            Tc(
+                "moved to another run directory and address",
+                first,
+                second,
+                [
+                    ("systemctl", "stop", unit),
+                    ("write-unit",),
+                    ("systemctl", "daemon-reload"),
+                    ("systemctl", "enable", unit),
+                    ("systemctl", "start", unit),
+                ],
+            ),
+            Tc(
+                "undone",
+                first,
+                None,
+                [
+                    ("systemctl", "stop", unit),
+                    ("systemctl", "disable", unit),
+                    ("remove-unit",),
+                    ("systemctl", "daemon-reload"),
+                ],
+            ),
+            Tc("undone with nothing persisted", None, None, []),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: t.List[runtime.PersistAutoStep] = runtime.get_persist_auto_steps(
+                tc.persisted_unit, tc.wanted_unit
+            )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_only_a_hand_run_command_on_the_persisted_run_dir_goes_through_the_unit(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            persisted_unit: t.Optional[str]
+            is_in_unit: bool
+            run_dir: pl.Path
+            expected: t.Optional[runtime.StartCommand]
+
+        persisted: runtime.StartCommand = make_start("/srv/a", "0.0.0.0:12001")
+        tcs: t.List[Tc] = [
+            Tc("nothing persisted", None, False, pl.Path("/srv/a"), None),
+            Tc(
+                "the persisted run directory, by hand",
+                make_persist_auto_unit(persisted),
+                False,
+                pl.Path("/srv/a"),
+                persisted,
+            ),
+            Tc(
+                "another run directory",
+                make_persist_auto_unit(persisted),
+                False,
+                pl.Path("/srv/b"),
+                None,
+            ),
+            Tc(
+                "the persisted run directory, from the unit itself",
+                make_persist_auto_unit(persisted),
+                True,
+                pl.Path("/srv/a"),
+                None,
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            with (
+                mock.patch.object(
+                    runtime, "read_persist_auto_unit", return_value=tc.persisted_unit
+                ),
+                mock.patch.object(
+                    runtime,
+                    "is_running_in_persist_auto_unit",
+                    return_value=tc.is_in_unit,
+                ),
+            ):
+                actual: t.Optional[runtime.StartCommand] = (
+                    runtime.get_persist_auto_start_of(tc.run_dir)
+                )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_hand_run_start_of_the_persisted_run_dir_needs_its_arguments(
+        self,
+    ) -> None:
+        persisted: runtime.StartCommand = make_start("/srv/a", "0.0.0.0:12001")
+        runtime.require_same_start_as_persisted(
+            make_start("/srv/./a", "0.0.0.0:12001"), persisted
+        )
+        start: runtime.StartCommand
+        for start in (
+            make_start("/srv/a", "127.0.0.1:12001"),
+            make_start("/srv/a", "0.0.0.0:12001", "plane-67"),
+        ):
+            with (
+                self.subTest(start=start),
+                self.assertRaisesRegex(RuntimeError, "--persist-auto systemd"),
+            ):
+                runtime.require_same_start_as_persisted(start, persisted)
+
+    def test_start_with_persist_auto_writes_the_unit_and_starts_it_through_systemd(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            unit_path: pl.Path = pl.Path(temporary) / runtime.PERSIST_AUTO_UNIT_NAME
+            start: runtime.StartCommand = dc.replace(
+                make_start("/srv/a", "0.0.0.0:12001"),
+                persist_auto=runtime.PersistAuto.SYSTEMD,
+            )
+            with (
+                mock.patch.object(
+                    runtime, "get_persist_auto_unit_path", return_value=unit_path
+                ),
+                mock.patch.object(runtime, "require_lingering_user"),
+                mock.patch.object(runtime, "run_systemctl_for_user") as systemctl,
+                mock.patch("sys.stdout"),
+            ):
+                start.run()
+            actual: t.Tuple[str, t.List[t.List[str]]] = (
+                unit_path.read_text(),
+                [list(call.args[0]) for call in systemctl.call_args_list],
+            )
+        expected: t.Tuple[str, t.List[t.List[str]]] = (
+            runtime.make_persist_auto_unit(
+                start, pl.Path(sys.executable), runtime.PLANE_RUNTIME_SCRIPT
+            ),
+            [
+                ["daemon-reload"],
+                ["enable", runtime.PERSIST_AUTO_UNIT_NAME],
+                ["start", runtime.PERSIST_AUTO_UNIT_NAME],
+            ],
+        )
+        self.assertEqual(actual, expected)
+
+    def test_hand_run_stop_of_the_persisted_run_dir_stops_the_unit(self) -> None:
+        with (
+            mock.patch.object(
+                runtime,
+                "get_persist_auto_start_of",
+                return_value=make_start("/srv/a", "0.0.0.0:12001"),
+            ),
+            mock.patch.object(runtime, "run_systemctl_for_user") as systemctl,
+            mock.patch.object(runtime, "stop_plane_containers") as stop,
+            mock.patch("sys.stdout"),
+        ):
+            runtime.StopCommand(pl.Path("/srv/a")).run()
+        actual: t.Tuple[t.List[t.List[str]], int] = (
+            [list(call.args[0]) for call in systemctl.call_args_list],
+            stop.call_count,
+        )
+        self.assertEqual(actual, ([["stop", runtime.PERSIST_AUTO_UNIT_NAME]], 0))
+
+
 class CommandLineTests(unittest.TestCase):
     def test_each_subcommand_parses_to_its_command(self) -> None:
         class Tc(t.NamedTuple):
@@ -599,6 +890,24 @@ class CommandLineTests(unittest.TestCase):
                     plane_git_path,
                     runtime.BindAddress(ipaddress.IPv4Address("127.0.0.1"), 18580),
                     plane_config.ImageTag("plane-47"),
+                ),
+            ),
+            Tc(
+                [
+                    "start",
+                    "--run-dir",
+                    "run",
+                    "--bind",
+                    "0.0.0.0:12001",
+                    "--persist-auto",
+                    "systemd",
+                ],
+                runtime.StartCommand(
+                    pl.Path("run"),
+                    plane_git_path,
+                    runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 12001),
+                    None,
+                    runtime.PersistAuto.SYSTEMD,
                 ),
             ),
             Tc(["stop", "--run-dir", "run"], runtime.StopCommand(pl.Path("run"))),

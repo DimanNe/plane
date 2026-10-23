@@ -2,15 +2,16 @@
 
 One script starts, stops, backs up and restores a complete Plane installation on one Linux host.
 It needs Python, rootless Docker with Buildx, GNU tar, zstd and `nsenter`; it uses only Python's
-standard library and reads no environment variable except `PATH`. Every subcommand has `--help`.
+standard library and reads no environment variable except `PATH`, and `XDG_RUNTIME_DIR` to reach the
+user's systemd. Every subcommand has `--help`.
 
 ```sh
 ./scripts/plane_runtime.py prepare                                                # build the images from this checkout
-./scripts/plane_runtime.py import --run-dir RUN --port PORT --input /dev/null     # new empty instance, started
+./scripts/plane_runtime.py import --run-dir RUN --bind IP:PORT --input /dev/null   # new empty instance, started
 ./scripts/plane_runtime.py bootstrap-user --run-dir RUN --email you@example.internal --password '...'
 ./scripts/plane_runtime.py export --run-dir RUN --output backup.zstd              # stop, then write the backup
-./scripts/plane_runtime.py import --run-dir RUN --port PORT --input backup.zstd   # replace everything, then start
-./scripts/plane_runtime.py start --run-dir RUN --port PORT
+./scripts/plane_runtime.py import --run-dir RUN --bind IP:PORT --input backup.zstd # replace everything, then start
+./scripts/plane_runtime.py start --run-dir RUN --bind IP:PORT [--persist-auto systemd]
 ./scripts/plane_runtime.py stop|status --run-dir RUN
 ```
 
@@ -34,9 +35,9 @@ proxy each run in a container. They all share the network namespace of one more 
 sleeps. Rootless Docker cannot give containers the host's network; the shared namespace lets every
 service reach the others on `127.0.0.1` exactly as upstream's configuration expects.
 
-The proxy is the only service the host can reach, at `http://localhost:PORT`. `start` and `import`
-always take `--port`; it is not saved in the run directory or in a backup, and starting a running
-instance with another port restarts it there. Instances in different run directories with
+The proxy is the only service the host can reach, on the address and port of `--bind`. `start` and
+`import` always take `--bind`; it is not saved in the run directory or in a backup, and starting a
+running instance with another address restarts it there. Instances in different run directories with
 different ports run side by side.
 
 Images are built from the checkout by `prepare` (or on first use when missing). After changing
@@ -81,6 +82,17 @@ logical dump, so restoring it costs no index rebuilds; it needs the same Postgre
 PostgreSQL's files belong to a user id that exists only inside Docker's rootless user namespace.
 tar, `rm` and the directory setup for a new cluster therefore run through `nsenter` in that
 namespace; everything else runs as the caller.
+
+## Starting at boot
+
+`start --persist-auto systemd` also writes `~/.config/systemd/user/plane-persist-auto.service`, a unit of
+the user's systemd that runs this `start`, with these arguments and from this checkout, at every boot,
+and this script's `stop` at shutdown. The user's systemd starts at boot because the user lingers
+(`loginctl enable-linger`). There is one such unit: running the command again with another run directory
+or address stops the old instance and moves the unit. `systemctl --user start|stop|restart|status
+plane-persist-auto` work on it, and `start`, `stop`, `export` and `import` of that run directory go
+through it, so that systemd always knows whether the instance runs. `start --persist-auto none` removes
+the unit and then starts the instance once, as a plain `start` does.
 
 ## MCP
 
