@@ -513,16 +513,17 @@ def get_containers(
     return found
 
 
+def get_plane_origin(port: int) -> str:
+    """The origin Plane writes into the absolute URLs it makes. A browser may reach the instance by
+    another address, so the proxy turns redirects to this origin into relative ones (see
+    write_caddy_config()); links in emails and notifications keep it."""
+    return f"http://localhost:{port}"
+
+
 def get_plane_environment(
     port: int, service_secrets: plane_config.ServiceSecrets
 ) -> t.Dict[str, str]:
-    # FOR_REVIEWER: the origin stays localhost whatever --bind says. Plane puts it into the
-    # redirect after sign-in and into the links of uploads, so a browser on another machine that
-    # opens http://HOST_IP:PORT is sent to its own localhost after signing in. A forwarded port
-    # (ssh -L PORT:127.0.0.1:PORT, or the VM's port forwarding) keeps it right. If the instance is
-    # to be opened by its address, it needs an --origin flag, or an origin made from a --bind
-    # host that is not 0.0.0.0.
-    origin: str = f"http://localhost:{port}"
+    origin: str = get_plane_origin(port)
     redis_port: int = SERVICE_PORTS[plane_config.Service.REDIS]
     return {
         "DJANGO_SETTINGS_MODULE": "plane.settings.production",
@@ -583,8 +584,9 @@ def write_postgres_auth_config(run_dir: pl.Path) -> None:
     postgres_auth_config.chmod(0o644)
 
 
-def write_caddy_config(run_dir: pl.Path) -> None:
+def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     ports: t.Dict[plane_config.Service, int] = SERVICE_PORTS
+    origin_pattern: str = re.escape(plane_origin)
     caddy_config: str = f"""{{
     admin off
     auto_https off
@@ -594,11 +596,16 @@ def write_caddy_config(run_dir: pl.Path) -> None:
 # The API closes a connection that has been idle for a moment. A proxy that keeps the connection for its next
 # request can send a save down it just as the API closes it, and must then answer 502: a save is not sent twice.
 # So each request to the API gets a connection of its own.
+# The API redirects to Plane's own origin, which is not the address a browser used when it came through another
+# interface of the host or a tunnel. Such a redirect is made relative, so the browser stays at the address it used.
+# The origin followed by "//" is left alone: made relative, it would name another host.
 (api) {{
     reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]} {{
         transport http {{
             keepalive off
         }}
+        header_down Location "^{origin_pattern}(/[^/]|/$)" "$1"
+        header_down Location "^{origin_pattern}([?#]|$)" "/$1"
     }}
 }}
 :{ports[plane_config.Service.PROXY]} {{
@@ -1471,7 +1478,7 @@ def start_plane_services(
     config.write(run_dir)
     write_minio_config(run_dir, service_secrets[plane_config.SecretName.MINIO])
     write_postgres_auth_config(run_dir)
-    write_caddy_config(run_dir)
+    write_caddy_config(run_dir, get_plane_origin(bind.port))
     start_network_container(
         run_dir,
         bind,
@@ -2244,7 +2251,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         type=BindAddress.parse,
         required=True,
         metavar="IPV4:PORT",
-        help="Host address and port the browser reaches Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. Plane makes its links for http://localhost:PORT, so a browser on another machine needs that port forwarded to its own localhost.",
+        help="Host address and port the browser reaches Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. A browser may reach it by any address of the host or through a tunnel; links in the emails and notifications Plane sends name http://localhost:PORT.",
     )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
@@ -2326,7 +2333,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         type=BindAddress.parse,
         required=True,
         metavar="IPV4:PORT",
-        help="Host address and port the browser reaches the restored Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. Plane makes its links for http://localhost:PORT, so a browser on another machine needs that port forwarded to its own localhost.",
+        help="Host address and port the browser reaches the restored Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. A browser may reach it by any address of the host or through a tunnel; links in the emails and notifications Plane sends name http://localhost:PORT.",
     )
     bootstrap_user_parser: argparse.ArgumentParser = subparsers.add_parser(
         "bootstrap-user",
