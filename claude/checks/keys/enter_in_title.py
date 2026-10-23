@@ -4,7 +4,6 @@ description are typed as one text. In the dialog of a new work item, what is typ
 description, and Enter saves nothing; Ctrl+Enter still saves. In the view beside the list the title stays one line.
 """
 
-
 import playwright.sync_api as pw
 
 import instance as ins

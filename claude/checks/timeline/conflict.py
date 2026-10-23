@@ -4,7 +4,6 @@ in red by how many days the task is too early. Under the pointer a card explains
 that produce it ringed in red, and offers the ways out; away from the arrow the card and the rings go.
 """
 
-
 import playwright.sync_api as pw
 
 import chart

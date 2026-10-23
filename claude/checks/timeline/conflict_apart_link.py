@@ -4,7 +4,6 @@ under the pointer its card explains it and offers its ways out; the first, a cli
 stands, stored, and red no more.
 """
 
-
 import playwright.sync_api as pw
 
 import chart
