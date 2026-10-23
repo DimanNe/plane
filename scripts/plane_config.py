@@ -30,8 +30,8 @@ class SecretName(enum.StrEnum):
 JSONObject: t.TypeAlias = t.Dict[str, t.Any]
 ServiceSecrets: t.TypeAlias = t.Dict[SecretName, str]
 # Tags the images that an instance runs, so that a session can build images of its own beside the owner's;
-# see --image-prefix in scripts/plane_runtime.py.
-ImagePrefix = t.NewType("ImagePrefix", str)
+# see --image-tag in scripts/plane_runtime.py.
+ImageTag = t.NewType("ImageTag", str)
 
 
 def fsync_dir(path: pl.Path) -> None:
@@ -48,7 +48,7 @@ class InstanceConfig:
     instance_id: str
     initialized: bool = False
     last_api_image: t.Optional[str] = None
-    image_prefix: t.Optional[ImagePrefix] = None
+    image_tag: t.Optional[ImageTag] = None
 
     @staticmethod
     def get_path(run_dir: pl.Path) -> pl.Path:
@@ -71,7 +71,7 @@ class InstanceConfig:
             instance_id=fields["instance_id"],
             initialized=fields.get("initialized", False),
             last_api_image=fields.get("last_api_image"),
-            image_prefix=fields.get("image_prefix"),
+            image_tag=fields.get("image_tag"),
         )
 
     @classmethod

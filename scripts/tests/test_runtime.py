@@ -122,7 +122,7 @@ class ImportTests(unittest.TestCase):
         self,
         run_dir: pl.Path,
         input: pl.Path,
-        image_prefix: t.Optional[plane_config.ImagePrefix] = None,
+        image_tag: t.Optional[plane_config.ImageTag] = None,
     ) -> None:
         with (
             mock.patch.object(runtime, "DockerFs", CallerDockerFs),
@@ -143,7 +143,7 @@ class ImportTests(unittest.TestCase):
                 input,
                 pl.Path(run_dir.parent / "plane-git"),
                 runtime.BindAddress.parse("127.0.0.1:18080"),
-                image_prefix,
+                image_tag,
             ).run()
 
     def test_import_replaces_everything_a_failed_import_left_in_run_dir(self) -> None:
@@ -187,13 +187,13 @@ class ImportTests(unittest.TestCase):
             self.assertFalse(config.initialized)
             self.assertNotEqual(config.secrets, previous_config.secrets)
 
-    def test_import_records_its_own_image_prefix_over_the_archive_s(self) -> None:
+    def test_import_records_its_own_image_tag_over_the_archive_s(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             original_run_dir: pl.Path = pl.Path(temporary) / "original"
             exported: plane_config.InstanceConfig = make_initialized_instance(
                 original_run_dir
             )
-            exported.image_prefix = plane_config.ImagePrefix("plane-47")
+            exported.image_tag = plane_config.ImageTag("plane-47")
             exported.write(original_run_dir)
             archive: pl.Path = pl.Path(temporary) / "backup.zstd"
             with CallerDockerFs() as docker_fs:
@@ -203,19 +203,17 @@ class ImportTests(unittest.TestCase):
             actual: plane_config.InstanceConfig = runtime.require_instance_config(
                 run_dir
             )
-            expected: plane_config.InstanceConfig = dc.replace(
-                exported, image_prefix=None
-            )
+            expected: plane_config.InstanceConfig = dc.replace(exported, image_tag=None)
             self.assertEqual(actual, expected)
 
-    def test_import_refuses_another_image_prefix_and_keeps_the_run_dir(self) -> None:
+    def test_import_refuses_another_image_tag_and_keeps_the_run_dir(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir: pl.Path = pl.Path(temporary) / "target"
             make_initialized_instance(run_dir)
             expected: t.Dict[str, t.Optional[bytes]] = read_tree(run_dir)
             with self.assertRaisesRegex(RuntimeError, "plane-local-\\*:current"):
                 self.run_import(
-                    run_dir, pl.Path("/dev/null"), plane_config.ImagePrefix("plane-47")
+                    run_dir, pl.Path("/dev/null"), plane_config.ImageTag("plane-47")
                 )
             actual: t.Dict[str, t.Optional[bytes]] = read_tree(run_dir)
             self.assertEqual(actual, expected)
@@ -223,7 +221,7 @@ class ImportTests(unittest.TestCase):
 
 class StartTests(unittest.TestCase):
     def run_start(
-        self, run_dir: pl.Path, image_prefix: t.Optional[plane_config.ImagePrefix]
+        self, run_dir: pl.Path, image_tag: t.Optional[plane_config.ImageTag]
     ) -> mock.MagicMock:
         def write_config(
             run_dir: pl.Path, config: plane_config.InstanceConfig, *_: t.Any
@@ -244,24 +242,24 @@ class StartTests(unittest.TestCase):
                 run_dir,
                 pl.Path(run_dir.parent / "plane-git"),
                 runtime.BindAddress.parse("127.0.0.1:18080"),
-                image_prefix,
+                image_tag,
             ).run()
         return build
 
-    def test_start_of_a_new_instance_records_its_image_prefix(self) -> None:
+    def test_start_of_a_new_instance_records_its_image_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir: pl.Path = pl.Path(temporary) / "new"
-            self.run_start(run_dir, plane_config.ImagePrefix("plane-47"))
-            actual: t.Optional[plane_config.ImagePrefix] = (
-                runtime.require_instance_config(run_dir).image_prefix
-            )
+            self.run_start(run_dir, plane_config.ImageTag("plane-47"))
+            actual: t.Optional[plane_config.ImageTag] = runtime.require_instance_config(
+                run_dir
+            ).image_tag
             self.assertEqual(actual, "plane-47")
 
-    def test_start_refuses_another_image_prefix_before_building_images(self) -> None:
+    def test_start_refuses_another_image_tag_before_building_images(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir: pl.Path = pl.Path(temporary) / "instance"
             config: plane_config.InstanceConfig = make_initialized_instance(run_dir)
-            config.image_prefix = plane_config.ImagePrefix("plane-47")
+            config.image_tag = plane_config.ImageTag("plane-47")
             config.write(run_dir)
             with (
                 mock.patch.object(
@@ -285,7 +283,7 @@ class InstanceConfigTests(unittest.TestCase):
             expected: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
             expected.initialized = True
             expected.last_api_image = "sha256:image"
-            expected.image_prefix = plane_config.ImagePrefix("plane-47")
+            expected.image_tag = plane_config.ImageTag("plane-47")
             expected.write(run_dir)
             actual: plane_config.InstanceConfig = runtime.require_instance_config(
                 run_dir
@@ -295,7 +293,7 @@ class InstanceConfigTests(unittest.TestCase):
                 {type(name) for name in actual.secrets}, {plane_config.SecretName}
             )
 
-    def test_config_written_before_image_prefixes_runs_without_one(self) -> None:
+    def test_config_written_before_image_tags_runs_without_one(self) -> None:
         text: str = json.dumps(
             {
                 "secrets": {name.value: "secret" for name in plane_config.SecretName},
@@ -310,7 +308,7 @@ class InstanceConfigTests(unittest.TestCase):
             instance_id="instance",
             initialized=True,
             last_api_image="sha256:image",
-            image_prefix=None,
+            image_tag=None,
         )
         self.assertEqual(actual, expected)
 
@@ -446,21 +444,21 @@ class BindAddressTests(unittest.TestCase):
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
 
-class ImagePrefixTests(unittest.TestCase):
+class ImageTagTests(unittest.TestCase):
     def test_parse_accepts_only_docker_tags_other_than_the_owner_s(self) -> None:
         class Tc(t.NamedTuple):
             name: str
             text: str
-            expected: t.Optional[plane_config.ImagePrefix]
+            expected: t.Optional[plane_config.ImageTag]
 
         tcs: t.List[Tc] = [
-            Tc("task", "plane-47", plane_config.ImagePrefix("plane-47")),
-            Tc("underscore first", "_a.b-c", plane_config.ImagePrefix("_a.b-c")),
-            Tc("longest", "a" * 128, plane_config.ImagePrefix("a" * 128)),
+            Tc("task", "plane-47", plane_config.ImageTag("plane-47")),
+            Tc("underscore first", "_a.b-c", plane_config.ImageTag("_a.b-c")),
+            Tc("longest", "a" * 128, plane_config.ImageTag("a" * 128)),
             Tc(
                 "other case than the owner's",
                 "Current",
-                plane_config.ImagePrefix("Current"),
+                plane_config.ImageTag("Current"),
             ),
             Tc("the owner's", "current", None),
             Tc("empty", "", None),
@@ -474,22 +472,22 @@ class ImagePrefixTests(unittest.TestCase):
         i: int
         tc: Tc
         for i, tc in enumerate(tcs):
-            actual: t.Optional[plane_config.ImagePrefix]
+            actual: t.Optional[plane_config.ImageTag]
             try:
-                actual = runtime.parse_image_prefix(tc.text)
+                actual = runtime.parse_image_tag(tc.text)
             except argparse.ArgumentTypeError:
                 actual = None
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
-    def test_prefix_tags_our_images_and_leaves_external_ones(self) -> None:
+    def test_image_tag_applies_to_our_images_and_leaves_external_ones(self) -> None:
         class Tc(t.NamedTuple):
             name: str
-            image_prefix: t.Optional[plane_config.ImagePrefix]
+            image_tag: t.Optional[plane_config.ImageTag]
             expected: t.Dict[plane_config.Service, str]
 
         tcs: t.List[Tc] = [
             Tc(
-                "no prefix",
+                "no tag",
                 None,
                 {
                     plane_config.Service.API: "plane-local-api:current",
@@ -500,8 +498,8 @@ class ImagePrefixTests(unittest.TestCase):
                 },
             ),
             Tc(
-                "prefix",
-                plane_config.ImagePrefix("plane-47"),
+                "a tag of its own",
+                plane_config.ImageTag("plane-47"),
                 {
                     plane_config.Service.API: "plane-local-api:plane-47",
                     plane_config.Service.LIVE: "plane-local-live:plane-47",
@@ -515,36 +513,36 @@ class ImagePrefixTests(unittest.TestCase):
         tc: Tc
         for i, tc in enumerate(tcs):
             actual: t.Dict[plane_config.Service, str] = runtime.get_all_images(
-                tc.image_prefix
+                tc.image_tag
             )
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
-    def test_instance_accepts_only_the_image_prefix_of_its_first_start(self) -> None:
+    def test_instance_accepts_only_the_image_tag_of_its_first_start(self) -> None:
         def make_config(
-            image_prefix: t.Optional[plane_config.ImagePrefix],
+            image_tag: t.Optional[plane_config.ImageTag],
         ) -> plane_config.InstanceConfig:
             config: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
-            config.image_prefix = image_prefix
+            config.image_tag = image_tag
             return config
 
         class Tc(t.NamedTuple):
             name: str
             config: t.Optional[plane_config.InstanceConfig]
-            image_prefix: t.Optional[plane_config.ImagePrefix]
+            image_tag: t.Optional[plane_config.ImageTag]
             expected_is_accepted: bool
 
-        prefix: plane_config.ImagePrefix = plane_config.ImagePrefix("plane-47")
+        tag: plane_config.ImageTag = plane_config.ImageTag("plane-47")
         tcs: t.List[Tc] = [
-            Tc("new instance, without prefix", None, None, True),
-            Tc("new instance, with prefix", None, prefix, True),
-            Tc("without prefix, again without", make_config(None), None, True),
-            Tc("without prefix, now with one", make_config(None), prefix, False),
-            Tc("with prefix, again the same", make_config(prefix), prefix, True),
-            Tc("with prefix, now without", make_config(prefix), None, False),
+            Tc("new instance, without tag", None, None, True),
+            Tc("new instance, with tag", None, tag, True),
+            Tc("without tag, again without", make_config(None), None, True),
+            Tc("without tag, now with one", make_config(None), tag, False),
+            Tc("with tag, again the same", make_config(tag), tag, True),
+            Tc("with tag, now without", make_config(tag), None, False),
             Tc(
-                "with prefix, now another",
-                make_config(prefix),
-                plane_config.ImagePrefix("plane-48"),
+                "with tag, now another",
+                make_config(tag),
+                plane_config.ImageTag("plane-48"),
                 False,
             ),
         ]
@@ -553,9 +551,7 @@ class ImagePrefixTests(unittest.TestCase):
         for i, tc in enumerate(tcs):
             actual: bool
             try:
-                runtime.require_same_image_prefix_as_instance(
-                    tc.config, tc.image_prefix
-                )
+                runtime.require_same_image_tag_as_instance(tc.config, tc.image_tag)
                 actual = True
             except RuntimeError:
                 actual = False
@@ -574,9 +570,9 @@ class CommandLineTests(unittest.TestCase):
         tcs: t.List[Tc] = [
             Tc(["prepare"], runtime.PrepareCommand(plane_git_path, None)),
             Tc(
-                ["prepare", "--image-prefix", "plane-47"],
+                ["prepare", "--image-tag", "plane-47"],
                 runtime.PrepareCommand(
-                    plane_git_path, plane_config.ImagePrefix("plane-47")
+                    plane_git_path, plane_config.ImageTag("plane-47")
                 ),
             ),
             Tc(
@@ -595,14 +591,14 @@ class CommandLineTests(unittest.TestCase):
                     "run",
                     "--bind",
                     "127.0.0.1:18580",
-                    "--image-prefix",
+                    "--image-tag",
                     "plane-47",
                 ],
                 runtime.StartCommand(
                     pl.Path("run"),
                     plane_git_path,
                     runtime.BindAddress(ipaddress.IPv4Address("127.0.0.1"), 18580),
-                    plane_config.ImagePrefix("plane-47"),
+                    plane_config.ImageTag("plane-47"),
                 ),
             ),
             Tc(["stop", "--run-dir", "run"], runtime.StopCommand(pl.Path("run"))),
@@ -650,7 +646,7 @@ class CommandLineTests(unittest.TestCase):
                     "plane",
                     "--bind",
                     "127.0.0.1:18580",
-                    "--image-prefix",
+                    "--image-tag",
                     "plane-47",
                 ],
                 runtime.ImportCommand(
@@ -658,7 +654,7 @@ class CommandLineTests(unittest.TestCase):
                     pl.Path("backup.zstd"),
                     pl.Path("plane"),
                     runtime.BindAddress(ipaddress.IPv4Address("127.0.0.1"), 18580),
-                    plane_config.ImagePrefix("plane-47"),
+                    plane_config.ImageTag("plane-47"),
                 ),
             ),
             Tc(

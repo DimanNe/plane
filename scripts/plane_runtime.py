@@ -55,8 +55,8 @@ OUR_IMAGE_NAMES: t.Dict[plane_config.Service, str] = {
     plane_config.Service.SPACE: "plane-local-space",
     plane_config.Service.PROXY: "plane-local-proxy",
 }
-# The tag of the owner's images, which every instance started without --image-prefix runs.
-IMAGE_TAG_WITHOUT_PREFIX: str = "current"
+# The tag of the owner's images, which every instance started without --image-tag runs.
+DEFAULT_IMAGE_TAG: str = "current"
 # Every service listens inside the network namespace of the instance. Only the proxy is published
 # to the host, on the address and port the caller names.
 SERVICE_PORTS: t.Dict[plane_config.Service, int] = {
@@ -161,21 +161,16 @@ class BindAddress:
         )
 
 
-def parse_image_prefix(text: str) -> plane_config.ImagePrefix:
-    # FOR_REVIEWER: the value becomes the tag of the images (plane-local-api:NAME), not a prefix of
-    # their names, although the flag says prefix. As a tag, `docker image ls 'plane-local-*'` still lists
-    # every image of a service together, and the value follows the tag rules below. The alternative is
-    # NAME-plane-local-api:current, whose NAME would follow the stricter rules of a repository name
-    # (lower case, no leading '_').
+def parse_image_tag(text: str) -> plane_config.ImageTag:
     if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", text):
         raise argparse.ArgumentTypeError(
             f"Expected a Docker image tag: up to 128 letters, digits, '_', '.' and '-', not starting with '.' or '-': {text!r}"
         )
-    if text == IMAGE_TAG_WITHOUT_PREFIX:
+    if text == DEFAULT_IMAGE_TAG:
         raise argparse.ArgumentTypeError(
-            f"{text!r} names the images of the instances started without --image-prefix"
+            f"{text!r} names the images of the instances started without --image-tag"
         )
-    return plane_config.ImagePrefix(text)
+    return plane_config.ImageTag(text)
 
 
 def make_bind_mount_option(
@@ -283,14 +278,14 @@ def resolve_archive_path(archive_path: pl.Path, run_dir: pl.Path) -> pl.Path:
     return archive_path
 
 
-def get_image_tag(image_prefix: t.Optional[plane_config.ImagePrefix]) -> str:
-    return IMAGE_TAG_WITHOUT_PREFIX if image_prefix is None else image_prefix
+def get_image_tag(image_tag: t.Optional[plane_config.ImageTag]) -> str:
+    return DEFAULT_IMAGE_TAG if image_tag is None else image_tag
 
 
 def get_all_images(
-    image_prefix: t.Optional[plane_config.ImagePrefix],
+    image_tag: t.Optional[plane_config.ImageTag],
 ) -> t.Dict[plane_config.Service, str]:
-    tag: str = get_image_tag(image_prefix)
+    tag: str = get_image_tag(image_tag)
     return {
         **{service: f"{name}:{tag}" for service, name in OUR_IMAGE_NAMES.items()},
         **EXTERNAL_DEPS,
@@ -298,7 +293,7 @@ def get_all_images(
 
 
 def build_our_images(
-    plane_git_path: pl.Path, image_prefix: t.Optional[plane_config.ImagePrefix]
+    plane_git_path: pl.Path, image_tag: t.Optional[plane_config.ImageTag]
 ) -> None:
     service: plane_config.Service
     for service in (
@@ -314,7 +309,7 @@ def build_our_images(
             "--network",
             "host",
             "-t",
-            get_all_images(image_prefix)[service],
+            get_all_images(image_tag)[service],
             "-f",
             str(
                 plane_git_path
@@ -489,24 +484,24 @@ def require_instance_config(run_dir: pl.Path) -> plane_config.InstanceConfig:
     return config
 
 
-def require_same_image_prefix_as_instance(
+def require_same_image_tag_as_instance(
     config: t.Optional[plane_config.InstanceConfig],
-    image_prefix: t.Optional[plane_config.ImagePrefix],
+    image_tag: t.Optional[plane_config.ImageTag],
 ) -> None:
     """The API image an instance runs applies its migrations to the instance's data, and the
     owner's instance holds real tasks. Pointed at the owner's run dir, a session's images would
-    migrate that data with code under development; a session that leaves out its --image-prefix
+    migrate that data with code under development; a session that leaves out its --image-tag
     would check the owner's images rather than its own code. Refuses images other than those of
     the instance's first start."""
-    if config is not None and config.image_prefix != image_prefix:
+    if config is not None and config.image_tag != image_tag:
         recorded_option: str = (
-            "no --image-prefix"
-            if config.image_prefix is None
-            else f"--image-prefix {config.image_prefix}"
+            "no --image-tag"
+            if config.image_tag is None
+            else f"--image-tag {config.image_tag}"
         )
         raise RuntimeError(
-            f"The instance runs the images plane-local-*:{get_image_tag(config.image_prefix)}, and this command names "
-            f"plane-local-*:{get_image_tag(image_prefix)}: pass {recorded_option}, or another --run-dir"
+            f"The instance runs the images plane-local-*:{get_image_tag(config.image_tag)}, and this command names "
+            f"plane-local-*:{get_image_tag(image_tag)}: pass {recorded_option}, or another --run-dir"
         )
 
 
@@ -1964,9 +1959,9 @@ def require_archive_output_file(output: pl.Path) -> None:
 
 
 def build_or_pull_missing_images_and_get_ids(
-    plane_git_path: pl.Path, image_prefix: t.Optional[plane_config.ImagePrefix]
+    plane_git_path: pl.Path, image_tag: t.Optional[plane_config.ImageTag]
 ) -> t.Dict[plane_config.Service, str]:
-    all_images: t.Dict[plane_config.Service, str] = get_all_images(image_prefix)
+    all_images: t.Dict[plane_config.Service, str] = get_all_images(image_tag)
     image_ids_by_tag: t.Dict[str, str] = get_docker_image_ids_by_tag(
         list(all_images.values())
     )
@@ -1976,7 +1971,7 @@ def build_or_pull_missing_images_and_get_ids(
             for service, tag in all_images.items()
             if service not in EXTERNAL_DEPS
         ):
-            build_our_images(plane_git_path, image_prefix)
+            build_our_images(plane_git_path, image_tag)
         pull_and_resolve_external_images()
         image_ids_by_tag = get_docker_image_ids_by_tag(list(all_images.values()))
     return {service: image_ids_by_tag[tag] for service, tag in all_images.items()}
@@ -2047,18 +2042,18 @@ class Command(abc.ABC):
 @dc.dataclass(frozen=True)
 class PrepareCommand(Command):
     plane_git_path: pl.Path
-    image_prefix: t.Optional[plane_config.ImagePrefix]
+    image_tag: t.Optional[plane_config.ImageTag]
 
     def run(self) -> None:
         plane_git_path: pl.Path = resolve_home(self.plane_git_path)
-        build_our_images(plane_git_path, self.image_prefix)
+        build_our_images(plane_git_path, self.image_tag)
         pull_and_resolve_external_images()
         print(
             json.dumps(
                 {
                     "ok": True,
                     "action": "prepare",
-                    "images": list(get_all_images(self.image_prefix).values()),
+                    "images": list(get_all_images(self.image_tag).values()),
                 }
             )
         )
@@ -2069,7 +2064,7 @@ class StartCommand(Command):
     run_dir: pl.Path
     plane_git_path: pl.Path
     bind: BindAddress
-    image_prefix: t.Optional[plane_config.ImagePrefix]
+    image_tag: t.Optional[plane_config.ImageTag]
 
     def run(self) -> None:
         start_time: float = time.monotonic()
@@ -2080,17 +2075,15 @@ class StartCommand(Command):
         config: t.Optional[plane_config.InstanceConfig] = (
             plane_config.InstanceConfig.read_existing(run_dir)
         )
-        require_same_image_prefix_as_instance(config, self.image_prefix)
+        require_same_image_tag_as_instance(config, self.image_tag)
         docker_fs: DockerFs
         with DockerFs() as docker_fs:
             image_ids: t.Dict[plane_config.Service, str] = (
-                build_or_pull_missing_images_and_get_ids(
-                    plane_git_path, self.image_prefix
-                )
+                build_or_pull_missing_images_and_get_ids(plane_git_path, self.image_tag)
             )
             if config is None:
                 config = plane_config.InstanceConfig.make()
-                config.image_prefix = self.image_prefix
+                config.image_tag = self.image_tag
             start_plane_services(
                 run_dir, config, self.bind, image_ids, docker_fs, timings
             )
@@ -2155,7 +2148,7 @@ class ImportCommand(Command):
     input: pl.Path
     plane_git_path: pl.Path
     bind: BindAddress
-    image_prefix: t.Optional[plane_config.ImagePrefix]
+    image_tag: t.Optional[plane_config.ImageTag]
 
     def run(self) -> None:
         start_time: float = time.monotonic()
@@ -2167,11 +2160,11 @@ class ImportCommand(Command):
             if self.input == pl.Path("/dev/null")
             else resolve_archive_path(self.input, run_dir)
         )
-        # FOR_REVIEWER: a failed import may leave the configuration of the archive, and with it the prefix
-        # of the exported instance; a retry with another prefix is then refused, and the message names
-        # the prefix to pass.
-        require_same_image_prefix_as_instance(
-            plane_config.InstanceConfig.read_existing(run_dir), self.image_prefix
+        # FOR_REVIEWER: a failed import may leave the configuration of the archive, and with it the image
+        # tag of the exported instance; a retry with another tag is then refused, and the message names
+        # the tag to pass.
+        require_same_image_tag_as_instance(
+            plane_config.InstanceConfig.read_existing(run_dir), self.image_tag
         )
         timings: Timings = make_lifecycle_timings(start_time)
         docker_fs: DockerFs
@@ -2185,7 +2178,7 @@ class ImportCommand(Command):
             ] = executor.submit(
                 build_or_pull_missing_images_and_get_ids,
                 plane_git_path,
-                self.image_prefix,
+                self.image_tag,
             )
             remove_containers(run_dir)
             docker_fs.run_fs_cmd_in_docker_ns(["rm", "-rf", "--", str(run_dir)])
@@ -2195,9 +2188,9 @@ class ImportCommand(Command):
                 if input == pl.Path("/dev/null")
                 else read_instance_config_from_archive(input)
             )
-            # An archive keeps the prefix of the instance that was exported; the owner imports a
+            # An archive keeps the image tag of the instance that was exported; the owner imports a
             # session's export without one.
-            config.image_prefix = self.image_prefix
+            config.image_tag = self.image_tag
             # The Python services need only the configuration to load their code, which takes
             # longer than extracting a backup, so they start before the extraction.
             early_start: concurrent.futures.Future[
@@ -2286,7 +2279,7 @@ class BootstrapUserCommand(Command):
 def parse_cli_command(argv: t.Sequence[str]) -> Command:
     # FOR_REVIEWER: claude/README.md deletes a session's images with two docker commands, the first
     # removing the containers of an instance by its run directory. A subcommand that removes every
-    # container on the images of a prefix (docker ps --filter ancestor=...) and then the images would
+    # container on the images of a tag (docker ps --filter ancestor=...) and then the images would
     # be harder to get wrong; not added, since it was not asked for.
     plane_git_path: pl.Path = pl.Path(__file__).resolve().parents[1]
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
@@ -2312,10 +2305,10 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         help="Plane checkout containing application sources, packages and Dockerfiles. Default: the checkout containing this script.",
     )
     prepare_parser.add_argument(
-        "--image-prefix",
-        type=parse_image_prefix,
-        metavar="NAME",
-        help="Build the images as plane-local-*:NAME rather than plane-local-*:current, which every instance started without --image-prefix runs.",
+        "--image-tag",
+        type=parse_image_tag,
+        metavar="TAG",
+        help="Build the images as plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs.",
     )
     start_parser: argparse.ArgumentParser = subparsers.add_parser(
         "start",
@@ -2342,10 +2335,10 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         help="Host address and port the browser reaches Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. A browser may reach it by any address of the host or through a tunnel; links in the emails and notifications Plane sends name http://localhost:PORT.",
     )
     start_parser.add_argument(
-        "--image-prefix",
-        type=parse_image_prefix,
-        metavar="NAME",
-        help="Run the images plane-local-*:NAME rather than plane-local-*:current, which every instance started without --image-prefix runs, building them first if they are missing. An instance runs only the images of its first start.",
+        "--image-tag",
+        type=parse_image_tag,
+        metavar="TAG",
+        help="Run the images plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs, building them first if they are missing. An instance runs only the images of its first start.",
     )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
@@ -2430,10 +2423,10 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         help="Host address and port the browser reaches the restored Plane on: 127.0.0.1:PORT for this host only, 0.0.0.0:PORT for every interface. It is the only port of the instance open on the host. A browser may reach it by any address of the host or through a tunnel; links in the emails and notifications Plane sends name http://localhost:PORT.",
     )
     import_parser.add_argument(
-        "--image-prefix",
-        type=parse_image_prefix,
-        metavar="NAME",
-        help="Run the images plane-local-*:NAME rather than plane-local-*:current, which every instance started without --image-prefix runs, building them first if they are missing. An instance runs only the images of its first start. The prefix recorded in the backup does not count.",
+        "--image-tag",
+        type=parse_image_tag,
+        metavar="TAG",
+        help="Run the images plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs, building them first if they are missing. An instance runs only the images of its first start. The tag recorded in the backup does not count.",
     )
     bootstrap_user_parser: argparse.ArgumentParser = subparsers.add_parser(
         "bootstrap-user",
@@ -2457,14 +2450,14 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
     args: argparse.Namespace = parser.parse_args(argv)
     if args.subparser_name == "prepare":
         return PrepareCommand(
-            plane_git_path=pl.Path(args.plane_git_path), image_prefix=args.image_prefix
+            plane_git_path=pl.Path(args.plane_git_path), image_tag=args.image_tag
         )
     elif args.subparser_name == "start":
         return StartCommand(
             run_dir=pl.Path(args.run_dir),
             plane_git_path=pl.Path(args.plane_git_path),
             bind=args.bind,
-            image_prefix=args.image_prefix,
+            image_tag=args.image_tag,
         )
     elif args.subparser_name == "stop":
         return StopCommand(run_dir=pl.Path(args.run_dir))
@@ -2483,7 +2476,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
             input=pl.Path(args.input),
             plane_git_path=pl.Path(args.plane_git_path),
             bind=args.bind,
-            image_prefix=args.image_prefix,
+            image_tag=args.image_tag,
         )
     elif args.subparser_name == "bootstrap-user":
         return BootstrapUserCommand(
