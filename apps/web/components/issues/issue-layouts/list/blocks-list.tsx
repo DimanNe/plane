@@ -18,6 +18,7 @@ import { LIST_ROW_INDENT, LIST_ROW_SPACING, getListRows } from "./utils";
 
 interface Props {
   issueIds: TGroupedIssues | any;
+  issueIdsOfList: Set<string>;
   issuesMap: TIssueMap;
   groupId: string;
   canEditProperties: (projectId: string | undefined) => boolean;
@@ -34,6 +35,7 @@ interface Props {
 export const IssueBlocksList = observer(function IssueBlocksList(props: Props) {
   const {
     issueIds,
+    issueIdsOfList,
     issuesMap,
     groupId,
     updateIssue,
@@ -52,7 +54,7 @@ export const IssueBlocksList = observer(function IssueBlocksList(props: Props) {
   return (
     <div className="relative h-full w-full">
       {issueIds &&
-        getListRows(issueIds, issuesMap, collapsedIssueIds).map((row, index, rows) => (
+        getListRows(issueIds, issuesMap, collapsedIssueIds, issueIdsOfList).map((row, index, rows) => (
           <IssueBlockRoot
             key={row.issueId}
             issueId={row.issueId}
@@ -66,6 +68,7 @@ export const IssueBlocksList = observer(function IssueBlocksList(props: Props) {
             spacingTop={row.spacingLevel * LIST_ROW_SPACING}
             hasSubIssues={row.hasSubIssues}
             isExpanded={row.isExpanded}
+            isInAnotherGroup={row.isInAnotherGroup}
             containerRef={containerRef}
             selectionHelpers={selectionHelpers}
             groupId={groupId}

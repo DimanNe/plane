@@ -17,7 +17,7 @@ import type {
 } from "@plane/types";
 // components
 import type { TListRow } from "@/components/issues/issue-layouts/list/utils";
-import { getListRows } from "@/components/issues/issue-layouts/list/utils";
+import { getIssueIdsOfList, getListRows } from "@/components/issues/issue-layouts/list/utils";
 import { getIssueBlockId } from "@/components/issues/issue-layouts/utils";
 import { isTypingInInput } from "@/components/power-k/core/shortcut-handler";
 // hooks
@@ -52,13 +52,15 @@ export const useListRowSelection = (props: Props) => {
     useListView();
   const { peekIssue, setPeekIssue } = useIssueDetail();
 
-  // the rows in the order the list shows them
+  // the rows in the order the list shows them, but for those of work items in another group, which only show the
+  // structure there
+  const issueIdsOfList = getIssueIdsOfList(groupedIssueIds);
   const rows = groups.flatMap((group) =>
     group_by && collapsedGroups.group_by.includes(group.id)
       ? []
-      : getListRows(groupedIssueIds[group.id] ?? [], issuesMap, collapsedIssueIds).map((row) =>
-          Object.assign(row, { groupId: group.id })
-        )
+      : getListRows(groupedIssueIds[group.id] ?? [], issuesMap, collapsedIssueIds, issueIdsOfList)
+          .filter((row) => !row.isInAnotherGroup)
+          .map((row) => Object.assign(row, { groupId: group.id }))
   );
   const selectedRowIndex = rows.findIndex(
     (row) => row.issueId === selectedRow?.issueId && row.groupId === selectedRow.groupId

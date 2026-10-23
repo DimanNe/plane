@@ -50,6 +50,7 @@ interface IssueBlockProps {
   spacingLeft?: number;
   hasSubIssues: boolean;
   isExpanded: boolean;
+  isInAnotherGroup: boolean;
   selectionHelpers: TSelectionHelper;
   isCurrentBlockDragging: boolean;
   setIsCurrentBlockDragging: React.Dispatch<React.SetStateAction<boolean>>;
@@ -71,6 +72,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
     spacingLeft = 14,
     hasSubIssues,
     isExpanded,
+    isInAnotherGroup,
     selectionHelpers,
     isCurrentBlockDragging,
     setIsCurrentBlockDragging,
@@ -109,7 +111,11 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
 
   // derived values
   const issue = issuesMap[issueId];
-  const canEditIssueProperties = canEditProperties(issue?.project_id ?? undefined);
+  // FOR_REVIEWER: open question, decided this way: the row of a work item in another group is not dragged, edited,
+  // selected by the arrow keys or given a menu, since it only shows the structure. A click opens the work item in
+  // the view beside the list, and a row dropped onto it becomes its sub-work item. The alternative is a row that
+  // can be dragged too, which moves the work item out of the group it really is in.
+  const canEditIssueProperties = !isInAnotherGroup && canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
   const isTitleEdited = getIsRowTitleEdited(issueId, groupId);
   const stateMenuOfKey = useStateMenuOfKey("list", getIsRowSelected(issueId, groupId) ? issueId : undefined);
@@ -179,6 +185,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
         isPeekOpenOnPressRef.current = !!peekIssue;
       }}
       onClick={(e) => {
+        if (isInAnotherGroup) return handleIssuePeekOverview(issue);
         // a click selects the row; a double click, or Enter on the row, opens it and ends the editing of its title
         const isOpening = e.detail !== 1;
         if (isOpening || !getIsRowSelected(issue.id, groupId)) setSelectedRow({ issueId: issue.id, groupId });
@@ -200,12 +207,13 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
             "last:border-b-transparent": !getIsIssuePeeked(issue.id) && !isIssueActive,
             "bg-accent-primary/5 hover:bg-accent-primary/10": isIssueSelected,
             "bg-layer-1": isCurrentBlockDragging,
+            "opacity-50": isInAnotherGroup,
             "md:flex-row md:items-center": isSidebarCollapsed,
             "lg:flex-row lg:items-center": !isSidebarCollapsed,
           }
         )}
         onDragStart={() => {
-          if (!isDraggingAllowed) {
+          if (!isDraggingAllowed && !isInAnotherGroup) {
             setToast({
               type: "warning",
               title: "Cannot move work item",
@@ -350,10 +358,11 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                   e.stopPropagation();
                 }}
               >
-                {quickActions({
-                  issue,
-                  parentRef: issueRef,
-                })}
+                {!isInAnotherGroup &&
+                  quickActions({
+                    issue,
+                    parentRef: issueRef,
+                  })}
               </div>
             </>
           ) : (

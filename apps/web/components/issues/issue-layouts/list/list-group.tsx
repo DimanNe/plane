@@ -46,11 +46,13 @@ import { HeaderGroupByCard } from "./headers/group-by-card";
 import { ListGroupQuickAddButton } from "./headers/quick-add-button";
 import { getListGroupHeaderId, highlightNewWorkItem } from "./new-work-item-arrival";
 import type { TRenderQuickActions } from "./list-view-types";
-import { getListDropLocation, getListDropMark } from "./utils";
+import { getCarriedSubIssueIds, getListDropLocation, getListDropMark } from "./utils";
 import { getWorkItemDataOfGroup } from "./work-item-data-of-group";
 
 interface Props {
   groupIssueIds: string[] | undefined;
+  // the work items of all the groups of the list
+  issueIdsOfList: Set<string>;
   group: IGroupByColumn;
   issuesMap: TIssueMap;
   group_by: TIssueGroupByOptions | null;
@@ -77,6 +79,7 @@ interface Props {
 export const ListGroup = observer(function ListGroup(props: Props) {
   const {
     groupIssueIds = [],
+    issueIdsOfList,
     group,
     issuesMap,
     group_by,
@@ -167,7 +170,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
       setDropMark(
         isWorkflowDropDisabled || group.isDropDisabled
           ? undefined
-          : getListDropMark(payload, getIssueIds(group.id) ?? [], issuesMap, orderBy === "sort_order")
+          : getListDropMark(payload, getIssueIds(group.id) ?? [], issuesMap, issueIdsOfList, orderBy === "sort_order")
       );
 
     return combine(
@@ -207,7 +210,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           setIsDraggingOverColumn(false);
           setDropMark(undefined);
           const source = getSourceFromDropPayload(payload);
-          const destination = getListDropLocation(payload, getIssueIds(group.id) ?? [], issuesMap);
+          const destination = getListDropLocation(payload, getIssueIds(group.id) ?? [], issuesMap, issueIdsOfList);
 
           if (!source || !destination) return;
 
@@ -221,7 +224,15 @@ export const ListGroup = observer(function ListGroup(props: Props) {
             return;
           }
 
-          handleOnDrop(source, destination);
+          handleOnDrop(
+            {
+              ...source,
+              carriedSubIssueIds: source.id
+                ? getCarriedSubIssueIds(source.id, getIssueIds(source.groupId) ?? [], issuesMap, issueIdsOfList)
+                : undefined,
+            },
+            destination
+          );
 
           highlightIssueOnDrop(getIssueBlockId(source.id, destination?.groupId), orderBy !== "sort_order");
 
@@ -240,6 +251,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     setDragColumnOrientation,
     setIsDraggingOverColumn,
     isWorkflowDropDisabled,
+    issueIdsOfList,
   ]);
 
   const isDragAllowed = group_by ? DRAG_ALLOWED_GROUPS.includes(group_by) : true;
@@ -330,6 +342,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           {groupIssueIds && (
             <IssueBlocksList
               issueIds={groupIssueIds}
+              issueIdsOfList={issueIdsOfList}
               groupId={group.id}
               issuesMap={issuesMap}
               updateIssue={updateIssue}

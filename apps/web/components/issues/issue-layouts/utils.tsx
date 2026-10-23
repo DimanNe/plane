@@ -87,6 +87,8 @@ export type GroupDropLocation = {
   id: string | undefined;
   canAddIssueBelow?: boolean;
   parentId?: string | null;
+  // the list layout's sub-work items that go to the new group with the dragged work item
+  carriedSubIssueIds?: string[];
 };
 
 export type IssueUpdates = {
@@ -637,6 +639,14 @@ export const handleGroupDragDrop = async (
     // keep track of updates on what was added and what was removed
     issueUpdates[groupKey] = { ADD: getGroupId(destination.groupId), REMOVE: getGroupId(source.groupId) };
     updatedIssue = { ...updatedIssue, [groupKey]: groupValue };
+
+    // where a work item has one value of the grouping, its sub-work items take the new value with it
+    if (!Array.isArray(groupValue))
+      for (const subIssueId of source.carriedSubIssueIds ?? []) {
+        const subIssue = getIssueById(subIssueId);
+        if (subIssue?.project_id)
+          updateIssueOnDrop(subIssue.project_id, subIssue.id, { [groupKey]: groupValue }, issueUpdates);
+      }
   }
 
   // do the same for subgroup

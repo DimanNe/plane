@@ -1,7 +1,8 @@
 """
-The list is a tree: a sub-work item stands under its parent, one level in, where both are in the same group
-and the parent is shown. Where the parent is in another group, or a filter hides it, the sub-work item stands
-at the top level. A change of parent shows at once, and a folded line stays folded while the list changes.
+The list is a tree: a sub-work item stands under its parent, one level in. Where the parent is in another group,
+the group shows it there too, dimmed (see parent_in_another_group); where a filter hides it, the sub-work item
+stands at the top level. A change of parent shows at once. A folded work item is folded in every group that shows
+it, and stays folded while the list changes.
 """
 
 import typing as t
@@ -30,15 +31,16 @@ def run(check: steps.Check) -> None:
     work_items: str = f"/projects/{project.id}/work-items/"
     page: pw.Page = ll.open_list(check, account, project)
     check.expect(
-        "every level is unfolded at first; a sub-work item in another group than its parent stands at the "
-        "top level of its own",
+        "every level is unfolded at first; a sub-work item in another group than its parent stands under the "
+        "parent there",
         lambda: ll.read_lines(page),
         [
             ["Backlog", 0, "parent"],
             ["Backlog", 1, "child"],
             ["Backlog", 2, "grandchild"],
             ["Backlog", 0, "alone"],
-            ["Todo", 0, "child in todo"],
+            ["Todo", 0, "parent"],
+            ["Todo", 1, "child in todo"],
         ],
     )
 
@@ -77,9 +79,9 @@ def run(check: steps.Check) -> None:
     ll.select_line(page, "parent")
     page.keyboard.press("ArrowLeft")
     check.expect(
-        "a folded line hides all that stands under it",
+        "a folded line hides all that stands under it, in every group that shows its work item",
         lambda: sorted(ll.read_titles(page)),
-        ["child in todo", "grandchild", "parent"],
+        ["grandchild", "parent", "parent"],
     )
     ins.call_api(
         check.instance,
@@ -101,7 +103,7 @@ def run(check: steps.Check) -> None:
     check.expect(
         "it stays folded while the list changes: a new sub-work item of it is not shown",
         lambda: sorted(ll.read_titles(page)),
-        ["child in todo", "parent", "renamed"],
+        ["parent", "parent", "renamed"],
     )
     page.keyboard.press("ArrowRight")
     check.expect(

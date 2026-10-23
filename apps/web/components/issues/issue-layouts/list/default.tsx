@@ -36,6 +36,7 @@ import { useListRowSelection } from "@/hooks/use-list-row-selection";
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
 import { ListGroup } from "./list-group";
+import { getIssueIdsOfList } from "./utils";
 import type { TRenderQuickActions } from "./list-view-types";
 
 export interface IList {
@@ -113,6 +114,7 @@ export const List = observer(function List(props: IList) {
   if (!groups) return null;
 
   const getGroupIndex = (groupId: string | undefined) => groups.findIndex(({ id }) => id === groupId);
+  const issueIdsOfList = getIssueIdsOfList(groupedIssueIds);
 
   const is_list = group_by === null ? true : false;
 
@@ -149,6 +151,7 @@ export const List = observer(function List(props: IList) {
                   <ListGroup
                     key={group.id}
                     groupIssueIds={groupedIssueIds?.[group.id]}
+                    issueIdsOfList={issueIdsOfList}
                     issuesMap={issuesMap}
                     group_by={group_by}
                     group={group}

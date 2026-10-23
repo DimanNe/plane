@@ -41,6 +41,7 @@ type Props = {
   spacingTop: number;
   hasSubIssues: boolean;
   isExpanded: boolean;
+  isInAnotherGroup: boolean;
   containerRef: MutableRefObject<HTMLDivElement | null>;
   selectionHelpers: TSelectionHelper;
   groupId: string;
@@ -64,6 +65,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
     spacingTop,
     hasSubIssues,
     isExpanded,
+    isInAnotherGroup,
     containerRef,
     isDragAllowed,
     canDropOverIssue,
@@ -91,14 +93,17 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
         getData: ({ input, element, source }): TListRowDropData => ({
           id: issueId,
           type: "ISSUE",
-          // a row takes neither itself nor a row it is under
+          // A row takes neither itself nor a row it is under. The row of a work item in another group takes a row
+          // in only: it does not stand at its place in this group.
           place: isSubIssueOf(issuesMap, issueId, source.data.id as string)
             ? undefined
-            : getListRowDropPlace(element, input.clientY, isExpanded),
+            : isInAnotherGroup
+              ? "inside"
+              : getListRowDropPlace(element, input.clientY, isExpanded),
         }),
       })
     );
-  }, [issueId, issuesMap, isExpanded, issueBlockRef, canDropOverIssue]);
+  }, [issueId, issuesMap, isExpanded, isInAnotherGroup, issueBlockRef, canDropOverIssue]);
 
   useOutsideClickDetector(issueBlockRef, () => {
     issueBlockRef?.current?.classList?.remove(HIGHLIGHT_CLASS);
@@ -142,6 +147,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
           displayProperties={displayProperties}
           hasSubIssues={hasSubIssues}
           isExpanded={isExpanded}
+          isInAnotherGroup={isInAnotherGroup}
           nestingLevel={nestingLevel}
           spacingLeft={spacingLeft}
           selectionHelpers={selectionHelpers}

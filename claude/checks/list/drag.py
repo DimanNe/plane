@@ -101,9 +101,10 @@ def check_what_is_drawn(
     )
     ll.hold_over(page, ll.line(page, "t child two"), down=0.15)
     check.expect(
-        "among sub-work items the thick line begins where their text begins",
+        "among the sub-work items of another group the work item keeps its parent, here none: the group is "
+        "marked, and the thick line stands at its end",
         lambda: ll.read_drop_marks(page),
-        [make_line_mark("above", "t child two", child_text["x"], right)],
+        [make_line_mark("at the end of", "Todo", left, right), {"group": "Todo"}],
     )
     ll.hold_over(page, ll.group_header(page, "Todo"), down=0.5)
     check.expect(
@@ -148,18 +149,20 @@ def check_what_is_drawn(
         ([], before),
         seconds=1,
     )
-
-
-def drop_on(page: pw.Page, carried: str, target: pw.Locator, down: float) -> None:
-    ll.carry_line(page, carried)
-    ll.hold_over(page, target, down)
-    page.mouse.up()
+    ll.carry_line(page, "t other")
+    ll.hold_over(page, ll.line(page, "t child two"), down=0.15)
+    check.expect(
+        "within its group, among sub-work items the thick line begins where their text begins",
+        lambda: ll.read_drop_marks(page),
+        [make_line_mark("above", "t child two", child_text["x"], right)],
+    )
+    let_go_outside(page)
 
 
 def check_what_a_drop_does(
     check: steps.Check, page: pw.Page, project: ins.Project
 ) -> None:
-    drop_on(page, "b one", ll.line(page, "b three"), down=0.85)
+    ll.drop_on(page, ll.line(page, "b one"), ll.line(page, "b three"), down=0.85)
     check.expect(
         "dropped on the lower part of a line, the work item stands after it, on the page and on the server",
         lambda: (ll.read_titles(page)[:3], read_stored(check, project)["Backlog"]),
@@ -168,7 +171,7 @@ def check_what_a_drop_does(
             [(None, "b two"), (None, "b three"), (None, "b one")],
         ),
     )
-    drop_on(page, "b two", ll.line(page, "b three"), down=0.5)
+    ll.drop_on(page, ll.line(page, "b two"), ll.line(page, "b three"), down=0.5)
     check.expect(
         "dropped on the middle of a line, it is that line's sub-work item",
         lambda: (ll.read_lines(page)[:3], read_stored(check, project)["Backlog"]),
@@ -181,7 +184,7 @@ def check_what_a_drop_does(
             [(None, "b three"), (None, "b one"), ("b three", "b two")],
         ),
     )
-    drop_on(page, "b one", ll.group_header(page, "Todo"), down=0.5)
+    ll.drop_on(page, ll.line(page, "b one"), ll.group_header(page, "Todo"), down=0.5)
     check.expect(
         "dropped on a group's header, it is the last line of that group and has its state",
         lambda: (ll.read_lines(page)[2:], read_stored(check, project)["Todo"][-1]),
@@ -196,7 +199,7 @@ def check_what_a_drop_does(
             (None, "b one"),
         ),
     )
-    drop_on(page, "t other", ll.line(page, "t child two"), down=0.15)
+    ll.drop_on(page, ll.line(page, "t other"), ll.line(page, "t child two"), down=0.15)
     check.expect(
         "dropped between two sub-work items, it is a sub-work item of their parent at that place",
         lambda: (
@@ -218,14 +221,23 @@ def check_what_a_drop_does(
             ["t child one", "t other", "t child two"],
         ),
     )
-    drop_on(page, "t child one", ll.group_header(page, "In Progress"), down=0.5)
+    ll.drop_on(
+        page,
+        ll.line(page, "t child one"),
+        ll.group_header(page, "In Progress"),
+        down=0.5,
+    )
     check.expect(
-        "a sub-work item dropped on the header of another group takes that state and keeps its parent",
+        "a sub-work item dropped on the header of another group takes that state, keeps its parent and stands "
+        "under it there",
         lambda: (
-            ll.read_lines(page)[-1],
+            ll.read_lines(page)[-2:],
             read_stored(check, project).get("In Progress"),
         ),
-        (["In Progress", 0, "t child one"], [("t parent", "t child one")]),
+        (
+            [["In Progress", 0, "t parent"], ["In Progress", 1, "t child one"]],
+            [("t parent", "t child one")],
+        ),
     )
 
 

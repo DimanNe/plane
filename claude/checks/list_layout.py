@@ -116,10 +116,38 @@ def line(page: pw.Page, title: str) -> pw.Locator:
     return page.locator(LINE).filter(has=page.get_by_text(title, exact=True)).first
 
 
+def line_in_group(page: pw.Page, group: str, title: str) -> pw.Locator:
+    """The line with this title in a group, where a work item has lines in several."""
+    return (
+        group_header(page, group)
+        .locator("xpath=../..")
+        .locator(LINE)
+        .filter(has=page.get_by_text(title, exact=True))
+        .first
+    )
+
+
 def read_lines(page: pw.Page) -> t.List[t.List[t.Any]]:
     return page.evaluate(
         f"(indent) => {{ {IS_OF_THE_LIST_JS} return ({LINES_JS})(indent); }}", INDENT
     )
+
+
+def read_lines_in_another_group(page: pw.Page) -> t.List[t.List[t.Any]]:
+    """The lines drawn dimmed, as a group draws the parent of its work items that stands in another group: the
+    group they are drawn in, and their title."""
+    return [
+        [group, title]
+        for (group, _, title), is_dimmed in zip(
+            read_lines(page),
+            page.evaluate(
+                f"""() => {{ {IS_OF_THE_LIST_JS}
+                  return [...document.querySelectorAll('{LINE}')].filter(isOfTheList)
+                    .map((line) => Number(getComputedStyle(line).opacity) < 1); }}"""
+            ),
+        )
+        if is_dimmed
+    ]
 
 
 def read_titles(page: pw.Page) -> t.List[str]:
@@ -283,16 +311,28 @@ DROP_MARKS_JS: str = """
 """
 
 
-def carry_line(page: pw.Page, title: str) -> None:
+def carry(page: pw.Page, carried: pw.Locator) -> None:
     """Takes a line by its left padding, where it holds no control, and begins to drag it."""
-    box: t.Optional[pw.FloatRect] = line(page, title).bounding_box()
+    box: t.Optional[pw.FloatRect] = carried.bounding_box()
     assert box is not None
     browser.press_and_carry(page, (box["x"] + 6, box["y"] + box["height"] / 2))
+
+
+def carry_line(page: pw.Page, title: str) -> None:
+    carry(page, line(page, title))
 
 
 def hold_over(page: pw.Page, target: pw.Locator, down: float) -> None:
     """Brings the carried line over an element, at a part of its height."""
     browser.carry_to(page, browser.get_point(target, across=0.3, down=down))
+
+
+def drop_on(
+    page: pw.Page, carried: pw.Locator, target: pw.Locator, down: float
+) -> None:
+    carry(page, carried)
+    hold_over(page, target, down)
+    page.mouse.up()
 
 
 def read_drop_marks(page: pw.Page) -> t.List[t.Dict[str, t.Any]]:
