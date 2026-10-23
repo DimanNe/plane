@@ -19,11 +19,10 @@ PANEL_TITLE: str = '#full-screen-portal textarea[placeholder="Work item title"]'
 MESSAGE: str = '[aria-label="Notifications"] > *'
 CREATE_DIALOG: str = '[role="dialog"]:has(button:has-text("Discard"))'
 QUESTION: str = '[role="dialog"]:has-text("Are you sure"), [role="alertdialog"]:has-text("Are you sure")'
-# An open menu of a property of a work item (state, priority, ...), and not the picture of it that a state's letter
-# leaves.
-PROPERTY_MENU: str = (
-    "[data-select-popup]:not(.menu-choice-picture, .menu-choice-picture *)"
-)
+# An open menu of a property of a work item (state, priority, ...). A menu that has closed stays in the page, marked
+# closed, while it fades out, which takes longer than a step that follows at once; it is not open, and neither is
+# the picture of a menu that a state's letter leaves.
+PROPERTY_MENU: str = "[data-select-popup]:not([data-closed], .menu-choice-picture, .menu-choice-picture *)"
 # pixels a level of sub-work items is indented by
 INDENT: int = 24
 
