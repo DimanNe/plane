@@ -61,6 +61,19 @@ index cd2795d2f52b4fd4afce45b98a3cb0c777b4657c..41f22700586d59c4fb3454a198c83e2e
  	}
  } }));
  //#endregion
+diff --git a/dist/elements/pill/variants.js b/dist/elements/pill/variants.js
+index 98d70e0aaaade4cb25ff5913735a981a5ab3a34b..95a633269f0c0c605695d802cc408b3abc243d9b 100644
+--- a/dist/elements/pill/variants.js
++++ b/dist/elements/pill/variants.js
+@@ -22,7 +22,7 @@ const pillVariants = cva([
+ 			"aria-busy:cursor-default aria-busy:border-subtle-1 aria-busy:bg-layer-transparent aria-busy:text-disabled"
+ 		],
+ 		soft: [
+-			"border-transparent bg-layer-3",
++			"border-[color:var(--chip-edge,transparent)] bg-[color:var(--chip-surface,var(--bg-layer-3))]",
+ 			"hover:bg-layer-3-hover",
+ 			"active:bg-layer-3-active active:text-primary",
+ 			"data-popup-open:bg-layer-3-active data-popup-open:text-primary",
 diff --git a/dist/internal/button-geometry.js b/dist/internal/button-geometry.js
 index 317fff9cee4e0b292b8f06a6c2a9a97ef638bb2d..df3ac9e50b7b714087f7de81429b474b46aafda1 100644
 --- a/dist/internal/button-geometry.js

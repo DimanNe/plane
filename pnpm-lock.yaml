@@ -521,7 +521,7 @@ overrides:
   tinypool@2: '>=2.1.2 <3'
 
 patchedDependencies:
-  '@makeplane/propel@0.7.3': 6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66
+  '@makeplane/propel@0.7.3': 9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e
 
 importers:
 
@@ -562,7 +562,7 @@ importers:
         version: 5.2.30
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@plane/blocks':
         specifier: workspace:*
         version: link:../../packages/blocks
@@ -831,7 +831,7 @@ importers:
         version: 5.2.30
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@plane/blocks':
         specifier: workspace:*
         version: link:../../packages/blocks
@@ -979,7 +979,7 @@ importers:
         version: 5.2.30
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@plane/blocks':
         specifier: workspace:*
         version: link:../../packages/blocks
@@ -1160,7 +1160,7 @@ importers:
         version: 1.6.0(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@plane/constants':
         specifier: workspace:*
         version: link:../constants
@@ -1321,7 +1321,7 @@ importers:
         version: 2.15.2(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@plane/blocks':
         specifier: workspace:*
         version: link:../blocks
@@ -1648,7 +1648,7 @@ importers:
     dependencies:
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.1.17
@@ -1694,7 +1694,7 @@ importers:
     dependencies:
       '@makeplane/propel':
         specifier: 'catalog:'
-        version: 0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
+        version: 0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)
       '@plane/constants':
         specifier: workspace:*
         version: link:../constants
@@ -9091,7 +9091,7 @@ snapshots:
 
   '@lifeomic/attempt@3.1.0': {}
 
-  '@makeplane/propel@0.7.3(patch_hash=6f40ea6cbe297ebe98f2cce374d69bf222711f64c0427826139f64a7726c2e66)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)':
+  '@makeplane/propel@0.7.3(patch_hash=9a9f80241e7c6f80279bf6d961690d6ecd23713e5e77292f4a3fa703eaf2e46e)(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.1.17)':
     dependencies:
       '@base-ui/react': 1.6.0(@date-fns/tz@1.4.1)(@types/react@19.2.17)(date-fns@4.1.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       class-variance-authority: 0.7.1

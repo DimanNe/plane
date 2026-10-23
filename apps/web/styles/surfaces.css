@@ -37,3 +37,15 @@
   background-color: var(--bg-surface-1);
   box-shadow: var(--panel-shadow);
 }
+
+/*
+ * A chip (a property of a work item, or a small action such as "Add child") is a tone without a frame on the panel,
+ * through --chip-surface and --chip-edge, which @plane/blocks' pill-button and propel's soft pill read. A hovered or
+ * selected line of a list is tinted to about that tone, and a chip on it would read as text rather than as something
+ * to press; such a line gives its chips the panel's own surface and a clear edge instead. The edge parts the chip from
+ * a hovered line, the surface from a selected one, whose tint is darker.
+ */
+@utility chips-on-tinted-line {
+  --chip-surface: var(--bg-layer-2);
+  --chip-edge: var(--border-strong-1);
+}

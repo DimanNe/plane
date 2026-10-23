@@ -204,14 +204,14 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
           // FOR_REVIEWER: no transition of the background colour, which upstream has: a held arrow key moves the
           // selection on before the transition ends, and the selected row stayed pale and behind. The hover changes
           // at once too, as it does in Linear.
-          "group/list-block relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 hover:bg-layer-transparent-hover",
+          "group/list-block hover:chips-on-tinted-line relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 hover:bg-layer-transparent-hover",
           {
             "min-h-9 py-2": isCompact,
-            "bg-layer-transparent-selected hover:bg-layer-transparent-selected": isRowSelected,
+            "chips-on-tinted-line bg-layer-transparent-selected hover:bg-layer-transparent-selected": isRowSelected,
             "border-accent-strong": getIsIssuePeeked(issue.id) && peekIssue?.nestingLevel === nestingLevel,
             "border-strong-1": isIssueActive,
             "last:border-b-transparent": !getIsIssuePeeked(issue.id) && !isIssueActive,
-            "bg-accent-primary/5 hover:bg-accent-primary/10": isIssueSelected,
+            "chips-on-tinted-line bg-accent-primary/5 hover:bg-accent-primary/10": isIssueSelected,
             "bg-layer-1": isCurrentBlockDragging,
             "opacity-50": isInAnotherGroup,
             "md:flex-row md:items-center": isSidebarCollapsed,
