@@ -13,8 +13,6 @@ import instance as ins
 import list_layout as ll
 import steps
 
-# the check reads every frame the page draws, so it has the machine to itself
-ALONE: bool = True
 STATE_AT_LINE: str = 'button[aria-label^="State, "]'
 STATE_IN_VIEW_BESIDE: str = '#full-screen-portal button[aria-label^="State, "]'
 

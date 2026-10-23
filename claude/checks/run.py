@@ -11,8 +11,8 @@ A check is a file GROUP/NAME.py beside this one; it is named GROUP/NAME, and GRO
 first lines say the rule it guards. Each step prints as the rule it checks; the status is 1 when a step failed.
 
 An instance is one started by scripts/plane_runtime.py; nothing but its run directory is needed. The checks are
-spread over the run directories given, several at once on each; a check marked ALONE reads every frame the
-page draws and runs after the others, by itself.
+spread over the run directories given, several at once on each. Nothing of a run outlives it, however it ends
+(see own_cgroup.py).
 
 A check makes its own accounts and its own projects, in a workspace of the run, and removes the projects when
 it has passed. What a failed check left stays, with the way to sign in printed beside the failure, and so does
@@ -39,6 +39,7 @@ import playwright.sync_api as pw
 
 import browser
 import instance as ins
+import own_cgroup
 import steps
 
 CHECKS: pl.Path = pl.Path(__file__).resolve().parent
@@ -237,8 +238,7 @@ class ListChecks(Command):
         name: str
         for name in find_checks(self.names):
             module: types.ModuleType = load_check(name)
-            alone: str = " (runs alone)" if getattr(module, "ALONE", False) else ""
-            print(f"{name}{alone}\n    {get_rule(module)}")
+            print(f"{name}\n    {get_rule(module)}")
         return 0
 
 
@@ -250,13 +250,11 @@ class RunChecks(Command):
     at_once: int
 
     def run(self) -> int:
+        if not own_cgroup.can_kill_own_cgroup():
+            own_cgroup.run_again_in_own_cgroup()
+        own_cgroup.kill_own_cgroup_when_this_process_ends()
         start: float = time.monotonic()
         names: t.List[str] = find_checks(self.names)
-        # a check that samples frames or measures a time has the machine to itself, after the others
-        alone: t.List[str] = [
-            name for name in names if getattr(load_check(name), "ALONE", False)
-        ]
-        together: t.List[str] = [name for name in names if name not in alone]
         locks: t.List[t.TextIO] = [
             ins.lock_instance(run_dir) for run_dir in self.run_dirs
         ]
@@ -264,9 +262,8 @@ class RunChecks(Command):
             ins.open_instance(run_dir) for run_dir in self.run_dirs
         ]
         outcomes: t.List[Outcome] = run_checks_at_once(
-            together, instances, self.is_real_window, self.at_once
+            names, instances, self.is_real_window, self.at_once
         )
-        outcomes += run_checks_at_once(alone, instances[:1], self.is_real_window, 1)
         failed: t.List[Outcome] = [
             outcome
             for outcome in outcomes

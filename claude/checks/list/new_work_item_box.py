@@ -13,9 +13,6 @@ import instance as ins
 import list_layout as ll
 import steps
 
-# the check reads every frame the page draws, so it has the machine to itself
-ALONE: bool = True
-
 
 def save_and_record(
     page: pw.Page, title: str, state: t.Optional[str]

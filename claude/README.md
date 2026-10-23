@@ -75,8 +75,8 @@ check, spreads the checks over the run directories it is given, and removes what
 A check says in its first lines the rule it guards. Then it reads from top to bottom: the data it
 builds through `/api/v1/`, what a person does, with real pointer and key events, and what must
 then be true on the page and on the server. A step waits for what the page shows and never by
-the clock, unless its rule is that nothing happens. A check that reads every frame is marked
-`ALONE` and runs after the others. What two checks need is in the modules beside `run.py`.
+the clock, unless its rule is that nothing happens. What two checks need is in the modules
+beside `run.py`.
 
 **A task that changes behaviour changes its check in the same commit**, and a task that settles
 a new rule adds a check for it.

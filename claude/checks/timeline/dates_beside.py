@@ -16,9 +16,6 @@ import chart
 import instance as ins
 import steps
 
-# the check sweeps the pointer across bars faster than the moment after which they show their dates, so it has the
-# machine to itself
-ALONE: bool = True
 DIMENSION_LINE: str = 'div[class~="z-[3]"] > svg[class~="h-px"]'
 # Writes down, from now on, whether a dimension line was drawn in any frame.
 WATCH_JS: str = """
