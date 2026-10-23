@@ -724,7 +724,9 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     # asked for along with the page: the browser fetches them while the code loads, and the code's own requests
     # take them (a preload is only taken by a request of the same mode and credentials, hence use-credentials).
     # An address that is no file of the app is a page of the app (an asset that is not there, as after a new build,
-    # is not); its first part names the workspace, unless it is one of the pages outside workspaces. Only requests
+    # is not); its first part names the workspace, unless it is one of the pages outside workspaces. That part goes
+    # into a header, where a comma, a semicolon or an angle bracket would add or change preloads, so only what the
+    # API accepts as a workspace's slug counts (WorkSpaceSerializer.validate_slug, Workspace.slug). Only requests
     # that every page of a workspace makes are preloaded, so that none is fetched for nothing.
     # The build names a code file after a hash of its contents, so such a file never changes and is kept for good;
     # an address of one that is not there is answered with the page instead. The page, which names the files of the
@@ -748,7 +750,7 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
         @page_of_workspace {{
             not file
             not path /assets/*
-            path_regexp workspace ^/([^/.]+)(/|$)
+            path_regexp workspace ^/([A-Za-z0-9_-]{{1,48}})(/|$)
             not path /sign-up* /accounts/* /create-workspace* /onboarding* /invitations* /workspace-invitations*
         }}
         header @page_of_workspace +Link "{get_preload_header(PRELOADED_API_REQUESTS_OF_A_WORKSPACE_PAGE)}"

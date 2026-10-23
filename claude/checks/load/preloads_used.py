@@ -3,6 +3,7 @@ A page of the app has the browser fetch, along with the page itself, the API ans
 and the code takes those answers: each preloaded answer is one the code asks for, and none is fetched again.
 """
 
+import re
 import typing as t
 
 import playwright.sync_api as pw
@@ -80,5 +81,25 @@ def run(check: steps.Check) -> None:
             set(page.evaluate(PRELOADED_JS)) & set(page.evaluate(FETCHED_BY_CODE_JS))
         ),
         [],
+        timeout=0,
+    )
+    # The first part of a page's address goes into the header that names the preloads; a comma, a semicolon or an
+    # angle bracket there would add or change preloads, as with this address.
+    response: pw.APIResponse = page.request.get(
+        check.instance.url + "/x,<https://elsewhere/>;rel=preload/"
+    )
+    check.expect(
+        "a page whose address cannot name a workspace preloads only the first requests of every page",
+        lambda: sorted(
+            re.findall(
+                "<([^>]*)>",
+                ",".join(
+                    header["value"]
+                    for header in response.headers_array
+                    if header["name"].lower() == "link"
+                ),
+            )
+        ),
+        sorted(plane_runtime.PRELOADED_API_REQUESTS_OF_EVERY_PAGE),
         timeout=0,
     )
