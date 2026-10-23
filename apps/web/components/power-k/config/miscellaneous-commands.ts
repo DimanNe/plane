@@ -45,8 +45,7 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
   const focusTopNavSearch = useCallback(() => {
     topNavInputRef?.current?.focus();
   }, [topNavInputRef]);
-  // Without a mounted top-nav input the command has nothing to focus, and Cmd+F must fall
-  // through to the browser's Find
+  // Without a mounted top-nav input the command has nothing to focus
   const hasTopNavInput = useCallback(() => Boolean(topNavInputRef?.current), [topNavInputRef]);
 
   return [
@@ -81,7 +80,9 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
       i18n_title: "power_k.miscellaneous_actions.focus_top_nav_search",
       icon: SearchOutline,
       action: focusTopNavSearch,
-      modifierShortcut: "cmd+f",
+      // Ctrl+F stays the browser's search of the page. The shortcut handler takes Alt+/ itself, also in a text
+      // field; the key here is what the palette and the list of shortcuts show.
+      modifierShortcut: "alt+/",
       isEnabled: hasTopNavInput,
       isVisible: hasTopNavInput,
       closeOnSelect: true,

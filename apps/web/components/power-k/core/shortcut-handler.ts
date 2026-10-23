@@ -213,8 +213,8 @@ export class ShortcutHandler {
       return;
     }
 
-    // Alt+/ is a second key for the search box of the top bar. Unlike Cmd+F it also works while a
-    // text field has the focus, where the browser gives the key no meaning of its own.
+    // Alt+/ is the key of the search box of the top bar; Ctrl+F is the browser's search of the page. It also works
+    // while a text field has the focus, where the browser gives the key no meaning of its own.
     if (formatModifierShortcut(e, this.layoutMap) === "alt+/") {
       const command = this.registry.getCommand("focus_top_nav_search");
       if (command && this.canExecuteCommand(command)) {
