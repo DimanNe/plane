@@ -14,6 +14,7 @@ import { orderProjects, shouldFilterProject } from "@plane/utils";
 // services
 import type { TProject, TPartialProject } from "@plane/types";
 import { IssueLabelService, IssueService } from "@/services/issue";
+import { fetchAroundOwnWrites } from "@/services/own-writes";
 import { ProjectService, ProjectStateService, ProjectArchiveService } from "@/services/project";
 // store
 import type { CoreRootStore } from "../root.store";
@@ -310,7 +311,7 @@ export class ProjectStore implements IProjectStore {
   fetchPartialProjects = async (workspaceSlug: string) => {
     try {
       this.loader = "init-loader";
-      const projectsResponse = await this.projectService.getProjectsLite(workspaceSlug);
+      const projectsResponse = await fetchAroundOwnWrites(() => this.projectService.getProjectsLite(workspaceSlug));
       runInAction(() => {
         projectsResponse.forEach((project) => {
           update(this.projectMap, [project.id], (p) => ({ ...p, ...project }));
@@ -339,7 +340,7 @@ export class ProjectStore implements IProjectStore {
       } else {
         this.loader = "init-loader";
       }
-      const projectsResponse = await this.projectService.getProjects(workspaceSlug);
+      const projectsResponse = await fetchAroundOwnWrites(() => this.projectService.getProjects(workspaceSlug));
       runInAction(() => {
         projectsResponse.forEach((project) => {
           update(this.projectMap, [project.id], (p) => ({ ...p, ...project }));
@@ -363,7 +364,7 @@ export class ProjectStore implements IProjectStore {
    */
   fetchProjectDetails = async (workspaceSlug: string, projectId: string) => {
     try {
-      const response = await this.projectService.getProject(workspaceSlug, projectId);
+      const response = await fetchAroundOwnWrites(() => this.projectService.getProject(workspaceSlug, projectId));
       runInAction(() => {
         update(this.projectMap, [projectId], (p) => ({ ...p, ...response }));
       });

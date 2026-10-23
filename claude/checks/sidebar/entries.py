@@ -106,7 +106,13 @@ def run(check: steps.Check) -> None:
     # an entry is taken by the handle that stands left of its name
     browser.press_and_carry(page, (last["x"] - 40, last["y"] + last["height"] / 2))
     browser.carry_to(page, (first["x"] - 40, first["y"] + 2))
-    page.mouse.up()
+    # The sidebar shows the new order at once and saves it meanwhile; a reload before the server has answered reads
+    # the order that the server still has.
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and "/sidebar-preferences/" in response.url
+    ):
+        page.mouse.up()
     moved: t.List[str] = ["Projects", "Wiki", in_dialog[-1], *in_dialog[:-1]]
     check.expect(
         "an entry dragged above another in the dialog stands there in the sidebar",
