@@ -648,6 +648,13 @@ def drag_bar(page: pw.Page, name: str, days: int, part: str = "middle") -> None:
     drag(page, start, (start[0] + days * get_px_per_day(page), start[1]))
 
 
+def draw_arrow(page: pw.Page, start: browser.Point, end: browser.Point) -> None:
+    """Presses at a point, which shows the handles of the bar there, and draws an arrow from it to another point."""
+    page.mouse.move(*start)
+    browser.let_page_draw(page)
+    drag(page, start, end)
+
+
 def let_go(page: pw.Page) -> None:
     page.mouse.up()
     browser.let_page_draw(page)

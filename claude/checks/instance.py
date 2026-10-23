@@ -578,6 +578,11 @@ def read_work_items(instance: Instance, project: Project) -> t.Dict[str, JSONObj
         cursor = f"&cursor={page['next_cursor']}"
 
 
+def read_work_item_names(instance: Instance, project: Project) -> t.List[str]:
+    """The names of the work items the project has stored, in order."""
+    return sorted(read_work_items(instance, project))
+
+
 def read_state_name(instance: Instance, project: Project, name: str) -> str:
     """The name of the state the server has stored for the work item called `name`."""
     states: t.Dict[str, str] = {

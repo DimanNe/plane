@@ -4,7 +4,6 @@ description are typed as one text. In the dialog of a new work item, what is typ
 description, and Enter saves nothing; Ctrl+Enter still saves. In the view beside the list the title stays one line.
 """
 
-import re
 
 import playwright.sync_api as pw
 
@@ -19,13 +18,6 @@ CARET_IN_VIEW_DESCRIPTION_JS: str = """
 () => !!document.activeElement?.classList.contains('ProseMirror')
   && !!document.activeElement.closest('#full-screen-portal')
 """
-
-
-def read_description(check: steps.Check, project: ins.Project, name: str) -> str:
-    html: str = (
-        ins.read_work_items(check.instance, project)[name].get("description_html") or ""
-    )
-    return re.sub(r"<[^>]+>", "", html).replace("&nbsp;", " ")
 
 
 def run(check: steps.Check) -> None:
@@ -57,7 +49,7 @@ def run(check: steps.Check) -> None:
     dialog.wait_for(state="detached")
     check.expect(
         "Ctrl+Enter saves the work item with its title and its description",
-        lambda: read_description(check, project, "a title"),
+        lambda: ll.read_description(check, project, "a title"),
         "first words",
     )
 
@@ -77,7 +69,7 @@ def run(check: steps.Check) -> None:
     check.expect(
         "the server has the description with the typed words before its text, and the title unchanged",
         lambda: (
-            read_description(check, project, "with text"),
+            ll.read_description(check, project, "with text"),
             sorted(ins.read_work_items(check.instance, project)),
         ),
         ("word existing text", ["a title", "with text"]),

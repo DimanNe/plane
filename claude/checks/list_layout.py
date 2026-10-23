@@ -6,6 +6,7 @@ the instance gave. What is read is what is drawn: the lines in their order with 
 line that is drawn as selected, what has the focus.
 """
 
+import re
 import typing as t
 
 import playwright.sync_api as pw
@@ -18,6 +19,11 @@ LINE: str = '[class~="group/list-block"]'
 PANEL_TITLE: str = '#full-screen-portal textarea[placeholder="Work item title"]'
 MESSAGE: str = '[aria-label="Notifications"] > *'
 CREATE_DIALOG: str = '[role="dialog"]:has(button:has-text("Discard"))'
+# Whether the caret is in the description of the work item with this id, in the view beside the list.
+CARET_IN_DESCRIPTION_JS: str = """
+(id) => !!document.activeElement?.classList.contains('ProseMirror')
+  && !!document.activeElement.closest(`#full-screen-portal [id="editor-container-${id}"]`)
+"""
 QUESTION: str = '[role="dialog"]:has-text("Are you sure"), [role="alertdialog"]:has-text("Are you sure")'
 # An open menu of a property of a work item (state, priority, ...). A menu that has closed stays in the page, marked
 # closed, while it fades out, which takes longer than a step that follows at once; it is not open, and neither is
@@ -258,6 +264,14 @@ def open_input_of_group(page: pw.Page, name: str) -> None:
     """A click on the "+" of a group; returns when the caret is in the input it opens."""
     plus_of_group(page, name).click()
     page.wait_for_function("() => document.activeElement?.name === 'name'")
+
+
+def read_description(check: steps.Check, project: ins.Project, name: str) -> str:
+    """The text the server has stored as the description of the work item called `name`."""
+    html: str = (
+        ins.read_work_items(check.instance, project)[name].get("description_html") or ""
+    )
+    return re.sub(r"<[^>]+>", "", html).replace("&nbsp;", " ")
 
 
 def read_panel(page: pw.Page) -> t.Optional[str]:
