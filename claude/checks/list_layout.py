@@ -213,6 +213,27 @@ def open_create_dialog(page: pw.Page, keys: str = "ni") -> pw.Locator:
     return dialog
 
 
+def make_with_keys(
+    check: steps.Check, project: ins.Project, page: pw.Page, title: str
+) -> t.Tuple[t.List[t.Any], ins.JSONObject]:
+    """N I, what the dialog shows, and the work item stored after its title is typed and Ctrl+Enter pressed: the
+    dialog closes when the server has answered."""
+    # What the open dialog of a new work item shows as its state, priority and labels.
+    SHOWN_JS: str = """
+() => {
+  const dialog = [...document.querySelectorAll('[role="dialog"]')].find((d) => d.querySelector('input[name="name"]'));
+  const said = (id) => dialog?.querySelector(`[data-testid="${id}"]`)?.innerText.trim() ?? null;
+  return [said('create-work-item-state-select'), said('create-work-item-priority-select'), said('create-work-item-label-select')];
+}
+"""
+    open_create_dialog(page)
+    shown: t.List[t.Any] = page.evaluate(SHOWN_JS)
+    page.keyboard.type(title)
+    page.keyboard.press("Control+Enter")
+    page.locator(CREATE_DIALOG).wait_for(state="detached")
+    return shown, ins.read_work_items(check.instance, project)[title]
+
+
 def choose_option(page: pw.Page, button: pw.Locator, option: str) -> None:
     """Opens the menu of a button, takes the option with this text, and waits until the menu has closed and
     given the focus back to its button: until then a key that follows goes nowhere."""
