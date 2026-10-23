@@ -165,7 +165,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
   return (
     <div
       className={`relative flex items-center justify-between p-4 ${
-        currentMode?.key === "full-screen" ? "border-b border-subtle" : ""
+        currentMode?.key === "full-screen" ? "border-b border-transparent" : ""
       }`}
     >
       <div className="flex items-center gap-4">

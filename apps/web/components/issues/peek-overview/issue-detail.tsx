@@ -82,7 +82,7 @@ export const PeekOverviewIssueDetails = observer(function PeekOverviewIssueDetai
       : undefined;
 
   return (
-    <div className="space-y-2">
+    <div className="panel-surface space-y-2 px-5 py-4">
       {issue.parent_id && (
         <IssueParentDetail
           workspaceSlug={workspaceSlug}

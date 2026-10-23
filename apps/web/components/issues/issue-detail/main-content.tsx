@@ -77,7 +77,7 @@ export const IssueMainContent = observer(function IssueMainContent(props: Props)
 
   return (
     <>
-      <div className="space-y-4 rounded-lg">
+      <div className="panel-surface space-y-4 px-5 py-4">
         {issue.parent_id && (
           <IssueParentDetail
             workspaceSlug={workspaceSlug}

@@ -85,7 +85,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
   return (
     <div>
       <h6 className="text-body-xs-medium">{t("common.properties")}</h6>
-      <div className={`mt-3 w-full space-y-3 ${disabled ? "opacity-60" : ""}`}>
+      <div className={`panel-surface mt-3 w-full space-y-3 px-5 py-4 ${disabled ? "opacity-60" : ""}`}>
         <SidebarPropertyListItem icon={StateOutline} label={t("common.state")}>
           <StateSelect
             testId="work-item-state-select"

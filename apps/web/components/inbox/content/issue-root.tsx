@@ -125,7 +125,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
 
   return (
     <>
-      <div className="space-y-4 pb-4">
+      <div className="panel-surface space-y-4 px-5 py-4">
         <IssueTitleInput
           workspaceSlug={workspaceSlug}
           projectId={issue.project_id}
@@ -198,7 +198,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
         </div>
       </div>
 
-      <div className="py-4">
+      <div className="panel-surface px-5 py-4">
         <IssueAttachmentRoot
           workspaceSlug={workspaceSlug}
           projectId={projectId}
@@ -207,7 +207,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
         />
       </div>
 
-      <div className="py-4">
+      <div className="panel-surface px-5 py-4">
         <InboxIssueContentProperties
           workspaceSlug={workspaceSlug}
           projectId={projectId}

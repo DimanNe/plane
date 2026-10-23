@@ -35,7 +35,7 @@ export function IssueDetailWidgets(props: Props) {
 
   return (
     <>
-      <div className="flex flex-col space-y-4">
+      <div className="panel-surface flex flex-col space-y-4 px-5 py-4">
         <IssueDetailWidgetActionButtons
           workspaceSlug={workspaceSlug}
           projectId={projectId}
