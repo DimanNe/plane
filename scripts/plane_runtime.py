@@ -638,6 +638,36 @@ def write_postgres_auth_config(run_dir: pl.Path) -> None:
     postgres_auth_config.chmod(0o644)
 
 
+# The API requests that the web app's code makes first on every page, and on every page of a workspace, written as
+# the code writes them: a preload is taken only by a request of exactly this address. {re.workspace.1} is the
+# workspace of the page's address (see write_caddy_config()).
+PRELOADED_API_REQUESTS_OF_EVERY_PAGE: t.List[str] = [
+    "/api/instances/",
+    "/api/users/me/",
+    "/api/users/me/profile/",
+    "/api/users/me/settings/",
+    "/api/users/me/workspaces/",
+]
+PRELOADED_API_REQUESTS_OF_A_WORKSPACE_PAGE: t.List[str] = [
+    "/api/users/me/workspaces/{re.workspace.1}/project-roles/",
+    "/api/workspaces/{re.workspace.1}/workspace-members/me/",
+    "/api/workspaces/{re.workspace.1}/projects/",
+    "/api/workspaces/{re.workspace.1}/members/",
+    "/api/workspaces/{re.workspace.1}/states/",
+    "/api/workspaces/{re.workspace.1}/sidebar-preferences/",
+    "/api/workspaces/{re.workspace.1}/user-properties/",
+    "/api/workspaces/{re.workspace.1}/users/notifications/unread/",
+    "/api/workspaces/{re.workspace.1}/user-favorites/?all=true",
+]
+
+
+def get_preload_header(paths: t.List[str]) -> str:
+    return ", ".join(
+        f"<{path}>; rel=preload; as=fetch; crossorigin=use-credentials"
+        for path in paths
+    )
+
+
 def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     ports: t.Dict[plane_config.Service, int] = SERVICE_PORTS
     origin_pattern: str = re.escape(plane_origin)
@@ -689,9 +719,39 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
         try_files {{path}} /index.html
         file_server
     }}
+    # A page of the web app loads hundreds of code files before its code asks the API for anything, and each answer
+    # of the API then leads the code to ask the next question. The answers that do not depend on earlier ones are
+    # asked for along with the page: the browser fetches them while the code loads, and the code's own requests
+    # take them (a preload is only taken by a request of the same mode and credentials, hence use-credentials).
+    # An address that is no file of the app is a page of the app (an asset that is not there, as after a new build,
+    # is not); its first part names the workspace, unless it is one of the pages outside workspaces. Only requests
+    # that every page of a workspace makes are preloaded, so that none is fetched for nothing.
+    # The build names a code file after a hash of its contents, so such a file never changes and is kept for good;
+    # an address of one that is not there is answered with the page instead. The page, which names the files of the
+    # latest build, is checked at every load, whatever address it answers.
     handle {{
         root * /srv/web
         try_files {{path}} /index.html
+        encode zstd gzip
+        @hashed_asset {{
+            file
+            path_regexp ^/assets/[^/]+-[A-Za-z0-9_-]{{8,}}\\.[A-Za-z0-9]+$
+        }}
+        header @hashed_asset Cache-Control "public, max-age=31536000, immutable"
+        @answered_with_page not file
+        header @answered_with_page Cache-Control "no-cache"
+        @page_of_app {{
+            not file
+            not path /assets/*
+        }}
+        header @page_of_app Link "{get_preload_header(PRELOADED_API_REQUESTS_OF_EVERY_PAGE)}"
+        @page_of_workspace {{
+            not file
+            not path /assets/*
+            path_regexp workspace ^/([^/.]+)(/|$)
+            not path /sign-up* /accounts/* /create-workspace* /onboarding* /invitations* /workspace-invitations*
+        }}
+        header @page_of_workspace +Link "{get_preload_header(PRELOADED_API_REQUESTS_OF_A_WORKSPACE_PAGE)}"
         file_server
     }}
 }}
