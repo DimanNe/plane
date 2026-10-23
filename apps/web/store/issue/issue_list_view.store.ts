@@ -17,8 +17,11 @@ export type TListDropMark = { groupId: string; issueId?: string; place: "above" 
 export interface IIssueListViewStore {
   collapsedIssueIds: string[];
   // a work item has a row in every group it belongs to, so the selected row names its group too;
-  // isEditing: its title is an input
-  selectedRow: { issueId: string; groupId: string; isEditing?: boolean } | undefined;
+  // isEditing: its title is an input; isByHover: the pointer moved over it, which no key or click has confirmed
+  selectedRow: { issueId: string; groupId: string; isEditing?: boolean; isByHover?: boolean } | undefined;
+  // The selected row before the pointer began to move the selection, for what follows where the user went with a
+  // key or a click and not where the pointer passes, such as the address of the page.
+  rowBeforeHover: IIssueListViewStore["selectedRow"];
   // The work item whose description is to take the caret (the key E on its line). The view beside the list loads
   // the work item before it has an editor, and what is typed in between is the description's: it is kept here
   // and kept from the shortcuts of the page.
@@ -30,6 +33,7 @@ export interface IIssueListViewStore {
   // computed
   getIsRowSelected: (issueId: string, groupId: string) => boolean;
   getIsRowTitleEdited: (issueId: string, groupId: string) => boolean;
+  getIsRowSelectedByHover: (issueId: string, groupId: string) => boolean;
   getRowDropPlace: (issueId: string, groupId: string) => TListDropMark["place"] | undefined;
   getGroupDropPlace: (groupId: string) => TListDropMark["place"] | undefined;
   // actions
@@ -51,6 +55,7 @@ export interface IIssueListViewStore {
 export class IssueListViewStore implements IIssueListViewStore {
   collapsedIssueIds: string[] = [];
   selectedRow: IIssueListViewStore["selectedRow"] = undefined;
+  rowBeforeHover: IIssueListViewStore["selectedRow"] = undefined;
   descriptionAwaitingCaret: string | undefined = undefined;
   private typedForDescription = "";
   private issueIdOfPlaceToKeep: string | undefined = undefined;
@@ -61,6 +66,7 @@ export class IssueListViewStore implements IIssueListViewStore {
     makeObservable(this, {
       collapsedIssueIds: observable,
       selectedRow: observable.ref,
+      rowBeforeHover: observable.ref,
       descriptionAwaitingCaret: observable,
       // a row is held over the same place for many pointer moves, each of which sets the same mark again
       dropMark: observable.struct,
@@ -83,6 +89,10 @@ export class IssueListViewStore implements IIssueListViewStore {
     (issueId: string, groupId: string) => this.getIsRowSelected(issueId, groupId) && !!this.selectedRow?.isEditing
   );
 
+  getIsRowSelectedByHover = computedFn(
+    (issueId: string, groupId: string) => this.getIsRowSelected(issueId, groupId) && !!this.selectedRow?.isByHover
+  );
+
   getRowDropPlace = computedFn((issueId: string, groupId: string) =>
     this.dropMark?.issueId === issueId && this.dropMark.groupId === groupId ? this.dropMark.place : undefined
   );
@@ -98,6 +108,8 @@ export class IssueListViewStore implements IIssueListViewStore {
   };
 
   setSelectedRow = (row: IIssueListViewStore["selectedRow"]) => {
+    if (!row?.isByHover) this.rowBeforeHover = undefined;
+    else if (!this.selectedRow?.isByHover) this.rowBeforeHover = this.selectedRow;
     this.selectedRow = row;
   };
 

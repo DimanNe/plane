@@ -2,11 +2,11 @@
 """
 Measures, on a running instance, what was made fast by measuring: typing in the description of a work item, the
 Display pop-up, the dialog of a new work item, opening the timeline of some hundreds of work items, and dragging and
-the wheel there. It builds its
+the wheel there, and ↓ held over a hundred lines of a list. It builds its
 own data in a workspace of its own, prints the numbers with the machine's load beside them, and judges nothing: a
 change near these is measured before and after, on the same machine at the same load.
 
-    claude/checks/measure.py --run-dir RUN_DIR [--windows] [--work-items 300]
+    claude/checks/measure.py --run-dir RUN_DIR [--windows] [--work-items 300] [--only held-arrow]
 
 Times are those of the main thread of the page, as Chrome counts them: by the clock, and as processor time, which
 the load of other programs stretches less; and the processor time of the compositor, which draws the frames.
@@ -74,6 +74,44 @@ TIME_TO_TITLE_JS: str = """
   document.addEventListener('keydown', pressed, true);
 }
 """
+
+
+# From now on: when each press of an arrow key came, and, for every frame the page draws, the title of the line it
+# shows selected and that line's background colour, which a transition of the colour may still be changing.
+RECORD_SELECTION_FRAMES_JS: str = """
+() => {
+  window.__presses = [];
+  window.__selectionFrames = [];
+  if (!window.__recordPress) {
+    window.__recordPress = (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') window.__presses.push(event.timeStamp);
+    };
+    document.addEventListener('keydown', window.__recordPress, true);
+  }
+  const record = (time) => {
+    const line = [...document.querySelectorAll('[class~="group/list-block"]')]
+      .find((line) => line.className.includes('bg-layer-transparent-selected'));
+    window.__selectionFrames.push([time, line?.querySelector('p')?.textContent ?? null,
+      line ? getComputedStyle(line).backgroundColor : null]);
+    window.__recordingSelection = requestAnimationFrame(record);
+  };
+  window.__recordingSelection = requestAnimationFrame(record);
+}
+"""
+STOP_RECORDING_SELECTION_JS: str = """
+() => {
+  cancelAnimationFrame(window.__recordingSelection);
+  return { presses: window.__presses, frames: window.__selectionFrames };
+}
+"""
+SCROLL_LIST_TO_TOP_JS: str = """
+() => document.querySelector('[class~="group/list-block"]').closest('.overflow-auto').scrollTo(0, 0)
+"""
+# A key held down repeats at about this rate in the desktops people use.
+KEY_REPEATS_PER_SECOND: int = 30
+# The lines that ↓ is held over: about as many as the owner's list where it crawled.
+HELD_ARROW_LINES: int = 100
+MEASUREMENTS: t.Tuple[str, ...] = ("typing", "timeline", "held-arrow")
 
 
 def read_load() -> str:
@@ -235,6 +273,100 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
     page.context.close()
 
 
+def describe_latencies(label: str, latencies: t.List[float]) -> str:
+    if not latencies:
+        return f"{label}: none"
+    ordered: t.List[float] = sorted(latencies)
+    return (
+        f"{label}: median {statistics.median(ordered):.0f} ms, 90% {ordered[int(len(ordered) * 0.9)]:.0f}, "
+        f"longest {ordered[-1]:.0f}"
+    )
+
+
+def measure_held_arrow(check: steps.Check, account: ins.Account, count: int) -> None:
+    """↓ held from the first line of a list, the key repeating as a desktop repeats it."""
+    project: ins.Project = check.project({account: ins.ROLE_ADMIN})
+    ins.make_work_items(
+        check.instance,
+        project,
+        [{"name": f"line {number}"} for number in range(count + 10)],
+    )
+    page: pw.Page = ll.open_list(check, account, project)
+    cdp: pw.CDPSession = page.context.new_cdp_session(page)
+    cdp.send("Performance.enable")
+    print(f"↓ held in the List layout of {count + 10} work items:")
+    run: int
+    for run in range(1, 4):
+        page.evaluate(SCROLL_LIST_TO_TOP_JS)
+        ll.select_line(page, "line 0")
+        browser.let_page_draw(page)
+        page.evaluate(RECORD_SELECTION_FRAMES_JS)
+        started: float = 0
+
+        def hold() -> None:
+            nonlocal started
+            started = time.monotonic()
+            number: int
+            for number in range(count):
+                # FOR_REVIEWER: a desktop sends a repeat whether or not the page has handled the one before, and
+                # Playwright waits for the page to take each key, so a slow page receives the repeats later than a
+                # desktop would send them; the rate it reaches is reported beside the times.
+                time.sleep(
+                    max(
+                        0.0,
+                        started + number / KEY_REPEATS_PER_SECOND - time.monotonic(),
+                    )
+                )
+                page.keyboard.down("ArrowDown")
+            page.keyboard.up("ArrowDown")
+
+        measure_counters(
+            page, cdp, f"{count} lines down ({run}), per line", hold, count
+        )
+        held: float = time.monotonic() - started
+        # what a transition of the last line's colour still changes
+        page.wait_for_timeout(500)
+        recorded: t.Dict[str, t.Any] = page.evaluate(STOP_RECORDING_SELECTION_JS)
+        presses: t.List[float] = recorded["presses"]
+        frames: t.List[t.Tuple[float, t.Optional[str], t.Optional[str]]] = [
+            (time_, int(title.split()[-1]) if title else -1, colour)
+            for time_, title, colour in recorded["frames"]
+        ]
+        final_colour: t.Optional[str] = frames[-1][2]
+        # A press shows when a frame comes that shows its line, or a line further down, selected: a page that is
+        # late with one press may show the next one's line straight away.
+        to_frame: t.List[float] = []
+        index: int
+        press: float
+        for index, press in enumerate(presses):
+            shown: t.List[t.Tuple[float, int, t.Optional[str]]] = [
+                frame for frame in frames if frame[0] >= press and frame[1] >= index + 1
+            ]
+            if shown:
+                to_frame.append(shown[0][0] - press)
+        # while the key is held, the frames whose selected line has not reached its colour yet: a transition of
+        # the colour that outlasts a repeat of the key shows the selection paler, and behind
+        held_frames: t.List[t.Tuple[float, int, t.Optional[str]]] = [
+            frame
+            for frame in frames
+            if presses and presses[0] <= frame[0] <= presses[-1]
+        ]
+        pale: int = sum(1 for frame in held_frames if frame[2] != final_colour)
+        print(
+            f"    {len(presses)} presses in {held:.1f} s ({len(presses) / held:.0f} per second); "
+            f"lines shown selected: {len({frame[1] for frame in frames if frame[1] >= 0})}; "
+            f"at the end: {ll.read_selected(page)}"
+        )
+        print(
+            "    "
+            + describe_latencies("press to the first frame showing its line", to_frame)
+        )
+        print(
+            f"    frames while held: {len(held_frames)}, with the selected line not yet in its colour: {pale}"
+        )
+    page.context.close()
+
+
 def make_timeline_plan(
     check: steps.Check, project: ins.Project, count: int
 ) -> t.List[str]:
@@ -356,6 +488,12 @@ def parse_arguments(arguments: t.List[str]) -> argparse.Namespace:
         default=300,
         help="how many work items the timeline has",
     )
+    parser.add_argument(
+        "--only",
+        choices=MEASUREMENTS,
+        action="append",
+        help="this measurement only (may be given more than once); all of them without it",
+    )
     return parser.parse_args(arguments)
 
 
@@ -372,8 +510,13 @@ def main(arguments: t.List[str]) -> int:
         with browser.open_browser(playwright, parsed.windows, directory) as opened:
             check: steps.Check = steps.Check("measure", instance, opened, directory)
             account: ins.Account = check.account()
-            measure_typing_and_popup(check, account)
-            measure_timeline(check, account, parsed.work_items)
+            only: t.List[str] = parsed.only or list(MEASUREMENTS)
+            if "typing" in only:
+                measure_typing_and_popup(check, account)
+            if "timeline" in only:
+                measure_timeline(check, account, parsed.work_items)
+            if "held-arrow" in only:
+                measure_held_arrow(check, account, HELD_ARROW_LINES)
             project: ins.Project
             for project in check.projects:
                 ins.remove_project(instance, project)

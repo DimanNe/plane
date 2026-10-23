@@ -62,6 +62,8 @@ def check_state(check: steps.Check, account: ins.Account) -> None:
             "other": "Todo",
         },
     )
+    # the drag selected the dragged line, as the pointer moved onto it; the folded one is selected again to unfold it
+    ll.select_line(page, "child")
     page.keyboard.press("ArrowRight")
     check.expect(
         "they stand under it in the new group",

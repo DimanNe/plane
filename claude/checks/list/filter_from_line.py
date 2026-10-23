@@ -93,13 +93,14 @@ def run(check: steps.Check) -> None:
     )
     page.keyboard.press("Escape")
     check.expect(
-        "one Escape closes the menu, and the right click selected and opened nothing",
+        "one Escape closes the menu, and the right click opened nothing; the line is the selected one, as the "
+        "pointer moved onto it",
         lambda: (
             page.get_by_role("menu").count(),
             ll.read_selected(page),
             ll.read_panel(page),
         ),
-        (0, [], None),
+        (0, ["todo high"], None),
     )
     open_menu_at(page, "todo high", "Priority")
     page.get_by_role("menuitem", name="Add Priority: High to the filter").click()

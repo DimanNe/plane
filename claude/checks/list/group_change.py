@@ -138,12 +138,13 @@ def run(check: steps.Check) -> None:
         timeout=0,
     )
     check.expect(
-        f"{way}: the state is stored, and the selection stays where it was",
+        f"{way}: the state is stored, and the selection went with the line, which the pointer selected on its way "
+        "to the state: out of view",
         lambda: (
             ins.read_state_name(check.instance, project, "todo 0"),
             ll.read_selected(page),
         ),
-        ("Done", ["backlog 2"]),
+        ("Done", []),
     )
 
     header: pw.Locator = ll.group_header(page, "In Progress")

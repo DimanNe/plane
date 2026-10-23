@@ -31,11 +31,11 @@ import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // plane web hooks
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
 import { useListLineGroupChange } from "@/hooks/use-list-line-group-change";
-import { useListRowSelection } from "@/hooks/use-list-row-selection";
 // utils
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
 import { ListGroup } from "./list-group";
+import { ListRowSelection } from "./list-row-selection";
 import { getIssueIdsOfList } from "./utils";
 import type { TRenderQuickActions } from "./list-view-types";
 
@@ -95,7 +95,6 @@ export const List = observer(function List(props: IList) {
     isEpic: isEpic,
   });
 
-  useListRowSelection({ containerRef, groups, groupedIssueIds, issuesMap, group_by, collapsedGroups });
   useListLineGroupChange(groupedIssueIds);
 
   // Enable Auto Scroll for Main Kanban
@@ -135,6 +134,14 @@ export const List = observer(function List(props: IList) {
   }
   return (
     <div className="relative flex size-full flex-col">
+      <ListRowSelection
+        containerRef={containerRef}
+        groups={groups}
+        groupedIssueIds={groupedIssueIds}
+        issuesMap={issuesMap}
+        group_by={group_by}
+        collapsedGroups={collapsedGroups}
+      />
       {groups && (
         <MultipleSelectGroup
           containerRef={containerRef}

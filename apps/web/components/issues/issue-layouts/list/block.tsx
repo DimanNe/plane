@@ -93,7 +93,8 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const { getIsIssuePeeked, peekIssue, setPeekIssue } = useIssueDetail(
     isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
   );
-  const { getIsRowSelected, getIsRowTitleEdited, setSelectedRow, toggleIssueCollapse } = useListView();
+  const { getIsRowSelected, getIsRowSelectedByHover, getIsRowTitleEdited, setSelectedRow, toggleIssueCollapse } =
+    useListView();
 
   const handleIssuePeekOverview = (issue: TIssue) =>
     workspaceSlug &&
@@ -186,9 +187,11 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
       }}
       onClick={(e) => {
         if (isInAnotherGroup) return handleIssuePeekOverview(issue);
-        // a click selects the row; a double click, or Enter on the row, opens it and ends the editing of its title
+        // a click selects the row, and confirms a row the pointer selected by moving over it; a double click, or
+        // Enter on the row, opens it and ends the editing of its title
         const isOpening = e.detail !== 1;
-        if (isOpening || !getIsRowSelected(issue.id, groupId)) setSelectedRow({ issueId: issue.id, groupId });
+        if (isOpening || !getIsRowSelected(issue.id, groupId) || getIsRowSelectedByHover(issue.id, groupId))
+          setSelectedRow({ issueId: issue.id, groupId });
         // the work item view beside the list follows the selection while it is open
         if (isOpening || isPeekOpenOnPressRef.current) handleIssuePeekOverview(issue);
       }}
@@ -198,7 +201,10 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
       <Row
         ref={issueRef}
         className={cn(
-          "group/list-block relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 transition-colors hover:bg-layer-transparent-hover",
+          // FOR_REVIEWER: no transition of the background colour, which upstream has: a held arrow key moves the
+          // selection on before the transition ends, and the selected row stayed pale and behind. The hover changes
+          // at once too, as it does in Linear.
+          "group/list-block relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 hover:bg-layer-transparent-hover",
           {
             "min-h-9 py-2": isCompact,
             "bg-layer-transparent-selected hover:bg-layer-transparent-selected": isRowSelected,

@@ -81,9 +81,10 @@ def run(check: steps.Check) -> None:
         sorted(project.states),
     )
     check.expect(
-        "the click neither selects the line nor opens the work item",
+        "the click opens no work item and leaves the address; the line is the selected one, as the pointer moved "
+        "onto it",
         lambda: (page.url, ll.read_selected(page), ll.read_panel(page)),
-        (address, [], None),
+        (address, ["todo"], None),
     )
     page.get_by_role("option").filter(has_text="In Progress").click()
     check.expect(
