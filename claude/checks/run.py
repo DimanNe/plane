@@ -45,8 +45,6 @@ import steps
 CHECKS: pl.Path = pl.Path(__file__).resolve().parent
 # Errors the pages are known to report, which say nothing about the rule a check guards.
 KNOWN_PAGE_ERRORS: t.Tuple[str, ...] = (
-    # at a first load: the page React was given by the server differs from the one it draws
-    "Minified React error #418",
     # A layout that is left while its request for the work items is under way: the store cancels that request
     # when the next layout asks (base-issues.store.ts, clear), the service throws on what the server answered,
     # which is nothing (issue.service.ts), and the layout that had asked does not catch it. Upstream's.

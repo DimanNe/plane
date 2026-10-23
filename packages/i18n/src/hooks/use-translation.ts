@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback } from "react";
-import { useTranslation as useI18nextTranslation } from "react-i18next";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { SUPPORTED_LANGUAGES, LANGUAGE_STORAGE_KEY } from "../constants/language";
+import { i18nInstance } from "../core";
 import type { TLanguage, ILanguageOption } from "../types";
 
 export type TTranslationStore = {
@@ -36,11 +36,38 @@ function coerceToString(key: string, value: unknown): string {
   return key;
 }
 
+// What the translations depend on changes rarely: the language, or translations added later. react-i18next's
+// hook gave each component a copy of the i18n instance and its own subscription to it, which was a large part of
+// the first render of a list of work items; here every user of the hook shares one subscription, and renders anew
+// when the language or the translations change. The instance has every namespace loaded before the app hydrates
+// (see core/instance.ts and entry.client).
+let revision = 0;
+const listeners = new Set<() => void>();
+const notifyChange = () => {
+  revision += 1;
+  listeners.forEach((listener) => listener());
+};
+const subscribeToChanges = (listener: () => void) => {
+  if (listeners.size === 0) {
+    i18nInstance.on("languageChanged", notifyChange);
+    i18nInstance.store.on("added", notifyChange);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      i18nInstance.off("languageChanged", notifyChange);
+      i18nInstance.store.off("added", notifyChange);
+    }
+  };
+};
+const getRevision = () => revision;
+
 export function useTranslation(): TTranslationStore {
   // No namespace arg — fallbackNS in the i18next config ensures all namespaces
-  // are searched for any key. Passing NAMESPACES here would trigger concurrent
-  // async loads per component, causing a re-render cascade.
-  const { t, i18n } = useI18nextTranslation();
+  // are searched for any key.
+  const currentRevision = useSyncExternalStore(subscribeToChanges, getRevision, getRevision);
+  const i18n = i18nInstance;
 
   const changeLanguage = useCallback(
     (lng: TLanguage) => {
@@ -58,9 +85,16 @@ export function useTranslation(): TTranslationStore {
     [i18n]
   );
 
+  const t = useMemo(
+    () => (key: string, params?: Record<string, unknown>) =>
+      coerceToString(key, params === undefined ? i18n.t(key) : i18n.t(key, params)),
+    // a new t when the translations change, so that what a component memoized with it is translated anew
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [i18n, currentRevision]
+  );
+
   return {
-    t: (key: string, params?: Record<string, unknown>) =>
-      coerceToString(key, params === undefined ? t(key) : t(key, params)),
+    t,
     currentLocale: i18n.language as TLanguage,
     changeLanguage,
     languages: SUPPORTED_LANGUAGES,
