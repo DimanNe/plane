@@ -124,7 +124,7 @@ def open_page(
             for name, value in account.cookies.items()
         ]
     )
-    settle.install_settle_watch(context)
+    settle.install_settle_watch(context, [project.id for project in check.projects])
     page: pw.Page = context.new_page()
     page.on(
         "pageerror",

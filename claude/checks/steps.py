@@ -153,4 +153,5 @@ class Check:
     ) -> ins.Project:
         project: ins.Project = ins.make_project(self.instance, members, **fields)
         self.projects.append(project)
+        settle.add_own_project(self.pages, project.id)
         return project
