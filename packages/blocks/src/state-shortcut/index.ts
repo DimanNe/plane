@@ -4,5 +4,5 @@
  * See the LICENSE file for details.
  */
 
-export { getStateOfShortcut, STATE_SHORTCUTS } from "./state-shortcut";
+export { getStateOfKey, getStateOfShortcut, STATE_SHORTCUTS } from "./state-shortcut";
 export type { TStateShortcut } from "./state-shortcut";

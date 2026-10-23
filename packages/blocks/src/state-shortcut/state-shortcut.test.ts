@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { IState, TStateGroups } from "@plane/types";
-import { getStateOfShortcut, STATE_SHORTCUTS } from "./state-shortcut";
+import { getStateOfKey, getStateOfShortcut, STATE_SHORTCUTS } from "./state-shortcut";
 
 const state = (name: string, group: TStateGroups) => ({ id: name, name, group }) as IState;
 
@@ -81,5 +81,72 @@ describe("a key means the state of its name, else the first state of its group",
 
   it.each(cases)("$name", ({ states, expected }) => {
     expect(getStateNamesByKey(states)).toEqual(expected);
+  });
+});
+
+/** The name of the state that each of `keys` means in a project with these states. */
+const getStateNamesOfKeys = (states: IState[], keys: string[]) =>
+  Object.fromEntries(keys.map((key) => [key, getStateOfKey(states, key)?.name ?? null]));
+
+describe("every state answers to the first letter of its name; the letters of STATE_SHORTCUTS keep theirs", () => {
+  const cases: { name: string; states: IState[]; keys: string[]; expected: Record<string, string | null> }[] = [
+    {
+      name: "the states of a new project: B means Backlog, and P and I both mean In Progress",
+      states: [
+        state("Backlog", "backlog"),
+        state("Todo", "unstarted"),
+        state("In Progress", "started"),
+        state("Done", "completed"),
+        state("Cancelled", "cancelled"),
+      ],
+      keys: ["b", "t", "p", "i", "d", "c", "r", "x"],
+      expected: {
+        b: "Backlog",
+        t: "Todo",
+        p: "In Progress",
+        i: "In Progress",
+        d: "Done",
+        c: "Cancelled",
+        r: null,
+        x: null,
+      },
+    },
+    {
+      name: "a state the project added answers to its letter; one letter for two states means the first of them",
+      states: [
+        state("Backlog", "backlog"),
+        state("Blocked", "backlog"),
+        state("Todo", "unstarted"),
+        state("Triage", "unstarted"),
+        state("In Progress", "started"),
+        state("Review", "started"),
+        state("Done", "completed"),
+        state("Cancelled", "cancelled"),
+      ],
+      keys: ["b", "t", "r", "i"],
+      expected: { b: "Backlog", t: "Todo", r: "Review", i: "In Progress" },
+    },
+    {
+      name: "a letter of STATE_SHORTCUTS keeps its group before the first letter, and only R, without a group, falls to it",
+      states: [
+        state("Idea", "backlog"),
+        state("Ready", "unstarted"),
+        state("Doing", "started"),
+        state("Shipped", "completed"),
+        state("Dropped", "cancelled"),
+      ],
+      keys: ["d", "p", "t", "c", "r", "s", "i"],
+      expected: { d: "Shipped", p: "Doing", t: "Ready", c: "Dropped", r: "Ready", s: "Shipped", i: "Idea" },
+    },
+    {
+      name: "the first letter is read without regard to case or leading spaces, and a digit answers too",
+      states: [state(" waiting", "unstarted"), state("2nd look", "started")],
+      keys: ["w", "2"],
+      expected: { w: " waiting", "2": "2nd look" },
+    },
+  ];
+
+  it.each(cases)("$name", ({ states, keys, expected }) => {
+    expect(getStateNamesOfKeys(states, keys)).toEqual(expected);
   });
 });

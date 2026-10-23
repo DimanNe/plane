@@ -6,7 +6,7 @@
 
 import { StateOutline } from "@makeplane/propel/icons";
 // plane imports
-import { getStateOfShortcut, STATE_SHORTCUTS } from "@plane/blocks/state-shortcut";
+import { getStateOfKey, getStateOfShortcut, STATE_SHORTCUTS } from "@plane/blocks/state-shortcut";
 import type { TStateShortcut } from "@plane/blocks/state-shortcut";
 import { setToast } from "@plane/blocks/toast";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -14,7 +14,7 @@ import { useTranslation } from "@plane/i18n";
 import type { IState, TIssue } from "@plane/types";
 import { getWorkItemPropertyErrorMessage } from "@plane/utils";
 // components
-import { resolveShortcutKey } from "@/components/power-k/core/shortcut-handler";
+import { KEY_SEQUENCE_TIMEOUT_MS, resolveShortcutKey } from "@/components/power-k/core/shortcut-handler";
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 import { useShortcutWorkItemId } from "@/components/power-k/hooks/use-shortcut-work-item";
 import { closeStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
@@ -34,9 +34,15 @@ import type { TStateMenuOfKey } from "@/store/base-power-k.store";
 type TStateMenuPlace = TStateMenuOfKey["place"] | "palette";
 
 /**
+ * What S opened for the key after it: a menu of states, the palette's page of states, or nothing, where the selected
+ * line is not drawn and so has no menu (see getStateMenuPlace).
+ */
+type TStateMenuOfS = TStateMenuOfKey | "palette" | "no menu";
+
+/**
  * The state of the work item that a shortcut acts on, by keys. S opens the menu of states, and the key after it,
- * the letter of a state, chooses in that menu as a click does. The change is made as the state menu of a line of
- * the list makes it, so a list that is grouped by state moves the line at once.
+ * the first letter of a state (see getStateOfKey), chooses in that menu as a click does. The change is made as the
+ * state menu of a line of the list makes it, so a list that is grouped by state moves the line at once.
  */
 export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
   // store hooks
@@ -65,14 +71,17 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
     return isEditingAllowed ? workItem : undefined;
   };
 
+  /** Says that the work item's project has no state that the shortcut means. */
+  const showNoStateOfShortcut = (shortcut: TStateShortcut) =>
+    setToast({
+      type: "info",
+      title: t("power_k.contextual_actions.work_item.set_state_toast_no_state", { state: shortcut.names[0] }),
+    });
+
   /** The state of the work item's project that the shortcut means; where the project has none, a toast says so. */
-  const getStateOfKey = (workItem: TIssue, shortcut: TStateShortcut) => {
+  const getStateOfShortcutOrShowNone = (workItem: TIssue, shortcut: TStateShortcut) => {
     const state = getStateOfShortcut(getProjectStates(workItem.project_id) ?? [], shortcut);
-    if (!state)
-      setToast({
-        type: "info",
-        title: t("power_k.contextual_actions.work_item.set_state_toast_no_state", { state: shortcut.names[0] }),
-      });
+    if (!state) showNoStateOfShortcut(shortcut);
     return state;
   };
 
@@ -112,38 +121,53 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
   /**
    * The key after S, taken before the menu hears it. With the letter of a state the page is the person's again
    * at once: the state is set and the menu closes, and a picture of the menu shows the item of that state for a
-   * moment, as it is drawn when it is clicked. Any other key is the menu's, which is an ordinary menu from then on.
+   * moment, as it is drawn when it is clicked. Any other key is the menu's, which is an ordinary menu from then on:
+   * typing searches it.
    */
-  const chooseStateByKey = (
-    e: KeyboardEvent,
-    ctx: TPowerKContext,
-    workItem: TIssue,
-    menu: TStateMenuOfKey | "palette"
-  ) => {
+  const chooseStateByKey = (e: KeyboardEvent, ctx: TPowerKContext, workItem: TIssue, menu: TStateMenuOfS) => {
     const key = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey ? undefined : resolveShortcutKey(e, null);
-    const shortcut = STATE_SHORTCUTS.find((stateShortcut) => stateShortcut.key === key);
     const isMenuOpen =
-      menu === "palette"
+      menu === "no menu" ||
+      (menu === "palette"
         ? powerK.isPowerKModalOpen && powerK.activePage === "update-work-item-state"
-        : powerK.stateMenuOfKey === menu;
-    if (!shortcut || !isMenuOpen) return;
+        : powerK.stateMenuOfKey === menu);
+    // a named key (Escape, the arrows, Enter) is the menu's; the space is "space"
+    if (!key || key.length !== 1 || !isMenuOpen) return;
+    const state = getStateOfKey(getProjectStates(workItem.project_id) ?? [], key);
+    const shortcut = STATE_SHORTCUTS.find((stateShortcut) => stateShortcut.key === key);
+    // A letter of STATE_SHORTCUTS that the project has no state for says so, and the menu stays for a choice by
+    // hand; any other key without a state is typed into the menu's search.
+    if (!state && !shortcut) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    // without a state for the letter the menu stays, for a choice by hand
-    const state = getStateOfKey(workItem, shortcut);
-    if (!state) return;
-    leavePictureOfChoice(menu === "palette" ? PALETTE_MENU : STATE_SELECT_MENU, state.name);
+    if (!state) {
+      if (shortcut) showNoStateOfShortcut(shortcut);
+      return;
+    }
+    if (menu !== "no menu") leavePictureOfChoice(menu === "palette" ? PALETTE_MENU : STATE_SELECT_MENU, state.name);
     if (menu === "palette") ctx.closePalette();
-    else closeStateMenuOfKey(powerK);
+    else if (menu !== "no menu") closeStateMenuOfKey(powerK);
     const change = setState(ctx, workItem, state);
     // with the list alone the keys go on down the group: the selection does not go away with the line
-    if (menu !== "palette" && menu.place === "list") listView.leaveSelectionAtPlaceOf(workItem.id, change);
+    if (menu === "no menu" || (menu !== "palette" && menu.place === "list"))
+      listView.leaveSelectionAtPlaceOf(workItem.id, change);
   };
 
   const openStateMenu = (ctx: TPowerKContext) => {
     const workItem = getEditableWorkItem(ctx);
+    if (!workItem) return;
     const place = getStateMenuPlace(ctx);
-    if (!workItem || !place) return;
+    if (!place) {
+      // The selected line is not drawn, so nothing opens, and the key after S is taken as the second key of a
+      // sequence is: within the time a sequence waits for it.
+      const chooseWithoutMenu = (e: KeyboardEvent) => chooseStateByKey(e, ctx, workItem, "no menu");
+      document.addEventListener("keydown", chooseWithoutMenu, { capture: true, once: true });
+      window.setTimeout(
+        () => document.removeEventListener("keydown", chooseWithoutMenu, { capture: true }),
+        KEY_SEQUENCE_TIMEOUT_MS
+      );
+      return;
+    }
     const focused = document.activeElement;
     const focusedBefore = focused instanceof HTMLElement && focused !== document.body ? focused : undefined;
     const menu = place === "palette" ? place : { workItemId: workItem.id, place, focusedBefore };
@@ -161,8 +185,7 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
 
   // A key, not a command of the palette: there the five below are offered, and the work item page has its own
   // command of this name.
-  const canOpenStateMenu = (ctx: TPowerKContext) =>
-    !powerK.isPowerKModalOpen && !!getStateMenuPlace(ctx) && !!getEditableWorkItem(ctx);
+  const canChooseStateByKey = (ctx: TPowerKContext) => !powerK.isPowerKModalOpen && !!getEditableWorkItem(ctx);
 
   return [
     {
@@ -173,10 +196,12 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
       type: "action",
       shortcut: "s",
       action: openStateMenu,
-      isEnabled: canOpenStateMenu,
-      isVisible: canOpenStateMenu,
+      isEnabled: canChooseStateByKey,
+      isVisible: canChooseStateByKey,
       closeOnSelect: true,
     },
+    // From the keyboard S takes the key after it itself (chooseStateByKey), so these sequences are what the palette
+    // and the list of shortcuts show.
     ...STATE_SHORTCUTS.map(
       (shortcut): TPowerKCommandConfig => ({
         id: `set_work_item_state_${shortcut.id}`,
@@ -187,7 +212,7 @@ export const usePowerKWorkItemStateCommands = (): TPowerKCommandConfig[] => {
         keySequence: `s${shortcut.key}`,
         action: (ctx) => {
           const workItem = getEditableWorkItem(ctx);
-          const state = workItem && getStateOfKey(workItem, shortcut);
+          const state = workItem && getStateOfShortcutOrShowNone(workItem, shortcut);
           if (state) void setState(ctx, workItem, state);
         },
         isEnabled: (ctx) => !!getEditableWorkItem(ctx),

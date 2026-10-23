@@ -140,6 +140,9 @@ export function isTypingInInput(target: EventTarget | null): boolean {
   return target.closest(KEYBOARD_OWNING_ANCESTOR) !== null;
 }
 
+/** How long a key sequence ("g m", "s d") waits for its next key before it is forgotten. */
+export const KEY_SEQUENCE_TIMEOUT_MS = 1000;
+
 /** Whether any registered sequence starts with `prefix` (equality included) */
 const hasSequencePrefix = (sequenceMap: ReadonlyMap<string, string>, prefix: string): boolean => {
   for (const sequence of sequenceMap.keys()) {
@@ -334,7 +337,7 @@ export class ShortcutHandler {
 
     this.sequenceTimeout = window.setTimeout(() => {
       this.resetSequence();
-    }, 1000);
+    }, KEY_SEQUENCE_TIMEOUT_MS);
   }
 
   /**
