@@ -11,7 +11,7 @@ user's systemd. Every subcommand has `--help`.
 ./scripts/plane_runtime.py bootstrap-user --run-dir RUN --email you@example.internal --password '...'
 ./scripts/plane_runtime.py export --run-dir RUN --output backup.zstd              # stop, then write the backup
 ./scripts/plane_runtime.py import --run-dir RUN --bind IP:PORT --input backup.zstd # replace everything, then start
-./scripts/plane_runtime.py start --run-dir RUN --bind IP:PORT [--persist-auto systemd]
+./scripts/plane_runtime.py start --run-dir RUN --bind IP:PORT [--persist-auto systemd --export-basename NAME [--export-dir DIR]]
 ./scripts/plane_runtime.py stop|status --run-dir RUN
 ```
 
@@ -87,16 +87,31 @@ PostgreSQL's files belong to a user id that exists only inside Docker's rootless
 tar, `rm` and the directory setup for a new cluster therefore run through `nsenter` in that
 namespace; everything else runs as the caller.
 
-## Starting at boot
+## Starting at boot, exporting on shutdown
 
-`start --persist-auto systemd` also writes `~/.config/systemd/user/plane-persist-auto.service`, a unit of
-the user's systemd that runs this `start`, with these arguments and from this checkout, at every boot,
-and this script's `stop` at shutdown. The user's systemd starts at boot because the user lingers
-(`loginctl enable-linger`). There is one such unit: running the command again with another run directory
-or address stops the old instance and moves the unit. `systemctl --user start|stop|restart|status
-plane-persist-auto` work on it, and `start`, `stop`, `export` and `import` of that run directory go
-through it, so that systemd always knows whether the instance runs. `start --persist-auto none` removes
-the unit and then starts the instance once, as a plain `start` does.
+`start --persist-auto systemd --export-basename NAME` also writes
+`~/.config/systemd/user/plane-persist-auto.service`, a unit of the user's systemd that runs this `start`,
+with these arguments and from this checkout, at every boot, and this script's `stop` at shutdown. The
+user's systemd starts at boot because the user lingers (`loginctl enable-linger`). There is one such
+unit: running the command again with another run directory or address stops the old instance and moves
+the unit. `systemctl --user start|stop|restart|status plane-persist-auto` work on it, and `start`,
+`stop`, `export` and `import` of that run directory go through it, so that systemd always knows whether
+the instance runs. `start --persist-auto none` removes the unit and then starts the instance once, as a
+plain `start` does.
+
+The unit's stop exports the instance when the user's systemd itself stops, which for a lingering user
+is when the VM powers off or reboots: `crosvm powerbtn`, or `poweroff` or `reboot` inside the VM. The
+export is written to `DIR/NAME---YYYY-mm-DD---HH-MM-SS.zstd`, with the local time of the export, at zstd
+level 20, and replaces a file of that name. `DIR` is `--export-dir`, by default the directory that holds
+this checkout, and is created when missing. A stop or restart of the unit, a restart of Docker and
+running `start --persist-auto` again leave the user's systemd running, so they only stop the instance.
+At shutdown the unit stops before rootless Docker, which the export reads the run directory through,
+and the containers of every instance stop only after the unit
+(`~/.config/systemd/user/docker-.scope.d/plane-persist-auto.conf`), so that the export stops the
+services in its own order. Two settings of the VM, in `dockerfiles`, make this work: acpid turns the
+power button into a poweroff (logind cannot see the button without udev), and the user's systemd may
+take as long to stop as the export takes (Ubuntu gives it 5 s). A VM that is killed rather than shut
+down exports nothing; the earlier exports stay.
 
 ## MCP
 

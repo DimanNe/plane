@@ -77,6 +77,9 @@ START_SIGNAL: str = "SIGURG"
 PERSIST_AUTO_UNIT_NAME: str = "plane-persist-auto.service"
 # What the unit runs: this script, in the checkout that persisted it.
 PLANE_RUNTIME_SCRIPT: pl.Path = pl.Path(__file__).resolve()
+# The owner's level for the export on shutdown: there is one export per poweroff, kept as a backup, so its size
+# counts for more than the time it adds to the poweroff.
+EXPORT_ON_SHUTDOWN_ZSTD_LEVEL: int = 20
 
 
 class DockerMetrics(t.TypedDict):
@@ -191,6 +194,25 @@ class PersistAuto(enum.StrEnum):
     SYSTEMD = "systemd"
     # removes that unit; this start then starts the instance once, as without --persist-auto
     NONE = "none"
+
+
+@dc.dataclass(frozen=True)
+class ExportOnShutdown:
+    """Where the persist-auto unit exports its instance when the user's systemd stops, which, since the user lingers,
+    happens when the VM powers off or reboots (crosvm powerbtn, poweroff or reboot inside the VM). The owner then has
+    a backup of the instance as the VM left it, beside the checkout, without exporting by hand first."""
+
+    basename: str
+    dir: pl.Path
+
+
+def parse_export_basename(text: str) -> str:
+    # The name of a file in --export-dir, not a path below it.
+    if not text or "/" in text or text in (".", ".."):
+        raise argparse.ArgumentTypeError(
+            f"Expected the start of a file name, without '/': {text!r}"
+        )
+    return text
 
 
 def make_bind_mount_option(
@@ -2138,6 +2160,39 @@ def get_persist_auto_unit_path() -> pl.Path:
     return expand_home(pl.Path("~/.config/systemd/user")) / PERSIST_AUTO_UNIT_NAME
 
 
+def get_persist_auto_container_order_path() -> pl.Path:
+    # A drop-in for every unit whose name starts with "docker-" and ends with ".scope": the containers of rootless
+    # Docker (see make_persist_auto_container_order()).
+    return (
+        get_persist_auto_unit_path().parent
+        / "docker-.scope.d"
+        / (PERSIST_AUTO_UNIT_NAME.removesuffix(".service") + ".conf")
+    )
+
+
+def make_persist_auto_container_order() -> str:
+    # Rootless Docker runs each container in a scope of the user's systemd. When that systemd stops, it stops every
+    # scope at once, so the services of the instance would get their signals in parallel with the unit's ExecStop=,
+    # which stops them in order and exports what they leave: the live server writes its page edits, the worker
+    # finishes its job, and then the run directory is archived. A service that systemd has already stopped makes
+    # that stop fail, and the export with it. Ordered before the unit, the scopes stop only after its ExecStop=.
+    return textwrap.dedent(f"""\
+        # Written by plane_runtime.py start --persist-auto systemd with {PERSIST_AUTO_UNIT_NAME}; --persist-auto none removes it.
+        [Unit]
+        Before={PERSIST_AUTO_UNIT_NAME}
+        """)
+
+
+def get_export_on_shutdown_output(
+    export_on_shutdown: ExportOnShutdown, now: time.struct_time
+) -> pl.Path:
+    return export_on_shutdown.dir / (
+        export_on_shutdown.basename
+        + time.strftime("---%Y-%m-%d---%H-%M-%S", now)
+        + ".zstd"
+    )
+
+
 def require_plain_systemd_argument(value: str) -> str:
     # systemd splits ExecStart= on blanks, removes quotes and expands % specifiers and $ variables. An argument
     # with any such character is refused rather than escaped, so that the unit reads back as it was written.
@@ -2162,6 +2217,11 @@ def make_persist_auto_unit(
     start: "StartCommand", python: pl.Path, script: pl.Path
 ) -> str:
     persisted: StartCommand = get_persisted_start(start)
+    # the command line requires --export-basename with --persist-auto systemd
+    assert start.export_on_shutdown is not None
+    export_dir: pl.Path = resolve_archive_path(
+        start.export_on_shutdown.dir, persisted.run_dir
+    )
     start_argv: t.List[str] = [
         str(python),
         str(script),
@@ -2181,14 +2241,21 @@ def make_persist_auto_unit(
         "stop",
         "--run-dir",
         str(persisted.run_dir),
+        "--export-basename",
+        start.export_on_shutdown.basename,
+        "--export-dir",
+        str(export_dir),
     ]
     exec_start: str = " ".join(map(require_plain_systemd_argument, start_argv))
     exec_stop: str = " ".join(map(require_plain_systemd_argument, stop_argv))
-    # A stop waits for the processes and then for Docker, each up to STOP_TIMEOUT; systemd must not kill it first.
+    # A stop bounds its own waits (STOP_TIMEOUT), and the export on shutdown takes as long as compressing the run
+    # directory does: a timeout here would only cut a backup short (the user's systemd gets as long, see
+    # dockerfiles/20_plane). After=docker.service keeps rootless Docker, whose user namespace the export reads the
+    # run directory in, running until the export is written.
     return textwrap.dedent(f"""\
         # Written by plane_runtime.py start --persist-auto systemd, which rewrites it; --persist-auto none removes it.
         [Unit]
-        Description=Plane of {persisted.run_dir} on {persisted.bind}, started at boot (plane_runtime.py --persist-auto)
+        Description=Plane of {persisted.run_dir} on {persisted.bind}, started at boot and exported on shutdown (plane_runtime.py --persist-auto)
         Requires=docker.service
         After=docker.service
 
@@ -2198,7 +2265,7 @@ def make_persist_auto_unit(
         ExecStart={exec_start}
         ExecReload={exec_start}
         ExecStop={exec_stop}
-        TimeoutStopSec={2 * STOP_TIMEOUT + 30}
+        TimeoutStopSec=infinity
 
         [Install]
         WantedBy=default.target
@@ -2267,20 +2334,23 @@ def require_lingering_user() -> None:
         )
 
 
-def run_systemctl_for_user(argv: t.Sequence[str]) -> None:
+def get_user_systemd_environment() -> t.Dict[str, str]:
     # systemctl finds the user's systemd through XDG_RUNTIME_DIR, which a session without a login manager, such as
     # the VM's console, has not set.
-    environment: t.Dict[str, str] = {
+    return {
         **get_host_environment(),
         "XDG_RUNTIME_DIR": os.environ.get(
             "XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"
         ),
     }
+
+
+def run_systemctl_for_user(argv: t.Sequence[str]) -> None:
     result: subprocess.CompletedProcess[bytes] = subprocess.run(
         ["systemctl", "--user", *argv],
         stdout=sys.stderr,
         stderr=sys.stderr,
-        env=environment,
+        env=get_user_systemd_environment(),
     )
     if result.returncode:
         raise RuntimeError(
@@ -2289,7 +2359,24 @@ def run_systemctl_for_user(argv: t.Sequence[str]) -> None:
         )
 
 
-# A step of persisting: ("systemctl", ARGUMENTS...), ("write-unit",) or ("remove-unit",).
+def is_user_systemd_stopping() -> bool:
+    # The user's systemd is "stopping" from the moment it begins to stop every unit, because it is stopping itself,
+    # until it exits; a stop or restart of some units leaves it "running".
+    result: subprocess.CompletedProcess[bytes] = subprocess.run(
+        ["systemctl", "--user", "show", "--property=SystemState", "--value"],
+        stdout=subprocess.PIPE,
+        stderr=sys.stderr,
+        env=get_user_systemd_environment(),
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f"systemctl --user show --property=SystemState failed ({result.returncode})"
+        )
+    return result.stdout.decode().strip() == "stopping"
+
+
+# A step of persisting: ("systemctl", ARGUMENTS...), ("write-unit",) or ("remove-unit",). The unit is written and
+# removed with the order of the containers' scopes (see make_persist_auto_container_order()).
 PersistAutoStep = t.Tuple[str, ...]
 
 
@@ -2324,20 +2411,31 @@ def get_persist_auto_steps(
     ]
 
 
+def write_unit_file(path: pl.Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writing: pl.Path = path.with_name(path.name + ".writing")
+    writing.write_text(text)
+    os.replace(writing, path)
+
+
 def apply_persist_auto_steps(
     steps: t.Sequence[PersistAutoStep], wanted_unit: t.Optional[str]
 ) -> None:
-    path: pl.Path = get_persist_auto_unit_path()
+    unit_path: pl.Path = get_persist_auto_unit_path()
+    # it comes and goes with the unit, which is the only one that needs it
+    container_order_path: pl.Path = get_persist_auto_container_order_path()
     step: PersistAutoStep
     for step in steps:
         if step == ("write-unit",):
             assert wanted_unit is not None
-            path.parent.mkdir(parents=True, exist_ok=True)
-            writing: pl.Path = path.with_name(path.name + ".writing")
-            writing.write_text(wanted_unit)
-            os.replace(writing, path)
+            write_unit_file(unit_path, wanted_unit)
+            write_unit_file(container_order_path, make_persist_auto_container_order())
         elif step == ("remove-unit",):
-            path.unlink(missing_ok=True)
+            unit_path.unlink(missing_ok=True)
+            container_order_path.unlink(missing_ok=True)
+            # unless other drop-ins for the containers' scopes are there
+            with contextlib.suppress(OSError):
+                container_order_path.parent.rmdir()
         else:
             run_systemctl_for_user(step[1:])
 
@@ -2387,6 +2485,7 @@ class StartCommand(Command):
     bind: BindAddress
     image_tag: t.Optional[plane_config.ImageTag]
     persist_auto: t.Optional[PersistAuto] = None
+    export_on_shutdown: t.Optional[ExportOnShutdown] = None
 
     def persist_and_start(self) -> None:
         # FOR_REVIEWER: the unit runs the interpreter and the checkout this command ran with. If that checkout
@@ -2440,6 +2539,7 @@ class StartCommand(Command):
 @dc.dataclass(frozen=True)
 class StopCommand(Command):
     run_dir: pl.Path
+    export_on_shutdown: t.Optional[ExportOnShutdown] = None
 
     def run(self) -> None:
         start_time: float = time.monotonic()
@@ -2448,6 +2548,32 @@ class StopCommand(Command):
             # the unit's ExecStop= runs this command again, from within the unit
             run_systemctl_for_user(["stop", PERSIST_AUTO_UNIT_NAME])
             return print_persist_auto_result(run_dir, "stop")
+        if self.export_on_shutdown is not None and is_user_systemd_stopping():
+            # FOR_REVIEWER: the export is in the stop of the user's systemd, not behind the power key. Overriding
+            # HandlePowerKey= would need a handler of ours that exports and then powers off itself, set up as root,
+            # while this script runs as the user. This way the key keeps its poweroff, and poweroff or reboot inside
+            # the VM export too. A stop or restart of the unit, a restart of Docker and every change --persist-auto
+            # makes leave the user's systemd "running", so they only stop. The VM's logind does not see the power
+            # key at all (it finds buttons through udev, which the VM does not run), so dockerfiles/00_vm_base now
+            # has acpid turn the key into a poweroff.
+            # FOR_REVIEWER: what exports nothing. A VM killed rather than shut down (crosvm stop, a crash of the
+            # host): the earlier exports stay, PostgreSQL and Redis recover the run directory at the next start, and
+            # a VM killed during the export leaves its partial .NAME---...zstd.writing-* beside them, which nothing
+            # removes. A poweroff while the instance is still starting at boot: the unit is not active yet, so its
+            # ExecStop= does not run, and the instance has served nothing since the previous shutdown. A failed
+            # export: its reason is only in the journal, which this VM keeps in memory, so it is gone after the
+            # poweroff.
+            # FOR_REVIEWER: local time is the VM's /etc/localtime (no TZ in the unit), which is UTC on this VM.
+            return ExportCommand(
+                run_dir,
+                get_export_on_shutdown_output(
+                    self.export_on_shutdown, time.localtime()
+                ),
+                # FOR_REVIEWER: export's --zstd-threads default, which zstd takes as one thread per physical core
+                # (35 of the 70 vCPUs here), not one per vCPU.
+                zstd_threads=0,
+                zstd_level=EXPORT_ON_SHUTDOWN_ZSTD_LEVEL,
+            ).run()
         timings: Timings = make_lifecycle_timings(start_time)
         stop_plane_containers(run_dir, timings).result()
         print_lifecycle_result(run_dir, "stop", timings, start_time)
@@ -2728,7 +2854,21 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         "--persist-auto",
         type=PersistAuto,
         choices=list(PersistAuto),
-        help=f"systemd: also start this instance at every boot, through the unit {PERSIST_AUTO_UNIT_NAME} of the user's systemd, which keeps these arguments; run again with other arguments to change them. From then on, start, stop, export and import of this run directory go through the unit, and systemctl --user start, stop, restart and status work on it. none: remove that unit, then start as without --persist-auto.",
+        help=f"systemd: also start this instance at every boot, and export it on shutdown (see --export-basename), through the unit {PERSIST_AUTO_UNIT_NAME} of the user's systemd, which keeps these arguments; run again with other arguments to change them. From then on, start, stop, export and import of this run directory go through the unit, and systemctl --user start, stop, restart and status work on it. none: remove that unit, then start as without --persist-auto.",
+    )
+    # FOR_REVIEWER: as the task says, --persist-auto systemd needs --export-basename, so every persisted instance is
+    # exported on shutdown. Without --persist-auto systemd both export options are refused rather than ignored: only
+    # the unit exports on shutdown, and a plain start that took them would export nothing.
+    start_parser.add_argument(
+        "--export-basename",
+        type=parse_export_basename,
+        metavar="NAME",
+        help=f"With --persist-auto systemd, which needs it: whenever the user's systemd stops, which happens when the host powers off or reboots (crosvm powerbtn, poweroff, reboot), the unit stops the instance and exports it to --export-dir/NAME---YYYY-mm-DD---HH-MM-SS.zstd, at that moment's local time and zstd level {EXPORT_ON_SHUTDOWN_ZSTD_LEVEL}, replacing a file of that name. A stop or restart of the unit only stops.",
+    )
+    start_parser.add_argument(
+        "--export-dir",
+        metavar="PATH",
+        help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: the directory that contains the checkout of this script, {plane_git_path.parent}.",
     )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
@@ -2740,6 +2880,17 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         required=True,
         metavar="PATH",
         help="Directory containing the Plane instance to stop.",
+    )
+    stop_parser.add_argument(
+        "--export-basename",
+        type=parse_export_basename,
+        metavar="NAME",
+        help=f"If the user's systemd is stopping, because the host powers off or reboots, export instead: stop the instance and write it to --export-dir/NAME---YYYY-mm-DD---HH-MM-SS.zstd, at local time and zstd level {EXPORT_ON_SHUTDOWN_ZSTD_LEVEL}, replacing a file of that name. Any other stop only stops. The unit of start --persist-auto systemd stops this way.",
+    )
+    stop_parser.add_argument(
+        "--export-dir",
+        metavar="PATH",
+        help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: {plane_git_path.parent}.",
     )
     status_parser: argparse.ArgumentParser = subparsers.add_parser(
         "status",
@@ -2838,6 +2989,29 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         "--password", required=True, help="Password to set for the administrator."
     )
     args: argparse.Namespace = parser.parse_args(argv)
+    export_on_shutdown: t.Optional[ExportOnShutdown] = None
+    if args.subparser_name in ("start", "stop"):
+        command_parser: argparse.ArgumentParser = (
+            start_parser if args.subparser_name == "start" else stop_parser
+        )
+        if args.export_basename is not None:
+            export_on_shutdown = ExportOnShutdown(
+                args.export_basename,
+                plane_git_path.parent
+                if args.export_dir is None
+                else pl.Path(args.export_dir),
+            )
+        elif args.export_dir is not None:
+            command_parser.error("--export-dir needs --export-basename")
+    if args.subparser_name == "start":
+        if args.persist_auto == PersistAuto.SYSTEMD and export_on_shutdown is None:
+            start_parser.error(
+                "--persist-auto systemd needs --export-basename: its unit exports the instance on shutdown"
+            )
+        if args.persist_auto != PersistAuto.SYSTEMD and export_on_shutdown is not None:
+            start_parser.error(
+                "--export-basename and --export-dir need --persist-auto systemd: only its unit exports on shutdown"
+            )
     if args.subparser_name == "prepare":
         return PrepareCommand(
             plane_git_path=pl.Path(args.plane_git_path), image_tag=args.image_tag
@@ -2849,9 +3023,12 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
             bind=args.bind,
             image_tag=args.image_tag,
             persist_auto=args.persist_auto,
+            export_on_shutdown=export_on_shutdown,
         )
     elif args.subparser_name == "stop":
-        return StopCommand(run_dir=pl.Path(args.run_dir))
+        return StopCommand(
+            run_dir=pl.Path(args.run_dir), export_on_shutdown=export_on_shutdown
+        )
     elif args.subparser_name == "status":
         return StatusCommand(run_dir=pl.Path(args.run_dir))
     elif args.subparser_name == "export":

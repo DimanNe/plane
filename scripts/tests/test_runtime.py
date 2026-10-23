@@ -1,4 +1,5 @@
 import argparse
+import concurrent.futures
 import dataclasses as dc
 import errno
 import ipaddress
@@ -7,6 +8,7 @@ import os
 import pathlib as pl
 import sys
 import tempfile
+import time
 import typing as t
 import unittest
 import unittest.mock as mock
@@ -609,9 +611,17 @@ def make_start(
     )
 
 
-def make_persist_auto_unit(start: runtime.StartCommand) -> str:
+EXPORT_ON_SHUTDOWN: runtime.ExportOnShutdown = runtime.ExportOnShutdown(
+    "plane-dev-export", pl.Path("/opt")
+)
+
+
+def make_persist_auto_unit(
+    start: runtime.StartCommand,
+    export_on_shutdown: runtime.ExportOnShutdown = EXPORT_ON_SHUTDOWN,
+) -> str:
     return runtime.make_persist_auto_unit(
-        start,
+        dc.replace(start, export_on_shutdown=export_on_shutdown),
         pl.Path("/usr/bin/python3"),
         pl.Path("/opt/plane/scripts/plane_runtime.py"),
     )
@@ -624,16 +634,18 @@ class PersistAutoTests(unittest.TestCase):
         class Tc(t.NamedTuple):
             name: str
             start: runtime.StartCommand
+            export_on_shutdown: runtime.ExportOnShutdown
             expected: str
 
         script: str = "/usr/bin/python3 /opt/plane/scripts/plane_runtime.py"
         tcs: t.List[Tc] = [
             Tc(
-                "the owner's instance, on every interface",
+                "the owner's instance, on every interface, exported beside the checkout",
                 make_start("/home/owner/plane-dev", "0.0.0.0:12001"),
+                runtime.ExportOnShutdown("plane-dev-export", pl.Path("/opt")),
                 "# Written by plane_runtime.py start --persist-auto systemd, which rewrites it; --persist-auto none removes it.\n"
                 "[Unit]\n"
-                "Description=Plane of /home/owner/plane-dev on 0.0.0.0:12001, started at boot (plane_runtime.py --persist-auto)\n"
+                "Description=Plane of /home/owner/plane-dev on 0.0.0.0:12001, started at boot and exported on shutdown (plane_runtime.py --persist-auto)\n"
                 "Requires=docker.service\n"
                 "After=docker.service\n"
                 "\n"
@@ -642,18 +654,19 @@ class PersistAutoTests(unittest.TestCase):
                 "RemainAfterExit=yes\n"
                 f"ExecStart={script} start --run-dir /home/owner/plane-dev --plane-git-path /opt/plane --bind 0.0.0.0:12001\n"
                 f"ExecReload={script} start --run-dir /home/owner/plane-dev --plane-git-path /opt/plane --bind 0.0.0.0:12001\n"
-                f"ExecStop={script} stop --run-dir /home/owner/plane-dev\n"
-                f"TimeoutStopSec={2 * runtime.STOP_TIMEOUT + 30}\n"
+                f"ExecStop={script} stop --run-dir /home/owner/plane-dev --export-basename plane-dev-export --export-dir /opt\n"
+                "TimeoutStopSec=infinity\n"
                 "\n"
                 "[Install]\n"
                 "WantedBy=default.target\n",
             ),
             Tc(
-                "an instance with images of its own tag",
+                "an instance with images of its own tag, exported to a directory of its own",
                 make_start("/srv/checks-1", "127.0.0.1:12141", "plane-67"),
+                runtime.ExportOnShutdown("checks-1", pl.Path("/srv/exports/checks")),
                 "# Written by plane_runtime.py start --persist-auto systemd, which rewrites it; --persist-auto none removes it.\n"
                 "[Unit]\n"
-                "Description=Plane of /srv/checks-1 on 127.0.0.1:12141, started at boot (plane_runtime.py --persist-auto)\n"
+                "Description=Plane of /srv/checks-1 on 127.0.0.1:12141, started at boot and exported on shutdown (plane_runtime.py --persist-auto)\n"
                 "Requires=docker.service\n"
                 "After=docker.service\n"
                 "\n"
@@ -662,8 +675,8 @@ class PersistAutoTests(unittest.TestCase):
                 "RemainAfterExit=yes\n"
                 f"ExecStart={script} start --run-dir /srv/checks-1 --plane-git-path /opt/plane --bind 127.0.0.1:12141 --image-tag plane-67\n"
                 f"ExecReload={script} start --run-dir /srv/checks-1 --plane-git-path /opt/plane --bind 127.0.0.1:12141 --image-tag plane-67\n"
-                f"ExecStop={script} stop --run-dir /srv/checks-1\n"
-                f"TimeoutStopSec={2 * runtime.STOP_TIMEOUT + 30}\n"
+                f"ExecStop={script} stop --run-dir /srv/checks-1 --export-basename checks-1 --export-dir /srv/exports/checks\n"
+                "TimeoutStopSec=infinity\n"
                 "\n"
                 "[Install]\n"
                 "WantedBy=default.target\n",
@@ -672,24 +685,47 @@ class PersistAutoTests(unittest.TestCase):
         i: int
         tc: Tc
         for i, tc in enumerate(tcs):
-            actual: str = make_persist_auto_unit(tc.start)
+            actual: str = make_persist_auto_unit(tc.start, tc.export_on_shutdown)
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
     def test_unit_refuses_an_argument_that_systemd_would_change(self) -> None:
-        run_dir: str
-        for run_dir in (
-            "/srv/plane dev",
-            "/srv/plane%h",
-            "/srv/plane$HOME",
-            '/srv/"plane"',
-        ):
+        start: runtime.StartCommand = make_start("/srv/a", "0.0.0.0:12001")
+        starts: t.List[t.Tuple[runtime.StartCommand, runtime.ExportOnShutdown]] = [
+            *(
+                (make_start(run_dir, "0.0.0.0:12001"), EXPORT_ON_SHUTDOWN)
+                for run_dir in (
+                    "/srv/plane dev",
+                    "/srv/plane%h",
+                    "/srv/plane$HOME",
+                    '/srv/"plane"',
+                )
+            ),
+            (start, runtime.ExportOnShutdown("plane %Y", pl.Path("/opt"))),
+            (start, runtime.ExportOnShutdown("plane", pl.Path("/srv/my exports"))),
+        ]
+        export_on_shutdown: runtime.ExportOnShutdown
+        for start, export_on_shutdown in starts:
             with (
-                self.subTest(run_dir=run_dir),
+                self.subTest(start=start, export_on_shutdown=export_on_shutdown),
                 self.assertRaisesRegex(RuntimeError, "Cannot persist"),
             ):
-                make_persist_auto_unit(make_start(run_dir, "0.0.0.0:12001"))
+                make_persist_auto_unit(start, export_on_shutdown)
 
-    def test_unit_reads_back_as_the_start_it_was_made_from(self) -> None:
+    def test_unit_refuses_an_export_dir_in_the_run_dir(self) -> None:
+        export_dir: str
+        for export_dir in ("/srv/a", "/srv/a/exports", "/srv/a/../a/exports"):
+            with (
+                self.subTest(export_dir=export_dir),
+                self.assertRaisesRegex(RuntimeError, "outside run-dir"),
+            ):
+                make_persist_auto_unit(
+                    make_start("/srv/a", "0.0.0.0:12001"),
+                    runtime.ExportOnShutdown("plane-dev-export", pl.Path(export_dir)),
+                )
+
+    def test_unit_reads_back_as_the_start_it_was_made_from_without_the_export(
+        self,
+    ) -> None:
         start: runtime.StartCommand
         for start in (
             make_start("/home/owner/plane-dev", "0.0.0.0:12001"),
@@ -844,6 +880,7 @@ class PersistAutoTests(unittest.TestCase):
             start: runtime.StartCommand = dc.replace(
                 make_start("/srv/a", "0.0.0.0:12001"),
                 persist_auto=runtime.PersistAuto.SYSTEMD,
+                export_on_shutdown=EXPORT_ON_SHUTDOWN,
             )
             with (
                 mock.patch.object(
@@ -854,14 +891,22 @@ class PersistAutoTests(unittest.TestCase):
                 mock.patch("sys.stdout"),
             ):
                 start.run()
-            actual: t.Tuple[str, t.List[t.List[str]]] = (
-                unit_path.read_text(),
+            actual: t.Tuple[t.Dict[str, t.Optional[bytes]], t.List[t.List[str]]] = (
+                read_tree(pl.Path(temporary)),
                 [list(call.args[0]) for call in systemctl.call_args_list],
             )
-        expected: t.Tuple[str, t.List[t.List[str]]] = (
-            runtime.make_persist_auto_unit(
-                start, pl.Path(sys.executable), runtime.PLANE_RUNTIME_SCRIPT
-            ),
+        expected: t.Tuple[t.Dict[str, t.Optional[bytes]], t.List[t.List[str]]] = (
+            {
+                runtime.PERSIST_AUTO_UNIT_NAME: runtime.make_persist_auto_unit(
+                    start, pl.Path(sys.executable), runtime.PLANE_RUNTIME_SCRIPT
+                ).encode(),
+                "docker-.scope.d": None,
+                "docker-.scope.d/plane-persist-auto.conf": (
+                    "# Written by plane_runtime.py start --persist-auto systemd with plane-persist-auto.service; --persist-auto none removes it.\n"
+                    "[Unit]\n"
+                    "Before=plane-persist-auto.service\n"
+                ).encode(),
+            },
             [
                 ["daemon-reload"],
                 ["enable", runtime.PERSIST_AUTO_UNIT_NAME],
@@ -869,6 +914,39 @@ class PersistAutoTests(unittest.TestCase):
             ],
         )
         self.assertEqual(actual, expected)
+
+    def test_start_with_persist_auto_none_removes_the_unit_and_the_order_of_the_containers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            unit_path: pl.Path = pl.Path(temporary) / runtime.PERSIST_AUTO_UNIT_NAME
+            persisted: runtime.StartCommand = dc.replace(
+                make_start("/srv/a", "0.0.0.0:12001"),
+                persist_auto=runtime.PersistAuto.SYSTEMD,
+                export_on_shutdown=EXPORT_ON_SHUTDOWN,
+            )
+            with (
+                mock.patch.object(
+                    runtime, "get_persist_auto_unit_path", return_value=unit_path
+                ),
+                mock.patch.object(runtime, "require_lingering_user"),
+                mock.patch.object(runtime, "run_systemctl_for_user"),
+                mock.patch.object(runtime.StartCommand, "run", autospec=True) as run,
+                mock.patch("sys.stdout"),
+            ):
+                runtime.StartCommand.persist_and_start(persisted)
+                runtime.StartCommand.persist_and_start(
+                    dc.replace(
+                        persisted,
+                        persist_auto=runtime.PersistAuto.NONE,
+                        export_on_shutdown=None,
+                    )
+                )
+            actual: t.Tuple[t.Dict[str, t.Optional[bytes]], t.List[t.Any]] = (
+                read_tree(pl.Path(temporary)),
+                [call.args[0] for call in run.call_args_list],
+            )
+        self.assertEqual(actual, ({}, [make_start("/srv/a", "0.0.0.0:12001")]))
 
     def test_hand_run_stop_of_the_persisted_run_dir_stops_the_unit(self) -> None:
         with (
@@ -887,6 +965,170 @@ class PersistAutoTests(unittest.TestCase):
             stop.call_count,
         )
         self.assertEqual(actual, ([["stop", runtime.PERSIST_AUTO_UNIT_NAME]], 0))
+
+
+class ExportOnShutdownTests(unittest.TestCase):
+    def test_output_is_named_by_the_local_time_of_the_export(self) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            export_on_shutdown: runtime.ExportOnShutdown
+            now: time.struct_time
+            expected: pl.Path
+
+        tcs: t.List[Tc] = [
+            Tc(
+                "beside the checkout",
+                runtime.ExportOnShutdown(
+                    "plane-dev-export", pl.Path("/home/owner/devel")
+                ),
+                time.struct_time((2026, 10, 23, 18, 5, 9, 4, 296, 0)),
+                pl.Path(
+                    "/home/owner/devel/plane-dev-export---2026-10-23---18-05-09.zstd"
+                ),
+            ),
+            Tc(
+                "a month, day, hour, minute and second of one digit",
+                runtime.ExportOnShutdown("plane-dev-export", pl.Path("/srv/exports")),
+                time.struct_time((2027, 1, 2, 3, 4, 5, 5, 2, 0)),
+                pl.Path("/srv/exports/plane-dev-export---2027-01-02---03-04-05.zstd"),
+            ),
+            Tc(
+                "the last second of a year",
+                runtime.ExportOnShutdown("checks-1", pl.Path("/srv/exports")),
+                time.struct_time((2026, 12, 31, 23, 59, 59, 3, 365, 0)),
+                pl.Path("/srv/exports/checks-1---2026-12-31---23-59-59.zstd"),
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: pl.Path = runtime.get_export_on_shutdown_output(
+                tc.export_on_shutdown, tc.now
+            )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_stop_exports_only_when_the_user_s_systemd_is_stopping(self) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            export_on_shutdown: t.Optional[runtime.ExportOnShutdown]
+            is_user_systemd_stopping: bool
+            expected: t.Tuple[t.List[runtime.ExportCommand], int]
+
+        now: time.struct_time = time.struct_time((2026, 10, 23, 18, 5, 9, 4, 296, 0))
+        tcs: t.List[Tc] = [
+            Tc(
+                "the shutdown of the user's systemd",
+                EXPORT_ON_SHUTDOWN,
+                True,
+                (
+                    [
+                        runtime.ExportCommand(
+                            pl.Path("/srv/a"),
+                            pl.Path(
+                                "/opt/plane-dev-export---2026-10-23---18-05-09.zstd"
+                            ),
+                            0,
+                            runtime.EXPORT_ON_SHUTDOWN_ZSTD_LEVEL,
+                        )
+                    ],
+                    0,
+                ),
+            ),
+            Tc(
+                "a stop or restart of the unit",
+                EXPORT_ON_SHUTDOWN,
+                False,
+                ([], 1),
+            ),
+            Tc(
+                "the shutdown of the user's systemd, without --export-basename",
+                None,
+                True,
+                ([], 1),
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            with (
+                mock.patch.object(
+                    runtime, "get_persist_auto_start_of", return_value=None
+                ),
+                mock.patch.object(
+                    runtime,
+                    "is_user_systemd_stopping",
+                    return_value=tc.is_user_systemd_stopping,
+                ),
+                mock.patch("time.localtime", return_value=now),
+                mock.patch.object(
+                    runtime.ExportCommand, "run", autospec=True
+                ) as export,
+                mock.patch.object(runtime, "stop_plane_containers") as stop,
+                mock.patch("sys.stdout"),
+            ):
+                runtime.StopCommand(pl.Path("/srv/a"), tc.export_on_shutdown).run()
+            actual: t.Tuple[t.List[runtime.ExportCommand], int] = (
+                [call.args[0] for call in export.call_args_list],
+                stop.call_count,
+            )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_export_creates_missing_directories_and_replaces_a_backup_of_the_same_name(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            existing: t.Dict[str, t.Optional[bytes]]
+
+        # a zstd frame begins with these bytes
+        zstd_magic_number: bytes = bytes.fromhex("28b52ffd")
+        tcs: t.List[Tc] = [
+            Tc("two levels of directories missing", {}),
+            Tc("the directories there", {"a": None, "a/b": None}),
+            Tc(
+                "a backup of the same name there",
+                {"a": None, "a/b": None, "a/b/backup.zstd": b"previous backup"},
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            with tempfile.TemporaryDirectory() as temporary:
+                run_dir: pl.Path = pl.Path(temporary) / "run"
+                make_initialized_instance(run_dir)
+                exports: pl.Path = pl.Path(temporary) / "exports"
+                exports.mkdir()
+                name: str
+                content: t.Optional[bytes]
+                for name, content in tc.existing.items():
+                    if content is None:
+                        (exports / name).mkdir()
+                    else:
+                        (exports / name).write_bytes(content)
+                stopped: concurrent.futures.Future[None] = concurrent.futures.Future()
+                stopped.set_result(None)
+                with (
+                    mock.patch.object(runtime, "DockerFs", CallerDockerFs),
+                    mock.patch.object(
+                        runtime, "read_persist_auto_unit", return_value=None
+                    ),
+                    mock.patch.object(
+                        runtime, "stop_plane_containers", return_value=stopped
+                    ),
+                    mock.patch("sys.stdout"),
+                ):
+                    runtime.ExportCommand(
+                        run_dir, exports / "a/b/backup.zstd", 0, 1
+                    ).run()
+                actual: t.Dict[str, t.Optional[bytes]] = {
+                    name: None if content is None else content[:4]
+                    for name, content in read_tree(exports).items()
+                }
+            self.assertEqual(
+                actual,
+                {"a": None, "a/b": None, "a/b/backup.zstd": zstd_magic_number},
+                f"Testcase #{i + 1} {tc.name}",
+            )
 
 
 class CommandLineTests(unittest.TestCase):
@@ -939,6 +1181,8 @@ class CommandLineTests(unittest.TestCase):
                     "0.0.0.0:12001",
                     "--persist-auto",
                     "systemd",
+                    "--export-basename",
+                    "plane-dev-export",
                 ],
                 runtime.StartCommand(
                     pl.Path("run"),
@@ -946,9 +1190,75 @@ class CommandLineTests(unittest.TestCase):
                     runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 12001),
                     None,
                     runtime.PersistAuto.SYSTEMD,
+                    runtime.ExportOnShutdown("plane-dev-export", plane_git_path.parent),
+                ),
+            ),
+            Tc(
+                [
+                    "start",
+                    "--run-dir",
+                    "run",
+                    "--bind",
+                    "0.0.0.0:12001",
+                    "--persist-auto",
+                    "systemd",
+                    "--export-basename",
+                    "plane-dev-export",
+                    "--export-dir",
+                    "exports",
+                ],
+                runtime.StartCommand(
+                    pl.Path("run"),
+                    plane_git_path,
+                    runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 12001),
+                    None,
+                    runtime.PersistAuto.SYSTEMD,
+                    runtime.ExportOnShutdown("plane-dev-export", pl.Path("exports")),
+                ),
+            ),
+            Tc(
+                [
+                    "start",
+                    "--run-dir",
+                    "run",
+                    "--bind",
+                    "0.0.0.0:12001",
+                    "--persist-auto",
+                    "none",
+                ],
+                runtime.StartCommand(
+                    pl.Path("run"),
+                    plane_git_path,
+                    runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 12001),
+                    None,
+                    runtime.PersistAuto.NONE,
                 ),
             ),
             Tc(["stop", "--run-dir", "run"], runtime.StopCommand(pl.Path("run"))),
+            Tc(
+                ["stop", "--run-dir", "run", "--export-basename", "plane-dev-export"],
+                runtime.StopCommand(
+                    pl.Path("run"),
+                    runtime.ExportOnShutdown("plane-dev-export", plane_git_path.parent),
+                ),
+            ),
+            Tc(
+                [
+                    "stop",
+                    "--run-dir",
+                    "run",
+                    "--export-basename",
+                    "plane-dev-export",
+                    "--export-dir",
+                    "/srv/exports",
+                ],
+                runtime.StopCommand(
+                    pl.Path("run"),
+                    runtime.ExportOnShutdown(
+                        "plane-dev-export", pl.Path("/srv/exports")
+                    ),
+                ),
+            ),
             Tc(["status", "--run-dir", "run"], runtime.StatusCommand(pl.Path("run"))),
             Tc(
                 [
@@ -1030,6 +1340,26 @@ class CommandLineTests(unittest.TestCase):
         for argv in (
             ["start", "--run-dir", "run"],
             ["import", "--run-dir", "run", "--input", "/dev/null"],
+        ):
+            with (
+                self.subTest(argv=argv),
+                mock.patch("sys.stderr"),
+                self.assertRaises(SystemExit),
+            ):
+                runtime.parse_cli_command(argv)
+
+    def test_export_options_need_persist_auto_systemd_and_a_basename(self) -> None:
+        start: t.List[str] = ["start", "--run-dir", "run", "--bind", "0.0.0.0:12001"]
+        argv: t.List[str]
+        for argv in (
+            [*start, "--persist-auto", "systemd"],
+            [*start, "--persist-auto", "systemd", "--export-dir", "exports"],
+            [*start, "--export-basename", "plane-dev-export"],
+            [*start, "--export-dir", "exports"],
+            [*start, "--persist-auto", "none", "--export-basename", "plane-dev-export"],
+            [*start, "--persist-auto", "systemd", "--export-basename", "exports/plane"],
+            [*start, "--persist-auto", "systemd", "--export-basename", ".."],
+            ["stop", "--run-dir", "run", "--export-dir", "exports"],
         ):
             with (
                 self.subTest(argv=argv),
