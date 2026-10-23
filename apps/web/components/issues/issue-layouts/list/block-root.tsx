@@ -128,10 +128,12 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
       {/* the space above the row takes a drop above the row */}
       <div className="absolute bottom-full w-full" style={{ height: spacingTop }} />
       {dropPlace === "above" && <ListDropLine className="top-0" spacingLeft={spacingLeft} />}
+      {/* Nothing is drawn between the lines of the list (styles/surfaces.css); the border keeps the height that the
+          stand-in of a line assumes. */}
       <RenderIfVisible
         key={`${issueId}`}
         root={containerRef}
-        classNames={`relative ${isLastChild && !isExpanded ? "" : "border-b border-b-subtle"}`}
+        classNames={`relative ${isLastChild && !isExpanded ? "" : "border-b border-b-transparent"}`}
         verticalOffset={100}
         defaultValue={issuesMap[issueId] ? isIssueNew(issuesMap[issueId]) : false}
         placeholderChildren={<IssueBlockStandIn nestingLevel={nestingLevel} isCompact={isCompact} />}

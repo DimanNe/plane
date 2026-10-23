@@ -1,6 +1,7 @@
 """
 The dialog of a new work item has no heading: under the project stand the title and the description as one text,
-without a frame around either, starting at one left edge, the title in a larger size. For screen readers the dialog
+without a frame around either, starting at one left edge, the title in a larger size, the description saying "Add
+description" until it has text. For screen readers the dialog
 is still named "Create new work item". It fades and grows in as it opens, as the other dialogs do.
 """
 
@@ -93,6 +94,13 @@ def run(check: steps.Check) -> None:
         ["Create new work item", False],
     )
     dialog.locator(".ProseMirror p").first.wait_for()
+    check.expect(
+        'until something is typed into it, the description says "Add description"',
+        lambda: dialog.locator(".ProseMirror p").first.get_attribute(
+            "data-placeholder"
+        ),
+        "Add description",
+    )
     check.expect(
         "neither the title nor the description has a frame around it (framed elements of each)",
         lambda: page.evaluate(FRAMES_JS),

@@ -32,7 +32,7 @@ export function IssueBlockAddSubIssue(props: Props) {
       <span className="inline-flex align-middle [direction:ltr]">
         <Pill
           size="xs"
-          variant="outline"
+          variant="soft"
           tabIndex={-1}
           startIcon={<Icon icon={AddOutline} />}
           label={t("issue.add.sub_issue")}

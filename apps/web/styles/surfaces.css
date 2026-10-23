@@ -1,0 +1,25 @@
+/*
+ * The app has two areas, told apart by tone rather than by lines: the frame (the top bar, the sidebar and the margins
+ * at the right and at the bottom) on the canvas tone, and the content (a list, the timeline, a page, settings) on a
+ * lighter panel with rounded corners that stands slightly above the frame. A line between two areas is one more edge
+ * to read on every screen, while a difference in tone over a whole area is seen at a glance; where tone parts two
+ * areas, the line between them is drawn transparent and keeps its width, so that nothing moves.
+ *
+ * In light, the frame takes the tone of propel's subtle border, the line that used to part it from the content, and
+ * so keeps the contrast that line had against the panel. In dark no frame gets that far from the panel (even black
+ * stays below), so the panel keeps a faint light edge of its own.
+ */
+:root {
+  --bg-canvas: var(--neutral-400);
+  --panel-radius: 0.625rem;
+  --panel-shadow: 0 1px 2px rgb(41 47 61 / 0.05), 0 2px 8px -2px rgb(41 47 61 / 0.06);
+}
+
+/* propel sets its dark tokens on every element of a dark page, not only on the root */
+:where([data-theme*="dark"], [data-theme*="dark"] *) {
+  --bg-canvas: color-mix(in oklch, var(--neutral-black), black 40%);
+}
+
+[data-theme*="dark"] {
+  --panel-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06), 0 1px 3px rgb(0 0 0 / 0.5);
+}

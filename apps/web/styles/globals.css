@@ -4,6 +4,7 @@
 @import "./emoji.css";
 @import "./new-work-item.css";
 @import "./dialogs.css";
+@import "./surfaces.css";
 @plugin "@tailwindcss/typography";
 
 /* stickies and editor colors

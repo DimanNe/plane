@@ -8,7 +8,7 @@ import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 
 const pillButtonVariants = cva(
-  "group inline-flex items-center justify-start rounded-md border border-subtle-1 bg-layer-2 text-secondary transition-colors outline-none hover:border-strong hover:bg-layer-2-hover active:border-strong active:bg-layer-2-active disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-subtle-1 disabled:bg-layer-transparent disabled:text-disabled",
+  "group inline-flex items-center justify-start rounded-md border border-transparent bg-layer-3 text-secondary transition-colors outline-none hover:bg-layer-3-hover active:bg-layer-3-active disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-layer-transparent disabled:text-disabled",
   {
     variants: {
       size: {
@@ -17,7 +17,7 @@ const pillButtonVariants = cva(
         lg: "h-7 gap-1 px-2 py-1 text-body-sm-regular",
       },
       isActive: {
-        true: "border-strong bg-layer-2-active text-primary",
+        true: "bg-layer-3-active text-primary",
         false: "",
       },
     },

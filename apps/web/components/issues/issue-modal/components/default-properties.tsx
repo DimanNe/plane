@@ -285,7 +285,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
             tabIndex={getIndex("parent_id")}
             render={
               // `PillChrome` renders its own `<button type="button">`, which becomes the menu trigger.
-              <PillChrome size="sm" variant="outline">
+              <PillChrome size="sm" variant="soft">
                 {selectedParentIssue?.project_id && (
                   <IssueIdentifier
                     projectId={selectedParentIssue.project_id}
@@ -318,7 +318,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
       ) : (
         <Pill
           size="sm"
-          variant="outline"
+          variant="soft"
           startIcon={<PropelIcon icon={<ParentOutline className="size-3.5" />} />}
           onClick={() => setParentIssueListModalOpen(true)}
           label={t("add_parent")}

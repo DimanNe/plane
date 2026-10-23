@@ -220,7 +220,7 @@ export const formatTextList = (TextArray: string[]): string => {
 export const getDescriptionPlaceholderI18n = (isFocused: boolean, description: string | undefined): string => {
   const isDescriptionEmpty = isEditorEmpty(description);
   if (!isDescriptionEmpty || isFocused) return "common.press_for_commands";
-  else return "common.click_to_add_description";
+  else return "common.add_description";
 };
 
 export const issueCountBasedOnFilters = (

@@ -21,7 +21,7 @@ export function WorkspaceSettingsSidebarRoot(props: Props) {
   return (
     <div
       className={cn(
-        "flex h-full w-[250px] shrink-0 animate-fade-in flex-col overflow-hidden border-r border-r-subtle bg-surface-1",
+        "flex h-full w-[250px] shrink-0 animate-fade-in flex-col overflow-hidden border-r border-r-transparent bg-canvas",
         className
       )}
     >

@@ -280,9 +280,12 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     >
       {/* The header and the input under it stay at the top of the list together while their group scrolls. */}
       <div className={cn("w-full flex-shrink-0", { "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0 })}>
+        {/* A group's header is a band in a darker tone than its lines (see styles/surfaces.css). Its bottom border, in the
+            panel's tone, is the gap that parts it from the band of an empty group below; it takes part of the padding,
+            so that the header is as high as it was with a thin line. */}
         <Row
           id={getListGroupHeaderId(group.id)}
-          className={cn("border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
+          className={cn("border-b-[3px] border-(--bg-surface-1) bg-layer-3 py-[3px] pr-3 hover:bg-layer-3-hover", {
             "bg-accent-subtle outline-2 -outline-offset-2 outline-accent-strong hover:bg-accent-subtle": !!dropPlace,
           })}
         >
@@ -320,7 +323,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
               setIsQuickAddOpen={setIsQuickAddOpen}
               layout={EIssueLayoutTypes.LIST}
               prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
-              containerClassName="border-b border-subtle bg-surface-1"
+              containerClassName="border-b border-transparent bg-surface-1"
               quickAddCallback={
                 quickAddCallback &&
                 (async (projectId, data) => {

@@ -170,7 +170,7 @@ export function ResizableSidebar({
       <div
         id="main-sidebar"
         className={cn(
-          "z-20 h-full border-r border-subtle bg-surface-1",
+          "z-20 h-full border-r border-transparent bg-canvas",
           !isResizing && "transition-all duration-300 ease-in-out",
           isCollapsed ? "w-0 translate-x-[-100%] opacity-0" : "translate-x-0 opacity-100",
           isMobile && "absolute",
@@ -185,7 +185,7 @@ export function ResizableSidebar({
         aria-label="Main sidebar"
         data-prevent-outside-click={isMobile || undefined}
       >
-        <aside className="group/sidebar relative flex h-full w-full flex-col overflow-hidden bg-surface-1 pt-3">
+        <aside className="group/sidebar relative flex h-full w-full flex-col overflow-hidden bg-canvas pt-3">
           {children}
 
           {/* Resize Handle */}
@@ -224,8 +224,8 @@ export function ResizableSidebar({
       >
         <aside
           className={cn(
-            "group/sidebar relative z-20 flex h-full w-full flex-col overflow-hidden bg-surface-1 pt-4",
-            "self-center rounded-md rounded-tl-none rounded-bl-none border-r border-subtle"
+            "group/sidebar relative z-20 flex h-full w-full flex-col overflow-hidden bg-canvas pt-4",
+            "self-center rounded-md rounded-tl-none rounded-bl-none border-r border-transparent"
           )}
         >
           {children}
