@@ -47,14 +47,12 @@ def get_pid_of_network_container(run_dir: pl.Path) -> str:
 
 def get_environment_of_command(
     port: int,
-    service_secrets: plane_config.ServiceSecrets,
+    config: plane_config.InstanceConfig,
     venv: pl.Path,
     db_name: str,
     redis_db: int,
 ) -> t.Dict[str, str]:
-    environment: t.Dict[str, str] = plane_runtime.get_plane_environment(
-        port, service_secrets
-    )
+    environment: t.Dict[str, str] = plane_runtime.get_plane_environment(port, config)
     redis: str = (
         f"redis://127.0.0.1:{plane_runtime.SERVICE_PORTS[plane_config.Service.REDIS]}"
     )
@@ -102,7 +100,7 @@ class RunInApiEnvironment:
             ],
             cwd=REPOSITORY / "apps/api",
             env=get_environment_of_command(
-                self.port, config.secrets, self.venv, self.db_name, self.redis_db
+                self.port, config, self.venv, self.db_name, self.redis_db
             ),
         )
 

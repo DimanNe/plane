@@ -55,7 +55,13 @@ export class UserService extends APIService {
   async currentUser(): Promise<IUser> {
     // Using validateStatus: null to bypass interceptors for unauthorized errors.
     return this.get("/api/users/me/", { validateStatus: null })
-      .then((response) => response?.data)
+      .then((response) => {
+        // Only the API's 401 says that nobody is signed in. Another answer, such as the proxy's 502 while the API
+        // restarts, says nothing about the session, and taken for "nobody" it would show a signed-in person the
+        // sign-in page.
+        if (response.status !== 200 && response.status !== 401) throw { response };
+        return response.data;
+      })
       .catch((error) => {
         throw error?.response;
       });

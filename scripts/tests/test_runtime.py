@@ -276,6 +276,44 @@ class StartTests(unittest.TestCase):
             self.assertEqual(build.call_count, 0)
 
 
+class PlaneEnvironmentTests(unittest.TestCase):
+    def test_each_instance_names_its_session_cookie_and_keeps_the_name_through_export(
+        self,
+    ) -> None:
+        def get_session_cookie_name(
+            config: plane_config.InstanceConfig, port: int
+        ) -> str:
+            return runtime.get_plane_environment(port, config)["SESSION_COOKIE_NAME"]
+
+        first: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
+        second: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
+        with tempfile.TemporaryDirectory() as temporary:
+            # an archive carries the configuration as it is written in the run directory
+            first.write(pl.Path(temporary))
+            imported: plane_config.InstanceConfig = runtime.require_instance_config(
+                pl.Path(temporary)
+            )
+        cases: t.List[t.Tuple[str, bool]] = [
+            (
+                "another instance names it otherwise",
+                get_session_cookie_name(second, 18081)
+                != get_session_cookie_name(first, 18080),
+            ),
+            (
+                "an imported export keeps the name, on another port too",
+                get_session_cookie_name(imported, 18081)
+                == get_session_cookie_name(first, 18080),
+            ),
+            (
+                "the name Plane gives it unless told otherwise is not taken",
+                get_session_cookie_name(first, 18080) != "session-id",
+            ),
+        ]
+        actual: t.List[t.Tuple[str, bool]] = cases
+        expected: t.List[t.Tuple[str, bool]] = [(rule, True) for rule, _ in cases]
+        self.assertEqual(actual, expected)
+
+
 class InstanceConfigTests(unittest.TestCase):
     def test_written_config_reads_back_equal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -10,6 +10,7 @@ import { useSearchParams, usePathname } from "next/navigation";
 import useSWR from "swr";
 // components
 import { LogoSpinner } from "@/components/common/logo-spinner";
+import { MaintenanceView } from "@/components/instance";
 // helpers
 import { isValidNextPath } from "@plane/utils";
 import { EPageTypes } from "@/helpers/authentication.helper";
@@ -47,14 +48,17 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
   // props
   const { children, pageType = EPageTypes.AUTHENTICATED } = props;
   // hooks
-  const { isLoading: isUserLoading, data: currentUser, fetchCurrentUser } = useUser();
+  const { isLoading: isUserLoading, data: currentUser, error: userError, fetchCurrentUser } = useUser();
   const { data: currentUserProfile } = useUserProfile();
   const { data: currentUserSettings } = useUserSettings();
   const { loader: workspacesLoader, workspaces } = useWorkspace();
 
+  // FOR_REVIEWER: asked again after a failure, as the instance's information is in InstanceWrapper, so that a page
+  // opened while the API restarts comes back by itself; it had `shouldRetryOnError: false`. This is SWR's own retry
+  // with its back-off, the one InstanceWrapper relies on, and no retry code of ours. Without it the page stays on
+  // "didn't start up correctly" until it is reloaded.
   const { isLoading: isUserSWRLoading } = useSWR("USER_INFORMATION", async () => await fetchCurrentUser(), {
     revalidateOnFocus: false,
-    shouldRetryOnError: false,
   });
 
   const isUserOnboard =
@@ -94,6 +98,10 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
         <LogoSpinner />
       </div>
     );
+
+  // The server did not say who is signed in (it answers 401 when nobody is), as while it restarts: the sign-in page
+  // would ask a person who is signed in to sign in again.
+  if (userError?.status === "user-fetch-error" && !currentUser?.id) return <MaintenanceView />;
 
   if (pageType === EPageTypes.PUBLIC) return <>{children}</>;
 

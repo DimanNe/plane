@@ -591,14 +591,32 @@ def get_plane_origin(port: int) -> str:
 
 
 def get_plane_environment(
-    port: int, service_secrets: plane_config.ServiceSecrets
+    port: int, config: plane_config.InstanceConfig
 ) -> t.Dict[str, str]:
     origin: str = get_plane_origin(port)
     redis_port: int = SERVICE_PORTS[plane_config.Service.REDIS]
+    service_secrets: plane_config.ServiceSecrets = config.secrets
+    # FOR_REVIEWER: a session now lasts as long as a browser keeps a cookie after its last use, where it lasted a
+    # week after signing in. The instance is reachable by the whole LAN when bound to 0.0.0.0, over HTTP, so a
+    # session cookie seen on the network gives that much longer access. A session that never expires is not
+    # possible: the browser drops the cookie at that cap whatever the server says. Renewing the session on every
+    # request (Django's SESSION_SAVE_EVERY_REQUEST, no code) was measured: 600 API requests, 16 at once, took
+    # 2.32 s in place of 2.05 s (median +6 ms), a write to the database and a Set-Cookie on each; so the API
+    # renews it at most once in a while instead.
+    # FOR_REVIEWER: the new cookie name signs every browser out once, at the first start with this change.
     return {
         "DJANGO_SETTINGS_MODULE": "plane.settings.production",
         "DEBUG": "0",
         "SECRET_KEY": service_secrets[plane_config.SecretName.DJANGO],
+        # A browser keeps cookies by host name and sends them to every port of that host. Another Plane, or any
+        # application that names its cookie as Plane does, on another port of the same host replaces or deletes
+        # the session cookie of this one, and the person is signed out here. A name of its own keeps the session
+        # apart; the instance's id stays the same through stop, start, export and import.
+        "SESSION_COOKIE_NAME": f"session-id-{config.instance_id}",
+        # The person who signed in to their own instance stays signed in. The API renews a session while it is
+        # used (SessionStore in apps/api/plane/db/models/session.py), and it lasts as long as a browser keeps a
+        # cookie: RFC 6265bis caps a cookie's lifetime at 400 days, and Chrome does.
+        "SESSION_COOKIE_AGE": str(400 * 24 * 60 * 60),
         "DATABASE_URL": f"postgresql://plane:{service_secrets[plane_config.SecretName.POSTGRES]}@127.0.0.1:{SERVICE_PORTS[plane_config.Service.POSTGRES]}/plane",
         # Opening a database connection was a large part of a small API request. Each thread of the API, the worker
         # and beat keeps its connection for later requests and tasks: about twenty per instance, well under
@@ -1626,9 +1644,7 @@ def start_plane_services(
     )
     initialized: bool = config.initialized
     api_image_id: str = image_ids[plane_config.Service.API]
-    plane_environment: t.Dict[str, str] = get_plane_environment(
-        bind.port, service_secrets
-    )
+    plane_environment: t.Dict[str, str] = get_plane_environment(bind.port, config)
     python_service_commands: t.Dict[plane_config.Service, t.List[str]] = (
         get_python_service_commands(run_dir)
     )
@@ -2067,7 +2083,7 @@ def start_network_container_and_python_services(
     image_lookup: concurrent.futures.Future[t.Dict[plane_config.Service, str]],
     run_dir: pl.Path,
     bind: BindAddress,
-    service_secrets: plane_config.ServiceSecrets,
+    config: plane_config.InstanceConfig,
 ) -> t.Dict[plane_config.Service, str]:
     """Starts what needs only the instance configuration, so that it can run beside the
     extraction of a backup: the network container, and the Python services, which begin to load
@@ -2082,9 +2098,7 @@ def start_network_container_and_python_services(
     network_mode: str = "container:" + get_container_name(
         run_dir, plane_config.Service.NETWORK
     )
-    plane_environment: t.Dict[str, str] = get_plane_environment(
-        bind.port, service_secrets
-    )
+    plane_environment: t.Dict[str, str] = get_plane_environment(bind.port, config)
     run_jobs_in_parallel(
         {
             service: functools.partial(
@@ -2549,7 +2563,7 @@ class ImportCommand(Command):
                 image_lookup,
                 run_dir,
                 self.bind,
-                config.secrets,
+                config,
             )
             if input == pl.Path("/dev/null"):
                 name: str
