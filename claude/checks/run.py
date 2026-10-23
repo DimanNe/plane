@@ -12,7 +12,7 @@ first lines say the rule it guards. Each step prints as the rule it checks; the 
 
 An instance is one started by scripts/plane_runtime.py; nothing but its run directory is needed. The checks are
 spread over the run directories given, several at once on each. Nothing of a run outlives it, however it ends
-(see own_cgroup.py).
+(see run_scope.py).
 
 A check makes its own accounts and its own projects, in a workspace of the run, and removes the projects when
 it has passed. What a failed check left stays, with the way to sign in printed beside the failure, and so does
@@ -39,7 +39,7 @@ import playwright.sync_api as pw
 
 import browser
 import instance as ins
-import own_cgroup
+import run_scope
 import steps
 
 CHECKS: pl.Path = pl.Path(__file__).resolve().parent
@@ -250,9 +250,9 @@ class RunChecks(Command):
     at_once: int
 
     def run(self) -> int:
-        if not own_cgroup.can_kill_own_cgroup():
-            own_cgroup.run_again_in_own_cgroup()
-        own_cgroup.kill_own_cgroup_when_this_process_ends()
+        if not run_scope.is_in_run_scope():
+            run_scope.run_again_in_run_scope()
+        run_scope.kill_run_scope_when_this_process_ends()
         start: float = time.monotonic()
         names: t.List[str] = find_checks(self.names)
         locks: t.List[t.TextIO] = [
