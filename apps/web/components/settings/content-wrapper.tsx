@@ -20,7 +20,7 @@ export function SettingsContentWrapper(props: Props) {
   const { children, header, hugging = false } = props;
 
   return (
-    <div className="@container flex size-full grow flex-col overflow-hidden rounded-(--panel-radius) bg-surface-1 shadow-(--panel-shadow)">
+    <div className="panel-surface @container flex size-full grow flex-col overflow-hidden">
       {header && (
         <div className="w-full shrink-0">
           <AppHeader header={header} />

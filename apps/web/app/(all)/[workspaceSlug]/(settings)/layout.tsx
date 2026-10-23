@@ -13,7 +13,7 @@ export default function SettingsLayout() {
   return (
     <>
       <ProjectsAppPowerKProvider />
-      <div className="relative flex size-full overflow-hidden rounded-(--panel-radius) border border-transparent">
+      <div className="relative flex size-full overflow-hidden border border-transparent">
         <main className="relative flex size-full flex-col overflow-hidden">
           {/* Content */}
           <ContentWrapper className="w-full md:flex">

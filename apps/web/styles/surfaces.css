@@ -23,3 +23,17 @@
 [data-theme*="dark"] {
   --panel-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06), 0 1px 3px rgb(0 0 0 / 0.5);
 }
+
+/*
+ * The lighter surface that content stands on above the frame: the content area itself and, in the views of a work
+ * item, each of its sections and comments. A box that clips its content to rounded corners inside another box that
+ * does makes the browser draw it through extra off-screen buffers on every frame, which without a GPU costs several
+ * times the processor time while typing or scrolling (measure.py prints it as the compositor's time). So this class
+ * paints its corners and does not clip; the content area also clips (overflow-hidden on it), and therefore nothing
+ * around it rounds and clips as well.
+ */
+.panel-surface {
+  border-radius: var(--panel-radius);
+  background-color: var(--bg-surface-1);
+  box-shadow: var(--panel-shadow);
+}

@@ -9,7 +9,7 @@ change near these is measured before and after, on the same machine at the same 
     claude/checks/measure.py --run-dir RUN_DIR [--windows] [--work-items 300]
 
 Times are those of the main thread of the page, as Chrome counts them: by the clock, and as processor time, which
-the load of other programs stretches less.
+the load of other programs stretches less; and the processor time of the compositor, which draws the frames.
 """
 
 import argparse
@@ -88,6 +88,18 @@ def read_metrics(cdp: pw.CDPSession) -> t.Dict[str, float]:
     return {name: values[name] for name in METRICS}
 
 
+def read_compositor_seconds(page: pw.Page) -> float:
+    """The processor time Chrome's GPU process has spent so far. Without a GPU it composites every frame on the
+    processor, which the counters of the page's main thread do not see: two nested boxes that clip to rounded
+    corners cost several times as much there, on every frame (apps/web/styles/surfaces.css)."""
+    browser_cdp: pw.CDPSession = page.context.browser.new_browser_cdp_session()
+    processes: t.List[t.Dict[str, t.Any]] = browser_cdp.send(
+        "SystemInfo.getProcessInfo"
+    )["processInfo"]
+    browser_cdp.detach()
+    return sum(process["cpuTime"] for process in processes if process["type"] == "GPU")
+
+
 def describe_frames(times: t.List[float]) -> str:
     gaps: t.List[float] = [after - before for before, after in zip(times, times[1:])]
     if not gaps:
@@ -101,15 +113,19 @@ def measure_counters(
     """Chrome's own counters of the main thread around an act, per one of its `count` parts."""
     page.evaluate(COUNT_FRAMES_JS)
     before: t.Dict[str, float] = read_metrics(cdp)
+    compositor_before: float = read_compositor_seconds(page)
     act()
     browser.let_page_draw(page)
     after: t.Dict[str, float] = read_metrics(cdp)
+    compositor: float = (
+        (read_compositor_seconds(page) - compositor_before) * 1000 / count
+    )
     per: t.Dict[str, float] = {
         name: (after[name] - before[name]) * 1000 / count for name in METRICS
     }
     print(
         f"  {label}: main thread {per['TaskDuration']:.1f} ms each (script {per['ScriptDuration']:.1f}, styles "
-        f"{per['RecalcStyleDuration']:.1f}, layout {per['LayoutDuration']:.1f}); "
+        f"{per['RecalcStyleDuration']:.1f}, layout {per['LayoutDuration']:.1f}); compositor {compositor:.1f} ms; "
         f"{describe_frames(page.evaluate(STOP_COUNTING_JS))}; load {read_load()}"
     )
 
@@ -119,9 +135,13 @@ def measure_traced(
 ) -> None:
     """The main thread's work around an act, from Chrome's trace, per one of its `count` parts."""
     page.evaluate(COUNT_FRAMES_JS)
+    compositor_before: float = read_compositor_seconds(page)
     check.browser.start_tracing(page=page, categories=TRACE_CATEGORIES)
     act()
     browser.let_page_draw(page)
+    compositor: float = (
+        (read_compositor_seconds(page) - compositor_before) * 1000 / count
+    )
     events: t.List[t.Dict[str, t.Any]] = json.loads(check.browser.stop_tracing())[
         "traceEvents"
     ]
@@ -144,7 +164,8 @@ def measure_traced(
         f"  {label}: main thread {clock['RunTask'] / count:.2f} ms each by the clock, {processor['RunTask'] / count:.2f} "
         f"ms of processor time (in the handlers of events {processor['EventDispatch'] / count:.2f}, styles "
         f"{processor['UpdateLayoutTree'] / count:.2f}, layout {processor['Layout'] / count:.2f}, paint "
-        f"{processor['Paint'] / count:.2f}); {describe_frames(page.evaluate(STOP_COUNTING_JS))}; load {read_load()}"
+        f"{processor['Paint'] / count:.2f}); compositor {compositor:.2f} ms; {describe_frames(page.evaluate(STOP_COUNTING_JS))}; "
+        f"load {read_load()}"
     )
 
 
