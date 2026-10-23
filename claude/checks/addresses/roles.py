@@ -84,12 +84,15 @@ def run(check: steps.Check) -> None:
         f"{workspace}/projects/{drafts.id}/issues/",
     )
     page.goto(f"{check.instance.url}{workspace}/drafts/")
+    # The sidebar names every project of the workspace on every page, this one too, once it has loaded them; what
+    # the address shows is the main part of the page, whose first line is its title.
     check.expect(
         "and that word is the app's page: here the workspace's Drafts",
         lambda: (
             page.evaluate("location.pathname"),
-            page.get_by_text("Named as a page").count(),
+            page.locator("main").last.inner_text().split("\n")[0],
+            page.locator("main").last.get_by_text("Named as a page").count(),
         ),
-        (f"{workspace}/drafts/", 0),
+        (f"{workspace}/drafts/", "Drafts", 0),
     )
     page.context.close()
