@@ -258,9 +258,12 @@ class RunChecks(Command):
         locks: t.List[t.TextIO] = [
             ins.lock_instance(run_dir) for run_dir in self.run_dirs
         ]
-        instances: t.List[ins.Instance] = [
-            ins.open_instance(run_dir) for run_dir in self.run_dirs
-        ]
+        # the instances are opened at once: each waits mostly for its own API container
+        opening: concurrent.futures.ThreadPoolExecutor
+        with concurrent.futures.ThreadPoolExecutor(len(self.run_dirs)) as opening:
+            instances: t.List[ins.Instance] = list(
+                opening.map(ins.open_instance, self.run_dirs)
+            )
         outcomes: t.List[Outcome] = run_checks_at_once(
             names, instances, self.is_real_window, self.at_once
         )

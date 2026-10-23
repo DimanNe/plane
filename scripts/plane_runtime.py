@@ -2216,6 +2216,38 @@ class ImportCommand(Command):
         print_lifecycle_result(run_dir, "import", timings, start_time)
 
 
+# Run by the API's own Python with Plane loaded: makes the account with this address an administrator of the
+# instance, or keeps it one, with this password hash, marks the instance set up and gives the account's API token.
+# bootstrap-user runs it on its own; the checks' account maker (claude/checks/instance.py), which has Plane loaded
+# already, runs it as it starts.
+BOOTSTRAP_ADMINISTRATOR: str = textwrap.dedent("""\
+    def bootstrap_administrator(email: str, password_hash: str) -> dict:
+        import django.core.cache as django_cache
+        import plane.db.models as db_models
+        import plane.license.models as license_models
+
+        user: db_models.User
+        _: bool
+        user, _ = db_models.User.objects.get_or_create(email=email, defaults={"username": email})
+        user.password = password_hash
+        user.is_superuser = True
+        user.is_staff = True
+        user.is_email_verified = True
+        user.save()
+        instance: license_models.Instance = license_models.Instance.objects.get()
+        instance.is_setup_done = True
+        instance.save()
+        # The API serves the instance state from its cache.
+        django_cache.cache.delete("/api/instances/")
+        license_models.InstanceAdmin.objects.update_or_create(
+            instance=instance, user=user, defaults={"role": 20, "is_verified": True}
+        )
+        api_token: db_models.APIToken
+        api_token, _ = db_models.APIToken.objects.get_or_create(user=user, label="local-mcp")
+        return {"api_key": api_token.token, "user_id": str(user.id), "email": user.email}
+""")
+
+
 @dc.dataclass(frozen=True)
 class BootstrapUserCommand(Command):
     run_dir: pl.Path
@@ -2223,38 +2255,22 @@ class BootstrapUserCommand(Command):
     password: str
 
     def run(self) -> None:
-        code: str = textwrap.dedent("""\
-            import json
-            import sys
-            import django
-            django.setup()
-            import django.core.cache as django_cache
-            import plane.db.models as db_models
-            import plane.license.models as license_models
-
-            email: str
-            password: str
-            email, password = sys.argv[1:3]
-            user: db_models.User
-            _: bool
-            user, _ = db_models.User.objects.get_or_create(email=email, defaults={"username": email})
-            user.set_password(password)
-            user.is_superuser = True
-            user.is_staff = True
-            user.is_email_verified = True
-            user.save()
-            instance: license_models.Instance = license_models.Instance.objects.get()
-            instance.is_setup_done = True
-            instance.save()
-            # The API serves the instance state from its cache.
-            django_cache.cache.delete("/api/instances/")
-            license_models.InstanceAdmin.objects.update_or_create(
-                instance=instance, user=user, defaults={"role": 20, "is_verified": True}
-            )
-            api_token: db_models.APIToken
-            api_token, _ = db_models.APIToken.objects.get_or_create(user=user, label="local-mcp")
-            print(json.dumps({"api_key": api_token.token, "user_id": str(user.id), "email": user.email}))
-        """)
+        code: str = (
+            textwrap.dedent("""\
+                import json
+                import sys
+                import django
+                django.setup()
+                import django.contrib.auth.hashers as hashers
+            """)
+            + BOOTSTRAP_ADMINISTRATOR
+            + textwrap.dedent("""\
+                email: str
+                password: str
+                email, password = sys.argv[1:3]
+                print(json.dumps(bootstrap_administrator(email, hashers.make_password(password))))
+            """)
+        )
         run_dir: pl.Path = resolve_run_dir(self.run_dir)
         credentials: str = (
             run_docker(

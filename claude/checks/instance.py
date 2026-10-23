@@ -37,7 +37,7 @@ import plane_runtime  # noqa: E402
 JSONObject: t.TypeAlias = t.Dict[str, t.Any]
 
 # Run by the API's own Python once per instance and run, and kept running until the run ends, it makes the run's
-# accounts. Made by a process of its own, an account took about 0.8 s, of which the database was about 0.06 s: the
+# administrator as it starts (see plane_runtime.BOOTSTRAP_ADMINISTRATOR) and then the run's other accounts. Made by a process of its own, an account took about 0.8 s, of which the database was about 0.06 s: the
 # process loaded all of Plane (django.setup) and exited again, and hashed the password with the hash Django keeps
 # passwords with, which is slow on purpose. Here Plane is loaded once, and the password, the same for every account
 # of the run, is hashed once. It answers each request, a line of JSON, with a line of JSON, as soon as it is made.
@@ -48,7 +48,8 @@ JSONObject: t.TypeAlias = t.Dict[str, t.Any]
 #   session for it from the cookie of its admin pages, which a user does not have; without the answer the page
 #   says that Plane did not start. So the account's session goes under that cookie's name too.
 # The account is also past the pages of a first visit.
-ACCOUNT_MAKER: str = textwrap.dedent("""\
+ACCOUNT_MAKER: str = (
+    textwrap.dedent("""\
     import concurrent.futures
     import importlib
     import json
@@ -61,8 +62,11 @@ ACCOUNT_MAKER: str = textwrap.dedent("""\
     import django.contrib.auth.hashers as hashers
     import django.http as http
     import plane.db.models as db_models
-
+""")
+    + plane_runtime.BOOTSTRAP_ADMINISTRATOR
+    + textwrap.dedent("""\
     password_hash: str = hashers.make_password(sys.argv[1])
+    administrator: dict = bootstrap_administrator(sys.argv[2], password_hash)
     printing: threading.Lock = threading.Lock()
 
 
@@ -94,12 +98,13 @@ ACCOUNT_MAKER: str = textwrap.dedent("""\
             print(json.dumps(reply), flush=True)
 
 
-    print(json.dumps({"ready": True}), flush=True)
+    print(json.dumps({"ready": True, "api_key": administrator["api_key"]}), flush=True)
     # several at once, since a run's checks start together and each asks for its accounts first
     with concurrent.futures.ThreadPoolExecutor(8) as pool:
         for line in sys.stdin:
             pool.submit(answer, json.loads(line))
 """)
+)
 
 # Every run on an instance signs in as this administrator, with a password it draws anew: the workspaces that
 # earlier runs left belong to it, so the next run can remove them.
@@ -237,6 +242,7 @@ class AccountMaker:
                     "-c",
                     ACCOUNT_MAKER,
                     password,
+                    ADMINISTRATOR_EMAIL,
                 ],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -244,10 +250,13 @@ class AccountMaker:
                 text=True,
             )
         assert self.process.stdin is not None and self.process.stdout is not None
-        if json.loads(self.process.stdout.readline() or "{}").get("ready") is not True:
+        ready: JSONObject = json.loads(self.process.stdout.readline() or "{}")
+        if ready.get("ready") is not True:
             raise RuntimeError(
                 f"The account maker of {run_dir} did not start; see {self.log}"
             )
+        # the API token of the run's administrator, which the account maker made as it started
+        self.administrator_api_key: str = ready["api_key"]
         self.writing: threading.Lock = threading.Lock()
         self.last_id: int = 0
         self.waiting: t.Dict[int, concurrent.futures.Future[JSONObject]] = {}
@@ -351,27 +360,6 @@ def find_url(run_dir: pl.Path) -> str:
     return f"http://localhost:{port}"
 
 
-def bootstrap_administrator(run_dir: pl.Path, password: str) -> str:
-    """Makes the run's administrator, or gives it the run's password, and gives its API token."""
-    printed: str = subprocess.run(
-        [
-            sys.executable,
-            str(REPOSITORY / "scripts/plane_runtime.py"),
-            "bootstrap-user",
-            "--run-dir",
-            str(run_dir),
-            "--email",
-            ADMINISTRATOR_EMAIL,
-            # joined, since a drawn password can begin with "-"
-            f"--password={password}",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    return json.loads(printed.strip().splitlines()[-1])["api_key"]
-
-
 def remove_workspaces_of_earlier_runs(url: str, administrator: Account) -> None:
     workspace: JSONObject
     for workspace in call_app(url, administrator, "GET", "/users/me/workspaces/"):
@@ -421,7 +409,6 @@ def open_instance(run_dir: pl.Path) -> Instance:
     password: str = secrets.token_urlsafe(16)
     account_maker: AccountMaker = AccountMaker(run_dir, password)
     ACCOUNT_MAKERS[run_dir] = account_maker
-    api_key: str = bootstrap_administrator(run_dir, password)
     administrator: Account = read_account(
         ADMINISTRATOR_EMAIL, password, account_maker.ask(ADMINISTRATOR_EMAIL)
     )
@@ -436,7 +423,13 @@ def open_instance(run_dir: pl.Path) -> Instance:
     )
     wait_until_workspace_seeded(url, administrator, workspace)
     return Instance(
-        url, run_dir, api_key, administrator, workspace, account_maker.address, password
+        url,
+        run_dir,
+        account_maker.administrator_api_key,
+        administrator,
+        workspace,
+        account_maker.address,
+        password,
     )
 
 
