@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Show sub-work items",
         "show_empty_groups": "Show empty groups"
+      },
+      "closed": {
+        "label": "Closed work items",
+        "hide": "Hide completed and cancelled",
+        "closed_for_more_than": "closed for more than",
+        "days": "{count, plural, one {# day} other {# days}}"
       }
     },
     "layouts": {

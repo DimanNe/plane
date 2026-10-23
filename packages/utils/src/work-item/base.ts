@@ -285,6 +285,7 @@ export const getComputedDisplayFilters = (
     sub_issue: filters?.sub_issue || false,
     show_empty_groups: filters?.show_empty_groups || false,
     show_only_leaves: filters?.show_only_leaves || false,
+    hide_closed_for_more_than_days: filters?.hide_closed_for_more_than_days ?? null,
   };
 };
 

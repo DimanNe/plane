@@ -33,3 +33,28 @@
 .work-item-dialog-title input {
   @apply text-h4-medium;
 }
+
+/*
+ * The dropdowns of a layout's settings (Display, and the others FiltersDropdown opens) float above the page as a
+ * dialog does, so they stand out the same way: by the dialog's shadow and tone, with no line around them, and none
+ * between their sections, which space and their headings part instead. Its sticky headings take the same surface
+ * (--filters-dropdown-surface), so that what scrolls under them does not show through a band of another tone.
+ * An attribute rather than utilities: propel's popover sets its own border, surface and shadow, and takes no
+ * class name of ours, while it passes an attribute on to its panel.
+ */
+[data-filters-dropdown] {
+  --filters-dropdown-surface: var(--dialog-surface);
+  border-color: transparent;
+  border-radius: var(--dialog-radius);
+  background-color: var(--dialog-surface);
+  box-shadow: var(--dialog-shadow);
+}
+
+/* A number in such a dropdown that the wheel or the arrow keys change: a chip, so that it reads as something to act on. */
+.filters-dropdown-number {
+  background-color: var(--chip-surface, var(--bg-layer-3));
+}
+.filters-dropdown-number:focus-visible {
+  outline: 2px solid var(--border-accent-strong, currentColor);
+  outline-offset: 1px;
+}

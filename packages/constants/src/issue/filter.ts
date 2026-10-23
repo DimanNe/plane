@@ -231,6 +231,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
           group_by: ["state", "priority", "cycle", "module", "milestone", "labels", "assignees", "created_by", null],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority", "target_date"],
           type: ["active", "backlog"],
+          hide_closed_for_more_than_days: true,
         },
         extra_options: {
           access: true,
@@ -254,6 +255,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
           ],
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority", "target_date"],
           type: ["active", "backlog"],
+          hide_closed_for_more_than_days: true,
         },
         extra_options: {
           access: true,
@@ -264,6 +266,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
         display_properties: ["key", "issue_type"],
         display_filters: {
           type: ["active", "backlog"],
+          hide_closed_for_more_than_days: true,
         },
         extra_options: {
           access: true,
@@ -275,6 +278,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
         display_filters: {
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority"],
           type: ["active", "backlog"],
+          hide_closed_for_more_than_days: true,
         },
         extra_options: {
           access: true,
@@ -286,6 +290,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
         display_filters: {
           order_by: ["sort_order", "-created_at", "-updated_at", "start_date", "-priority"],
           type: ["active", "backlog"],
+          hide_closed_for_more_than_days: true,
         },
         extra_options: {
           access: false,

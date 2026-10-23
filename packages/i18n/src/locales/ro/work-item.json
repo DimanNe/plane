@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Afișează sub-activitățile",
         "show_empty_groups": "Afișează grupurile goale"
+      },
+      "closed": {
+        "label": "Activități închise",
+        "hide": "Ascunde finalizate și anulate",
+        "closed_for_more_than": "închise de mai mult de",
+        "days": "{count, plural, one {# zi} few {# zile} other {# de zile}}"
       }
     },
     "layouts": {

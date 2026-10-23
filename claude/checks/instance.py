@@ -565,6 +565,43 @@ def make_work_items(
     return ids
 
 
+# A work item keeps the moment it was completed or cancelled (completed_at, cancelled_at) as it happens, and
+# /api/v1/ cannot set it; run by the API's own Python, this moves that moment back for the work items given.
+MOVE_CLOSING_BACK: str = textwrap.dedent("""\
+    import datetime
+    import json
+    import sys
+    import django
+    django.setup()
+    import django.utils.timezone as timezone
+    import plane.db.models as db_models
+    closed_at = timezone.now() - datetime.timedelta(days=float(sys.argv[2]))
+    issues = db_models.Issue.objects.filter(id__in=json.loads(sys.argv[1]))
+    issues.filter(completed_at__isnull=False).update(completed_at=closed_at)
+    issues.filter(cancelled_at__isnull=False).update(cancelled_at=closed_at)
+""")
+
+
+def move_closing_back(
+    instance: Instance, work_item_ids: t.Sequence[str], days: float
+) -> None:
+    """Makes the closed work items given look as if they were completed or cancelled `days` ago."""
+    plane_runtime.run_docker(
+        [
+            "exec",
+            plane_runtime.get_container_name(
+                instance.run_dir, plane_config.Service.API
+            ),
+            "python",
+            "-c",
+            MOVE_CLOSING_BACK,
+            json.dumps(list(work_item_ids)),
+            str(days),
+        ],
+        capture=True,
+    )
+
+
 def read_work_items(instance: Instance, project: Project) -> t.Dict[str, JSONObject]:
     """Every work item the project has stored, by name."""
     found: t.Dict[str, JSONObject] = {}

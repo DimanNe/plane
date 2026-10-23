@@ -154,6 +154,8 @@ export interface ILayoutDisplayFiltersOptions {
     sub_group_by?: TIssueGroupByOptions[];
     order_by?: TIssueOrderByOptions[];
     type?: TIssueGroupingFilters[];
+    // the layout offers to hide closed work items (IIssueDisplayFilterOptions.hide_closed_for_more_than_days)
+    hide_closed_for_more_than_days?: boolean;
   };
   extra_options: {
     access: boolean;

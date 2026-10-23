@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "하위 작업 항목 표시",
         "show_empty_groups": "빈 그룹 표시"
+      },
+      "closed": {
+        "label": "닫힌 작업 항목",
+        "hide": "완료 및 취소 항목 숨기기",
+        "closed_for_more_than": "닫힌 지",
+        "days": "{count, plural, one {#일 초과} other {#일 초과}}"
       }
     },
     "layouts": {

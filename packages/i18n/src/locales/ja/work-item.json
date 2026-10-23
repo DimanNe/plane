@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "サブ作業項目を表示",
         "show_empty_groups": "空のグループを表示"
+      },
+      "closed": {
+        "label": "クローズ済みの作業項目",
+        "hide": "完了とキャンセルを非表示",
+        "closed_for_more_than": "クローズしてから",
+        "days": "{count, plural, one {# 日超} other {# 日超}}"
       }
     },
     "layouts": {

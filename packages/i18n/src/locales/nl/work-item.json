@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Subwerkitems tonen",
         "show_empty_groups": "Lege groepen tonen"
+      },
+      "closed": {
+        "label": "Gesloten werkitems",
+        "hide": "Voltooide en geannuleerde verbergen",
+        "closed_for_more_than": "langer gesloten dan",
+        "days": "{count, plural, one {# dag} other {# dagen}}"
       }
     },
     "layouts": {

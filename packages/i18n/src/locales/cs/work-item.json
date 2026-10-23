@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Zobrazit podřízené položky",
         "show_empty_groups": "Zobrazit prázdné skupiny"
+      },
+      "closed": {
+        "label": "Uzavřené pracovní položky",
+        "hide": "Skrýt dokončené a zrušené",
+        "closed_for_more_than": "uzavřené déle než",
+        "days": "{count, plural, one {# den} few {# dny} many {# dne} other {# dní}}"
       }
     },
     "layouts": {

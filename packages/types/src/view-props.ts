@@ -164,6 +164,8 @@ export interface IIssueDisplayFilterOptions {
   sub_issue?: boolean;
   // the Timeline layout lists only the work items without sub-work items
   show_only_leaves?: boolean;
+  // hides the work items closed (completed or cancelled) for more than this many days; null shows them all
+  hide_closed_for_more_than_days?: number | null;
 }
 export interface IIssueDisplayProperties {
   description?: boolean;

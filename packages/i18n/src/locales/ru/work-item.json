@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Показывать подэлементы",
         "show_empty_groups": "Показывать пустые группы"
+      },
+      "closed": {
+        "label": "Закрытые рабочие элементы",
+        "hide": "Скрыть завершённые и отменённые",
+        "closed_for_more_than": "закрыты более",
+        "days": "{count, plural, one {# дня} few {# дней} many {# дней} other {# дня}}"
       }
     },
     "layouts": {

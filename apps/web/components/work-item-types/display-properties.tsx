@@ -9,6 +9,8 @@ import { useParams } from "next/navigation";
 // plane imports
 import type { IIssueDisplayProperties } from "@plane/types";
 import { getWorkItemPropertyKey, isWorkItemPropertyDisplayProperty } from "@plane/utils";
+// components
+import { getDisplayPropertyToggleClassName } from "@/components/issues/issue-layouts/filters/header/display-filters/display-property-toggle";
 // hooks
 import { useWorkItemTypes } from "@/hooks/store/use-work-item-types";
 
@@ -35,11 +37,7 @@ export const WorkItemPropertyDisplayProperties = observer(function WorkItemPrope
             <button
               key={property.id}
               type="button"
-              className={`rounded-sm border px-2 py-0.5 text-11 transition-all ${
-                displayProperties?.[key]
-                  ? "border-accent-strong bg-accent-primary text-on-color"
-                  : "border-subtle hover:bg-layer-1"
-              }`}
+              className={getDisplayPropertyToggleClassName(!!displayProperties?.[key])}
               onClick={() => handleUpdate({ [key]: !displayProperties?.[key] })}
             >
               {property.display_name}

@@ -104,6 +104,7 @@ export function FiltersDropdown(props: Props) {
         {/* A panel taller than the room under its button stays there and scrolls; Base UI would move it beside the button. */}
         <PopoverContent
           variant="rich"
+          data-filters-dropdown=""
           {...toSideAndAlign(placement ?? "auto")}
           collisionAvoidance={{ fallbackAxisSide: "none" }}
         >

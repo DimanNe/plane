@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Afficher les sous-éléments",
         "show_empty_groups": "Afficher les groupes vides"
+      },
+      "closed": {
+        "label": "Éléments de travail fermés",
+        "hide": "Masquer les terminés et les annulés",
+        "closed_for_more_than": "fermés depuis plus de",
+        "days": "{count, plural, one {# jour} many {# jours} other {# jours}}"
       }
     },
     "layouts": {

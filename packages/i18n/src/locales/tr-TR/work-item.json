@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Alt iş öğelerini göster",
         "show_empty_groups": "Boş grupları göster"
+      },
+      "closed": {
+        "label": "Kapatılan iş öğeleri",
+        "hide": "Tamamlananları ve iptal edilenleri gizle",
+        "closed_for_more_than": "kapatılalı",
+        "days": "{count, plural, one {# günden fazla} other {# günden fazla}}"
       }
     },
     "layouts": {

@@ -17,6 +17,7 @@ import { useProject } from "@/hooks/store/use-project";
 // components
 import { WorkItemPropertyDisplayProperties } from "@/components/work-item-types/display-properties";
 import { FilterHeader } from "../helpers/filter-header";
+import { getDisplayPropertyToggleClassName } from "./display-property-toggle";
 
 type Props = {
   displayProperties: IIssueDisplayProperties;
@@ -77,11 +78,7 @@ export const FilterDisplayProperties = observer(function FilterDisplayProperties
               <button
                 key={displayProperty.key}
                 type="button"
-                className={`rounded-sm border px-2 py-0.5 text-11 transition-all ${
-                  displayProperties?.[displayProperty.key]
-                    ? "border-accent-strong bg-accent-primary text-on-color"
-                    : "border-subtle hover:bg-layer-1"
-                }`}
+                className={getDisplayPropertyToggleClassName(!!displayProperties?.[displayProperty.key])}
                 onClick={() =>
                   handleUpdate({
                     [displayProperty.key]: !displayProperties?.[displayProperty.key],

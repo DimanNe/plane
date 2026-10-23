@@ -31,6 +31,27 @@ import { getComputedDisplayFilters, getComputedDisplayProperties } from "@plane/
 // lib
 import { storage } from "@/lib/local-storage";
 
+/**
+ * The rich filters of a list, with the Display option that hides work items closed (completed or cancelled) for more
+ * than a number of days. The server applies that option, as the negation of its closed_for_days__gt filter, so that
+ * the pages, the counts of the groups and every layout agree on what is shown.
+ */
+const getRichFiltersHidingClosedWorkItems = (
+  richFilters: TWorkItemFilterExpression | undefined,
+  hideClosedForMoreThanDays: number | null | undefined
+): object | undefined => {
+  // FOR_REVIEWER: on the server rather than on the work items the page has, which would leave the pages and the
+  // counts of the groups as they were, and every layout to do it again. The option is a display filter, kept per user
+  // with the others in display_filters, and offered on the pages of a project's work items, its cycles, modules and
+  // views (ISSUE_DISPLAY_FILTERS_BY_PAGE.issues), not on My work, a profile or the archive, which is all closed.
+  if (hideClosedForMoreThanDays === null || hideClosedForMoreThanDays === undefined) return richFilters;
+  const hideClosedWorkItems = { not: { closed_for_days__gt: hideClosedForMoreThanDays } };
+  if (isEmpty(richFilters)) return hideClosedWorkItems;
+  // into the group that is already there rather than one more level, which the server limits
+  if ("and" in richFilters) return { and: [...richFilters.and, hideClosedWorkItems] };
+  return { and: [richFilters, hideClosedWorkItems] };
+};
+
 interface ILocalStoreIssueFilters {
   key: EIssuesStoreType;
   workspaceSlug: string;
@@ -115,7 +136,8 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
     });
 
     // work item filters
-    if (richFilters) issueFiltersParams.filters = JSON.stringify(richFilters);
+    const filters = getRichFiltersHidingClosedWorkItems(richFilters, displayFilters?.hide_closed_for_more_than_days);
+    if (filters) issueFiltersParams.filters = JSON.stringify(filters);
 
     if (displayFilters?.layout) issueFiltersParams.layout = displayFilters?.layout;
 
@@ -265,7 +287,7 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
    * @returns
    */
   getShouldReFetchIssues = (displayFilters: IIssueDisplayFilterOptions) => {
-    const NON_SERVER_DISPLAY_FILTERS = ["order_by", "sub_issue", "type"];
+    const NON_SERVER_DISPLAY_FILTERS = ["order_by", "sub_issue", "type", "hide_closed_for_more_than_days"];
     const displayFilterKeys = Object.keys(displayFilters);
 
     return NON_SERVER_DISPLAY_FILTERS.some((serverDisplayfilter: string) =>

@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Tampilkan sub-item kerja",
         "show_empty_groups": "Tampilkan grup kosong"
+      },
+      "closed": {
+        "label": "Item Kerja yang ditutup",
+        "hide": "Sembunyikan yang selesai dan dibatalkan",
+        "closed_for_more_than": "ditutup lebih dari",
+        "days": "{count, plural, one {# hari} other {# hari}}"
       }
     },
     "layouts": {

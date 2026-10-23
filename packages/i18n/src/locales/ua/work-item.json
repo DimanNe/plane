@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Показати похідні робочі одиниці",
         "show_empty_groups": "Показати порожні групи"
+      },
+      "closed": {
+        "label": "Закриті робочі одиниці",
+        "hide": "Приховати завершені та скасовані",
+        "closed_for_more_than": "закриті понад",
+        "days": "{count, plural, one {# день} few {# дні} many {# днів} other {# дня}}"
       }
     },
     "layouts": {

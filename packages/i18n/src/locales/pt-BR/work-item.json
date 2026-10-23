@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Mostrar sub-itens de trabalho",
         "show_empty_groups": "Mostrar grupos vazios"
+      },
+      "closed": {
+        "label": "Itens de trabalho fechados",
+        "hide": "Ocultar concluídos e cancelados",
+        "closed_for_more_than": "fechados há mais de",
+        "days": "{count, plural, one {# dia} many {# dias} other {# dias}}"
       }
     },
     "layouts": {

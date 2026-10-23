@@ -66,6 +66,12 @@
       "extra": {
         "show_sub_issues": "Hiển thị mục công việc con",
         "show_empty_groups": "Hiển thị nhóm trống"
+      },
+      "closed": {
+        "label": "Mục công việc đã đóng",
+        "hide": "Ẩn mục đã hoàn thành và đã hủy",
+        "closed_for_more_than": "đã đóng hơn",
+        "days": "{count, plural, one {# ngày} other {# ngày}}"
       }
     },
     "layouts": {

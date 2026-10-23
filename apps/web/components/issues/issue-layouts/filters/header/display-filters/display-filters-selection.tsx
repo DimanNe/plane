@@ -21,6 +21,7 @@ import {
   FilterOrderBy,
   FilterSubGroupBy,
 } from "@/components/issues/issue-layouts/filters";
+import { FilterHideClosedWorkItems } from "./hide-closed-work-items";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 
@@ -66,7 +67,7 @@ export const DisplayFiltersSelection = observer(function DisplayFiltersSelection
   }
 
   return (
-    <div className="vertical-scrollbar relative scrollbar-sm h-full w-full divide-y divide-subtle-1 overflow-hidden overflow-y-auto px-2.5">
+    <div className="vertical-scrollbar relative scrollbar-sm flex h-full w-full flex-col gap-2 overflow-hidden overflow-y-auto px-2.5">
       {/* display properties */}
       {layoutDisplayFiltersOptions?.display_properties && layoutDisplayFiltersOptions.display_properties.length > 0 && (
         <div className="py-2">
@@ -144,6 +145,18 @@ export const DisplayFiltersSelection = observer(function DisplayFiltersSelection
               })
             }
             enabledExtraOptions={layoutDisplayFiltersOptions?.extra_options.values}
+          />
+        </div>
+      )}
+
+      {/* closed work items */}
+      {isDisplayFilterEnabled("hide_closed_for_more_than_days") && (
+        <div className="py-2">
+          <FilterHideClosedWorkItems
+            hideClosedForMoreThanDays={displayFilters?.hide_closed_for_more_than_days}
+            handleUpdate={(hide_closed_for_more_than_days) =>
+              handleDisplayFiltersUpdate({ hide_closed_for_more_than_days })
+            }
           />
         </div>
       )}
