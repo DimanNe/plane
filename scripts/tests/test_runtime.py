@@ -279,36 +279,44 @@ class StartTests(unittest.TestCase):
 
 
 class PlaneEnvironmentTests(unittest.TestCase):
-    def test_each_instance_names_its_session_cookie_and_keeps_the_name_through_export(
+    def test_instances_on_one_host_name_their_cookies_apart_and_a_restored_backup_keeps_them(
         self,
     ) -> None:
-        def get_session_cookie_name(
+        def get_cookie_names(
             config: plane_config.InstanceConfig, port: int
-        ) -> str:
-            return runtime.get_plane_environment(port, config)["SESSION_COOKIE_NAME"]
+        ) -> t.Tuple[str, str, str]:
+            environment: t.Dict[str, str] = runtime.get_plane_environment(port, config)
+            return (
+                environment["SESSION_COOKIE_NAME"],
+                environment["ADMIN_SESSION_COOKIE_NAME"],
+                environment["CSRF_COOKIE_NAME"],
+            )
 
-        first: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
-        second: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
+        exported: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
+        other: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
         with tempfile.TemporaryDirectory() as temporary:
             # an archive carries the configuration as it is written in the run directory
-            first.write(pl.Path(temporary))
+            exported.write(pl.Path(temporary))
             imported: plane_config.InstanceConfig = runtime.require_instance_config(
                 pl.Path(temporary)
             )
+        names: t.Tuple[str, str, str] = get_cookie_names(exported, 18080)
         cases: t.List[t.Tuple[str, bool]] = [
             (
-                "another instance names it otherwise",
-                get_session_cookie_name(second, 18081)
-                != get_session_cookie_name(first, 18080),
+                "a copy imported from the export, on another port, names them otherwise",
+                set(get_cookie_names(imported, 18081)).isdisjoint(names),
             ),
             (
-                "an imported export keeps the name, on another port too",
-                get_session_cookie_name(imported, 18081)
-                == get_session_cookie_name(first, 18080),
+                "another instance on the same port of another machine names them otherwise",
+                set(get_cookie_names(other, 18080)).isdisjoint(names),
             ),
             (
-                "the name Plane gives it unless told otherwise is not taken",
-                get_session_cookie_name(first, 18080) != "session-id",
+                "the backup restored on the same port keeps them",
+                get_cookie_names(imported, 18080) == names,
+            ),
+            (
+                "the names that Plane and Django give them unless told otherwise are not taken",
+                set(names).isdisjoint({"session-id", "admin-session-id", "csrftoken"}),
             ),
         ]
         actual: t.List[t.Tuple[str, bool]] = cases

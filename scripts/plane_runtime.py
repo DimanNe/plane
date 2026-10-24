@@ -625,16 +625,28 @@ def get_plane_environment(
     # request (Django's SESSION_SAVE_EVERY_REQUEST, no code) was measured: 600 API requests, 16 at once, took
     # 2.32 s in place of 2.05 s (median +6 ms), a write to the database and a Set-Cookie on each; so the API
     # renews it at most once in a while instead.
-    # FOR_REVIEWER: the new cookie name signs every browser out once, at the first start with this change.
+    # A browser keeps cookies by host name and sends them to every port of that host. Another Plane on another port
+    # of the same host, a copy imported from this one's export too, would replace or delete the cookies of this one:
+    # its session (the person is signed out here), the session of its admin pages, and Django's token against forged
+    # requests, which a sign-in form holds from the moment it opened (the form is refused). Instances on one host
+    # differ by port; the id tells apart instances on the same port of other machines that one host name leads to,
+    # by port forwarding. A backup restored on the same port keeps both, so that the browser stays signed in.
+    # FOR_REVIEWER: a copy bound to the same port on another machine and reached at another port of the same host
+    # name, as a clone of a whole machine would be, still shares the names. Only the port that the browser used, in
+    # the Host header of each request, tells those apart; naming the cookies after it would take Plane's session
+    # middleware and Django's CSRF middleware choosing a name for each request.
+    # FOR_REVIEWER: new names sign every browser out once, at the first start with this change.
+    # FOR_REVIEWER: ADMIN_SESSION_COOKIE_NAME and CSRF_COOKIE_NAME are new environment variables of the API, one line
+    # each in apps/api/plane/settings/common.py, with upstream's names as their defaults; claude/README.md asks for
+    # the owner's word on a new one.
+    cookie_name_suffix: str = f"{port}-{config.instance_id}"
     return {
         "DJANGO_SETTINGS_MODULE": "plane.settings.production",
         "DEBUG": "0",
         "SECRET_KEY": service_secrets[plane_config.SecretName.DJANGO],
-        # A browser keeps cookies by host name and sends them to every port of that host. Another Plane, or any
-        # application that names its cookie as Plane does, on another port of the same host replaces or deletes
-        # the session cookie of this one, and the person is signed out here. A name of its own keeps the session
-        # apart; the instance's id stays the same through stop, start, export and import.
-        "SESSION_COOKIE_NAME": f"session-id-{config.instance_id}",
+        "SESSION_COOKIE_NAME": f"session-id-{cookie_name_suffix}",
+        "ADMIN_SESSION_COOKIE_NAME": f"admin-session-id-{cookie_name_suffix}",
+        "CSRF_COOKIE_NAME": f"csrftoken-{cookie_name_suffix}",
         # The person who signed in to their own instance stays signed in. The API renews a session while it is
         # used (SessionStore in apps/api/plane/db/models/session.py), and it lasts as long as a browser keeps a
         # cookie: RFC 6265bis caps a cookie's lifetime at 400 days, and Chrome does.

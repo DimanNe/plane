@@ -115,6 +115,13 @@ ROLE_MEMBER: int = 15
 ROLE_GUEST: int = 5
 # an id of the form the server gives, which it has given to nothing
 NO_SUCH_ID: str = "00000000-0000-4000-8000-000000000000"
+# What Plane and Django name the cookies of a session, of a session of the admin pages and of the token against
+# forged requests unless told otherwise (apps/api/plane/settings/common.py), by the setting that names each.
+DEFAULT_COOKIE_NAMES: t.Dict[str, str] = {
+    "SESSION_COOKIE_NAME": "session-id",
+    "ADMIN_SESSION_COOKIE_NAME": "admin-session-id",
+    "CSRF_COOKIE_NAME": "csrftoken",
+}
 
 
 @dc.dataclass(frozen=True)
@@ -344,6 +351,25 @@ def sign_in(instance: Instance, email: str) -> Account:
         connection.sendall(json.dumps({"email": email}).encode() + b"\n")
         reply: JSONObject = json.loads(connection.makefile().readline())
     return read_account(email, instance.password_of_accounts, reply)
+
+
+def read_cookie_names_of_copy_on_another_port(instance: Instance) -> t.Dict[str, str]:
+    """The names of the cookies that a copy of the instance, imported from its export and started on another port of
+    the same host by this checkout's runtime, sets, by the setting that names each."""
+    config: t.Optional[plane_config.InstanceConfig] = (
+        plane_config.InstanceConfig.read_existing(instance.run_dir)
+    )
+    assert config is not None
+    port: t.Optional[int] = urllib.parse.urlparse(instance.url).port
+    assert port is not None
+    environment: t.Dict[str, str] = plane_runtime.get_plane_environment(
+        port + 1, config
+    )
+    # a cookie that the runtime does not name keeps the name Plane gives it
+    return {
+        setting: environment.get(setting, name)
+        for setting, name in DEFAULT_COOKIE_NAMES.items()
+    }
 
 
 def find_url(run_dir: pl.Path) -> str:

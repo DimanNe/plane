@@ -40,9 +40,11 @@ The proxy is the only service the host can reach, on the address and port of `--
 running instance with another address restarts it there. Instances in different run directories with
 different ports run side by side.
 
-A browser stays signed in to each of them. It sends the cookies of a host to every port of that host, so an
-instance names its session cookie after its id, which an export keeps. A session is renewed while it is used and
-ends only when it was not used for as long as a browser keeps a cookie.
+A browser stays signed in to each of them, a copy imported from another's export too. It sends the cookies of a
+host to every port of that host, so an instance names its cookies (its sessions and Django's token against forged
+requests) after its port and its id, which an export keeps: a backup restored on the same port keeps the browser
+signed in. A session is renewed while it is used and ends only when it was not used for as long as a browser keeps a
+cookie.
 
 Images are built from the checkout by `prepare` (or on first use when missing). After changing
 sources run `prepare` again; the next `start` sees the new API image and runs Django migrations

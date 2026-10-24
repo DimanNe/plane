@@ -379,10 +379,11 @@ SESSION_COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", None)
 SESSION_SAVE_EVERY_REQUEST = os.environ.get("SESSION_SAVE_EVERY_REQUEST", "0") == "1"
 
 # Admin Cookie
-ADMIN_SESSION_COOKIE_NAME = "admin-session-id"
+ADMIN_SESSION_COOKIE_NAME = os.environ.get("ADMIN_SESSION_COOKIE_NAME", "admin-session-id")
 ADMIN_SESSION_COOKIE_AGE = int(os.environ.get("ADMIN_SESSION_COOKIE_AGE", 3600))
 
 # CSRF cookies
+CSRF_COOKIE_NAME = os.environ.get("CSRF_COOKIE_NAME", "csrftoken")
 CSRF_COOKIE_SECURE = secure_origins
 CSRF_COOKIE_HTTPONLY = True
 CSRF_TRUSTED_ORIGINS = cors_allowed_origins
