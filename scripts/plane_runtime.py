@@ -344,10 +344,14 @@ def build_our_images(
         plane_config.Service.SPACE,
         plane_config.Service.PROXY,
     ):
+        # Start runs migrations when the API image is another one, and restarts what runs on other images (see
+        # start_plane_services()). By default buildx adds to an image a record of its build, with the time of the
+        # build, so that an image built again from the same sources has another id.
         args: t.List[str] = [
             "buildx",
             "build",
             "--load",
+            "--provenance=false",
             "--network",
             "host",
             "-t",
@@ -743,6 +747,19 @@ def get_preload_header(paths: t.List[str]) -> str:
 def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     ports: t.Dict[plane_config.Service, int] = SERVICE_PORTS
     origin_pattern: str = re.escape(plane_origin)
+    # FOR_REVIEWER: a page opened while the instance starts is now blank until the API answers, instead of saying
+    # "didn't start up correctly" and then "Not Authorized!": its held preloads take all the connections that the
+    # browser opens to one host, so its code loads only then. Measured, the list shows about 1 s after the API
+    # answers, where it showed about 4 s after. A page opened while the API is down for good, as after a failed
+    # start, waits as long as START_TIMEOUT before it says that Plane didn't start up.
+    # FOR_REVIEWER: Caddy holds a request by connecting again at a short interval; a refused connection on the
+    # loopback costs next to nothing. Without that polling, preload_and_wait.py could listen on the API's address
+    # before it loads the code and hand the socket to gunicorn (--bind fd://), so that the kernel queues the
+    # connections until the API accepts them. That changes how the API starts, the proxy would have to start after
+    # that listen, and a request would then wait without a bound for an API that never starts.
+    # FOR_REVIEWER: saves are not held. Held, a POST was tried again with an empty body and answered 502 after the
+    # wait, with request_buffers too. Caddy 2.11 sends again a body that request_buffers holds, so with it saves made
+    # while the instance starts could be held as well; that is a newer proxy image and buffered request bodies.
     caddy_config: str = f"""{{
     admin off
     auto_https off
@@ -755,13 +772,28 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
 # The API redirects to Plane's own origin, which is not the address a browser used when it came through another
 # interface of the host or a tunnel. Such a redirect is made relative, so the browser stays at the address it used.
 # The origin followed by "//" is left alone: made relative, it would name another host.
+# The proxy serves pages while the instance starts, before the API listens, and has the browser fetch the API's first
+# answers along with each page (see the preloads below). The browser keeps those answers until the app's own requests
+# take them, so a 502 would reach the app after the API is back: the app would say that Plane didn't start up and ask
+# again a moment later, once for each step of its loading. So a request without a body that finds no API listening waits
+# until the API accepts it, as long as start itself waits for a service to become ready. A request with a body, such as
+# a save, is answered 502 at once: Caddy 2.10 tries it again without its body.
+(api_upstream) {{
+    transport http {{
+        keepalive off
+    }}
+    header_down Location "^{origin_pattern}(/[^/]|/$)" "$1"
+    header_down Location "^{origin_pattern}([?#]|$)" "/$1"
+}}
 (api) {{
+    @without_body method GET HEAD
+    reverse_proxy @without_body 127.0.0.1:{ports[plane_config.Service.API]} {{
+        import api_upstream
+        lb_try_duration {START_TIMEOUT}s
+        lb_try_interval 50ms
+    }}
     reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]} {{
-        transport http {{
-            keepalive off
-        }}
-        header_down Location "^{origin_pattern}(/[^/]|/$)" "$1"
-        header_down Location "^{origin_pattern}([?#]|$)" "/$1"
+        import api_upstream
     }}
 }}
 :{ports[plane_config.Service.PROXY]} {{

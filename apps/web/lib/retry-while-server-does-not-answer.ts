@@ -7,12 +7,19 @@
 import type { SWRConfiguration } from "swr";
 import { SWRConfig } from "swr";
 
-// While the instance restarts, its proxy answers the API's requests with 502, also those that the browser fetched along
-// with the page (see write_caddy_config() in scripts/plane_runtime.py) and that the app takes after the API is back.
-// A page whose first requests failed shows "didn't start up correctly", or "Not Authorized!" for the membership of
-// the workspace, until those requests, made again, are answered. SWR makes a failed request again after ever longer
-// waits, so the page came back long after the server did. A request that the server did not answer is made again at a
-// short fixed interval instead; one that it did answer, such as a 403, keeps SWR's own retry.
+// An axios error and an axios response both carry the status; none means that no answer came at all. A status of 500 or
+// more says that the API, or the proxy in front of it, failed, and nothing about what was asked.
+export const hasServerAnswered = (error: unknown): boolean => {
+  const status: number | undefined = (error as { status?: number } | undefined)?.status;
+  return status !== undefined && status < 500;
+};
+
+// A page can be open, or be opened, while the API of its instance does not answer: the instance is stopped, or its API
+// did not start up (while it starts, the proxy holds the API's requests; see write_caddy_config() in
+// scripts/plane_runtime.py). A page whose first requests failed says that Plane didn't start up correctly until those
+// requests, made again, are answered. SWR makes a failed request again after ever longer waits, so the page came back
+// long after the server did. A request that the server did not answer is made again at a short fixed interval instead;
+// one that it did answer, such as a 403, keeps SWR's own retry.
 export const retryWhileServerDoesNotAnswer: NonNullable<SWRConfiguration["onErrorRetry"]> = (
   error,
   key,
@@ -25,9 +32,7 @@ export const retryWhileServerDoesNotAnswer: NonNullable<SWRConfiguration["onErro
   // local instance does not feel; a page left open on an instance whose API crashes on these requests keeps asking. A
   // longer interval brings the page back later after a restart.
   const RETRY_INTERVAL_MS = 1000;
-  // An axios error and an axios response both carry the status; none means that no answer came at all.
-  const status: number | undefined = (error as { status?: number } | undefined)?.status;
-  if (status !== undefined && status < 500) {
+  if (hasServerAnswered(error)) {
     SWRConfig.defaultValue.onErrorRetry(error, key, config, revalidate, options);
     return;
   }

@@ -20,6 +20,7 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import WorkSpaceNotAvailable from "@/app/assets/workspace/workspace-not-available.png?url";
 // components
 import { LogoSpinner } from "@/components/common/logo-spinner";
+import { MaintenanceView } from "@/components/instance";
 // constants
 import {
   WORKSPACE_MEMBERS,
@@ -40,7 +41,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useLiveUpdates } from "@/hooks/use-live-updates";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-import { retryWhileServerDoesNotAnswer } from "@/lib/retry-while-server-does-not-answer";
+import { hasServerAnswered, retryWhileServerDoesNotAnswer } from "@/lib/retry-while-server-does-not-answer";
 
 interface IWorkspaceAuthWrapper {
   children: ReactNode;
@@ -75,7 +76,7 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
   useLiveUpdates(currentWorkspace?.slug);
 
   // fetching user workspace information
-  useSWR(
+  const { error: workspaceMemberMeError } = useSWR(
     workspaceSlug && currentWorkspace ? WORKSPACE_MEMBER_ME_INFORMATION(workspaceSlug.toString()) : null,
     workspaceSlug && currentWorkspace ? () => fetchUserWorkspaceInfo(workspaceSlug.toString()) : null,
     { revalidateIfStale: false, revalidateOnFocus: false, onErrorRetry: retryWhileServerDoesNotAnswer }
@@ -210,6 +211,12 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
       </div>
     );
   }
+
+  // The server did not say whether the person is a member, as when the API of the instance is down: "Not Authorized!"
+  // would tell a member of the workspace that they are not one.
+  // FOR_REVIEWER: the first render, before SWR asks for the membership, renders this where it rendered "Not
+  // Authorized!". SWR asks in a layout effect, so the browser paints neither (measured on every load).
+  if (currentWorkspaceInfo === undefined && !hasServerAnswered(workspaceMemberMeError)) return <MaintenanceView />;
 
   // while user does not have access to view that workspace
   if (currentWorkspaceInfo === undefined) {

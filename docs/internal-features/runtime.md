@@ -63,6 +63,11 @@ then waits for a signal that the script sends once the stores answer. The live s
 soon as Redis answers. On import the three Python services start even before the backup is
 extracted; they need only the configuration, which is the first thing in an archive.
 
+The proxy serves pages before the API listens. Until the API accepts connections, the proxy holds
+each request to the API that has no body, for as long as start waits for a service: a page opened
+while the instance starts loads once the API answers, instead of saying that Plane did not start.
+A request with a body, such as a save, is answered 502 at once.
+
 ## Stop, export and durability
 
 Stop sends SIGTERM to the worker and the live server and waits for them: the worker finishes the
