@@ -127,14 +127,17 @@ def open_page(
     path: str,
     width: int = 1440,
     height: int = 900,
+    origin: t.Optional[str] = None,
 ) -> pw.Page:
-    """A window of this size in which the account is signed in, at a path of the instance."""
+    """A window of this size in which the account is signed in, at a path of the instance: at its own address, or at
+    `origin`, another address of the host that reaches it."""
+    url: str = origin if origin is not None else check.instance.url
     context: pw.BrowserContext = check.browser.new_context(
         viewport={"width": width, "height": height}
     )
     context.add_cookies(
         [
-            {"name": name, "value": value, "url": check.instance.url}
+            {"name": name, "value": value, "url": url}
             for name, value in account.cookies.items()
         ]
     )
@@ -153,7 +156,7 @@ def open_page(
         else None,
     )
     check.pages.append(page)
-    page.goto(check.instance.url + path)
+    page.goto(url + path)
     return page
 
 

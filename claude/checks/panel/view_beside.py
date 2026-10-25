@@ -1,7 +1,7 @@
 """
 The view of a work item beside the list: its header ends with an "x" that closes it, the id of the work item
-stands once, in that header, and a click copies it; the title can be typed into and is stored. Closing the view leaves its line
-selected.
+stands once, in that header (panel/click_copies_id: a click copies it); the title can be typed into and is stored.
+Closing the view leaves its line selected.
 """
 
 import typing as t
@@ -72,15 +72,6 @@ def run(check: steps.Check) -> None:
         timeout=0,
     )
 
-    page.context.grant_permissions(
-        ["clipboard-read", "clipboard-write"], origin=check.instance.url
-    )
-    view.get_by_text(id_of_work_item, exact=True).click()
-    check.expect(
-        "a click on the id copies it",
-        lambda: page.evaluate("navigator.clipboard.readText()"),
-        id_of_work_item,
-    )
     page.locator(ll.PANEL_TITLE).click()
     page.keyboard.press("End")
     page.keyboard.type(" renamed")

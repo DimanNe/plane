@@ -93,10 +93,12 @@ def open_list(
     check: steps.Check,
     account: ins.Account,
     project: ins.Project,
+    *,
+    origin: t.Optional[str] = None,
     **display_filters: t.Any,
 ) -> pw.Page:
     """The project's work items in the List layout, in the manual order and grouped by state unless told
-    otherwise, with its first line drawn."""
+    otherwise, with its first line drawn; at `origin` when given (see browser.open_page)."""
     ins.set_display(
         check.instance,
         account,
@@ -111,7 +113,10 @@ def open_list(
         },
     )
     page: pw.Page = browser.open_page(
-        check, account, f"/{check.instance.workspace}/projects/{project.id}/issues/"
+        check,
+        account,
+        f"/{check.instance.workspace}/projects/{project.id}/issues/",
+        origin=origin,
     )
     page.locator(LINE).first.wait_for()
     return page
@@ -185,7 +190,7 @@ def read_menu_of_line(page: pw.Page, title: str) -> t.List[str]:
 def read_messages(page: pw.Page) -> t.List[str]:
     """The texts of the messages the page shows in its corner, each on one line."""
     return [
-        " | ".join(message.inner_text().split("\n"))
+        " | ".join(part for part in message.inner_text().split("\n") if part.strip())
         for message in page.locator(MESSAGE).all()
     ]
 

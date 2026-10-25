@@ -543,6 +543,8 @@
     "copied": "Copied!",
     "link_copied": "Link copied!",
     "link_copied_to_clipboard": "Link copied to clipboard",
+    "id_copied": "ID copied!",
+    "id_copied_to_clipboard": "{id} copied to clipboard",
     "copied_to_clipboard": "Work item link copied to clipboard",
     "branch_name_copied_to_clipboard": "Branch name copied to clipboard",
     "is_copied_to_clipboard": "Work item is copied to clipboard",
