@@ -295,6 +295,22 @@ def read_description(check: steps.Check, project: ins.Project, name: str) -> str
     return re.sub(r"<[^>]+>", "", html).replace("&nbsp;", " ")
 
 
+def read_comments(
+    check: steps.Check, project: ins.Project, item_id: str
+) -> t.List[t.List[str]]:
+    """The comments of a work item, oldest first, each as its paragraphs."""
+    found: t.List[ins.JSONObject] = ins.call_api(
+        check.instance, "GET", f"/projects/{project.id}/work-items/{item_id}/comments/"
+    )["results"]
+    return [
+        [
+            re.sub(r"<[^>]+>", "", paragraph)
+            for paragraph in re.findall(r"<p[^>]*>(.*?)</p>", comment["comment_html"])
+        ]
+        for comment in sorted(found, key=lambda comment: comment["created_at"])
+    ]
+
+
 def read_panel(page: pw.Page) -> t.Optional[str]:
     """The title in the work item view beside the list; None while it is closed."""
     title: pw.Locator = page.locator(PANEL_TITLE)

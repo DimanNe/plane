@@ -27,6 +27,17 @@ export type EmojisListDropdownProps = SuggestionProps<EmojiItem, { name: string 
   forceOpen?: boolean;
 };
 
+/**
+ * The menu shows once something is typed after ":", or at once when the slash command "Emoji" opened it, and only
+ * while an emoji matches, so that typing on after no match is plain text, as with the slash command menu.
+ */
+export const isEmojiMenuShown = ({
+  items,
+  query,
+  forceOpen,
+}: Pick<EmojisListDropdownProps, "items" | "query" | "forceOpen">): boolean =>
+  items.length > 0 && (query.length > 0 || !!forceOpen);
+
 export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
   props: EmojisListDropdownProps,
   ref: React.ForwardedRef<EmojiListRef>
@@ -50,16 +61,6 @@ export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent): boolean => {
-      // Allow keyboard navigation if we have items to show
-      if (items.length === 0) {
-        return false;
-      }
-
-      // Don't handle keyboard if modal shouldn't be visible (query empty without forceOpen)
-      if (query.length === 0 && !forceOpen) {
-        return false;
-      }
-
       if (event.key === "ArrowUp") {
         setSelectedIndex((prev) => (prev + items.length - 1) % items.length);
         return true;
@@ -70,14 +71,14 @@ export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
         return true;
       }
 
-      if (event.key === "Enter") {
+      if (event.key === "Enter" || event.key === "Tab") {
         selectItem(selectedIndex);
         return true;
       }
 
       return false;
     },
-    [items.length, query.length, forceOpen, selectItem, selectedIndex]
+    [items.length, selectItem, selectedIndex]
   );
 
   // Show animation
@@ -116,7 +117,7 @@ export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
 
   useOutsideClickDetector(dropdownContainerRef, onClose);
 
-  if (query.length === 0 && !forceOpen) return null;
+  if (!isEmojiMenuShown({ items, query, forceOpen })) return null;
 
   return (
     <>
@@ -145,35 +146,31 @@ export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
           e.stopPropagation();
         }}
       >
-        {items.length ? (
-          items.map((item, index) => {
-            const isSelected = index === selectedIndex;
-            const emojiKey = item.shortcodes.join(" - ");
+        {items.map((item, index) => {
+          const isSelected = index === selectedIndex;
+          const emojiKey = item.shortcodes.join(" - ");
 
-            return (
-              <button
-                key={emojiKey}
-                id={`emoji-item-${index}`}
-                type="button"
-                className={cn(
-                  "flex w-full items-center gap-2 truncate rounded-sm px-2 py-1.5 text-left text-13 text-secondary transition-colors duration-150 hover:bg-layer-1-hover",
-                  {
-                    "bg-layer-1-hover": isSelected,
-                  }
-                )}
-                onClick={() => selectItem(index)}
-                onMouseEnter={() => setSelectedIndex(index)}
-              >
-                <span className="grid size-5 flex-shrink-0 place-items-center text-14">{item.emoji}</span>
-                <span className="flex-grow truncate">
-                  <span className="font-medium">:{item.name}:</span>
-                </span>
-              </button>
-            );
-          })
-        ) : (
-          <div className="py-2 text-center text-13 text-placeholder">No emojis found</div>
-        )}
+          return (
+            <button
+              key={emojiKey}
+              id={`emoji-item-${index}`}
+              type="button"
+              className={cn(
+                "flex w-full items-center gap-2 truncate rounded-sm px-2 py-1.5 text-left text-13 text-secondary transition-colors duration-150 hover:bg-layer-1-hover",
+                {
+                  "bg-layer-1-hover": isSelected,
+                }
+              )}
+              onClick={() => selectItem(index)}
+              onMouseEnter={() => setSelectedIndex(index)}
+            >
+              <span className="grid size-5 flex-shrink-0 place-items-center text-14">{item.emoji}</span>
+              <span className="flex-grow truncate">
+                <span className="font-medium">:{item.name}:</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </>
   );

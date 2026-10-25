@@ -4,7 +4,6 @@ Ctrl+Enter in an empty comment sends nothing. In a comment that is edited Enter 
 saves it once. The button Comment still sends.
 """
 
-import re
 import typing as t
 
 import playwright.sync_api as pw
@@ -15,22 +14,6 @@ import list_layout as ll
 import steps
 
 EDITOR: str = '#full-screen-portal .ProseMirror[contenteditable="true"]'
-
-
-def read_comments(
-    check: steps.Check, project: ins.Project, item_id: str
-) -> t.List[t.List[str]]:
-    """The comments of a work item, oldest first, each as its paragraphs."""
-    found: t.List[ins.JSONObject] = ins.call_api(
-        check.instance, "GET", f"/projects/{project.id}/work-items/{item_id}/comments/"
-    )["results"]
-    return [
-        [
-            re.sub(r"<[^>]+>", "", paragraph)
-            for paragraph in re.findall(r"<p[^>]*>(.*?)</p>", comment["comment_html"])
-        ]
-        for comment in sorted(found, key=lambda comment: comment["created_at"])
-    ]
 
 
 def open_comment_menu(page: pw.Page, comment_id: str) -> None:
@@ -71,7 +54,7 @@ def run(check: steps.Check) -> None:
     check.expect(
         "Ctrl+Enter sends the comment once, both lines, and empties the editor",
         lambda: (
-            read_comments(check, project, ids["talked about"]),
+            ll.read_comments(check, project, ids["talked about"]),
             len(
                 [
                     write
@@ -99,7 +82,7 @@ def run(check: steps.Check) -> None:
     ).click()
     check.expect(
         "the button Comment still sends",
-        lambda: read_comments(check, project, ids["talked about"])[-1],
+        lambda: ll.read_comments(check, project, ids["talked about"])[-1],
         ["by the button"],
     )
     first: ins.JSONObject = sorted(
@@ -131,7 +114,7 @@ def run(check: steps.Check) -> None:
     check.expect(
         "Ctrl+Enter saves it once",
         lambda: (
-            read_comments(check, project, ids["talked about"])[0],
+            ll.read_comments(check, project, ids["talked about"])[0],
             len(
                 [
                     write

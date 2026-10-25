@@ -7,6 +7,9 @@
 import type { EmojiOptions, EmojiStorage } from "@tiptap/extension-emoji";
 import { ReactRenderer } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
+import type { SuggestionProps } from "@tiptap/suggestion";
+// plane imports
+import { findEmojisMatchingQuery } from "@plane/blocks/emoji-suggestion";
 // constants
 import { CORE_EXTENSIONS } from "@/constants/extension";
 // helpers
@@ -14,7 +17,7 @@ import { updateFloatingUIFloaterPosition } from "@/helpers/floating-ui";
 import type { CommandListInstance } from "@/helpers/tippy";
 import { DROPDOWN_NAVIGATION_KEYS } from "@/helpers/tippy";
 // local imports
-import { EmojisListDropdown } from "./components/emojis-list";
+import { EmojisListDropdown, isEmojiMenuShown } from "./components/emojis-list";
 import type { EmojisListDropdownProps, EmojiItem } from "./components/emojis-list";
 import type { ExtendedEmojiStorage } from "./emoji";
 
@@ -32,15 +35,7 @@ export const emojiSuggestion: EmojiOptions["suggestion"] = {
         .slice(0, 5);
       return defaultEmojis as EmojiItem[];
     }
-    return emojis
-      .filter(({ shortcodes, tags }) => {
-        const lowerQuery = query.toLowerCase();
-        return (
-          shortcodes.find((shortcode: string) => shortcode.startsWith(lowerQuery)) ||
-          tags.find((tag: string) => tag.startsWith(lowerQuery))
-        );
-      })
-      .slice(0, 5) as EmojiItem[];
+    return findEmojisMatchingQuery(emojis, query, 5) as EmojiItem[];
   },
 
   allowSpaces: false,
@@ -49,12 +44,24 @@ export const emojiSuggestion: EmojiOptions["suggestion"] = {
     let component: ReactRenderer<CommandListInstance, EmojisListDropdownProps> | null = null;
     let cleanup: () => void = () => {};
     let editorRef: Editor | null = null;
+    // A ":" at the start of a word begins the suggestion also where no emoji follows, as in "thanks :)". Ctrl+Enter,
+    // which sends a comment, and Escape, which closes the view beside the list, wait while a dropbar is active, and
+    // the menu's keys would keep ↑ and ↓ from the caret. So the menu is an active dropbar, and takes keys, only
+    // while it shows emojis.
+    let isMenuShown = false;
+
+    const markMenuShownOrHidden = (props: SuggestionProps<EmojiItem>, forceOpen: boolean) => {
+      isMenuShown = isEmojiMenuShown({ items: props.items, query: props.query, forceOpen });
+      if (isMenuShown) props.editor.commands.addActiveDropbarExtension(CORE_EXTENSIONS.EMOJI);
+      else props.editor.commands.removeActiveDropbarExtension(CORE_EXTENSIONS.EMOJI);
+    };
 
     const handleClose = (editor?: Editor) => {
       component?.destroy();
       component = null;
+      isMenuShown = false;
       (editor || editorRef)?.commands.removeActiveDropbarExtension(CORE_EXTENSIONS.EMOJI);
-      const emojiStorage = editor?.storage.emoji as ExtendedEmojiStorage;
+      const emojiStorage = (editor || editorRef)?.storage.emoji as ExtendedEmojiStorage;
       emojiStorage.forceOpen = false;
       cleanup();
     };
@@ -74,7 +81,7 @@ export const emojiSuggestion: EmojiOptions["suggestion"] = {
           className: "fixed z-[100]",
         });
         if (!props.clientRect) return;
-        props.editor.commands.addActiveDropbarExtension(CORE_EXTENSIONS.EMOJI);
+        markMenuShownOrHidden(props, forceOpen);
         const element = component.element as HTMLElement;
         cleanup = updateFloatingUIFloaterPosition(props.editor, element).cleanup;
       },
@@ -85,11 +92,14 @@ export const emojiSuggestion: EmojiOptions["suggestion"] = {
         const forceOpen = emojiStorage.forceOpen || false;
         component.updateProps({ ...props, forceOpen });
         if (!props.clientRect) return;
+        markMenuShownOrHidden(props, forceOpen);
         cleanup();
         cleanup = updateFloatingUIFloaterPosition(props.editor, component.element as HTMLElement).cleanup;
       },
       onKeyDown: ({ event }) => {
-        if ([...DROPDOWN_NAVIGATION_KEYS, "Escape"].includes(event.key)) {
+        if (!isMenuShown) return false;
+
+        if ([...DROPDOWN_NAVIGATION_KEYS, "Tab", "Escape"].includes(event.key)) {
           event.preventDefault();
           event.stopPropagation();
         }

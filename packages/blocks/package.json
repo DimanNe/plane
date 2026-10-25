@@ -24,6 +24,7 @@
     "./emoji-icon-picker": "./dist/emoji-icon-picker/index.js",
     "./emoji-icon-picker/data": "./dist/emoji-icon-picker/data.js",
     "./emoji-reaction": "./dist/emoji-reaction/index.js",
+    "./emoji-suggestion": "./dist/emoji-suggestion/index.js",
     "./empty-state": "./dist/empty-state/index.js",
     "./icons": "./dist/icons/index.js",
     "./layout": "./dist/layout/index.js",

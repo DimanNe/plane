@@ -12,6 +12,10 @@ import { Emoji } from "./emoji";
 import { emojiSuggestion } from "./suggestion";
 
 export const EmojiExtension = Emoji.extend({
+  // Above the default of the extensions whose keymaps also take Tab, ↑ and ↓, such as those of lists and tables, so
+  // that the emoji menu, while it shows, is given those keys first.
+  priority: 101,
+
   addStorage() {
     const extensionOptions = this.options;
 
