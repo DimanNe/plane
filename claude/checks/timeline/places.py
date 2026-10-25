@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 import browser
 import chart
 import instance as ins
+import page_changes
 import steps
 
 
@@ -45,8 +46,10 @@ def open_place(
         account,
         f"/{check.instance.workspace}/projects/{project.id}/{kind}/{place_id}/",
     )
-    page.locator(chart.LINE).first.wait_for()
-    page.locator(".vertical-scrollbar.isolate div.top-7").first.wait_for()
+    page_changes.wait_until_shown(page.locator(chart.LINE).first)
+    page_changes.wait_until_shown(
+        page.locator(".vertical-scrollbar.isolate div.top-7").first
+    )
     details: pw.Locator = page.locator(
         ".vertical-scrollbar.absolute.right-0 button"
     ).first

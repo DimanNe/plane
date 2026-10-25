@@ -28,8 +28,13 @@ import browser
 import chart
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
+FINITE_ANIMATIONS_ENDED_JS: str = """
+() => document.getAnimations().every((animation) => animation.playState !== "running"
+  || animation.effect?.getComputedTiming().endTime === Infinity)
+"""
 TRACE_CATEGORIES: t.List[str] = [
     "devtools.timeline",
     "disabled-by-default-devtools.timeline",
@@ -222,11 +227,11 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
 
     def open_pop_up() -> None:
         display.click()
-        pop_up.last.wait_for()
+        page_changes.wait_until_shown(pop_up.last)
 
     def close_pop_up() -> None:
         page.keyboard.press("Escape")
-        pop_up.first.wait_for(state="detached")
+        page_changes.wait_until_removed(pop_up.first)
 
     run: int
     for run in range(1, 4):
@@ -240,7 +245,7 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
 
     def close_dialog() -> None:
         page.keyboard.press("Escape")
-        page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+        page_changes.wait_until_removed(page.locator(ll.CREATE_DIALOG))
 
     for run in range(1, 4):
         page.evaluate(TIME_TO_TITLE_JS)
@@ -257,7 +262,7 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
         measure_counters(page, cdp, f"and closed by Escape ({run})", close_dialog, 1)
     ll.select_line(page, "line 3")
     page.keyboard.press("Enter")
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     editor: pw.Locator = page.locator(
         '#full-screen-portal .ProseMirror[contenteditable="true"]'
     ).first
@@ -325,7 +330,7 @@ def measure_held_arrow(check: steps.Check, account: ins.Account, count: int) -> 
         )
         held: float = time.monotonic() - started
         # what a transition of the last line's colour still changes
-        page.wait_for_timeout(500)
+        page_changes.wait_until_true(page, FINITE_ANIMATIONS_ENDED_JS)
         recorded: t.Dict[str, t.Any] = page.evaluate(STOP_RECORDING_SELECTION_JS)
         presses: t.List[float] = recorded["presses"]
         frames: t.List[t.Tuple[float, t.Optional[str], t.Optional[str]]] = [
@@ -415,28 +420,30 @@ def measure_timeline(check: steps.Check, account: ins.Account, count: int) -> No
     for _ in range(5):
         page.goto("about:blank")
         page.goto(check.instance.url + path, wait_until="commit")
-        page.locator(chart.LINE).first.wait_for()
+        page_changes.wait_until_shown(page.locator(chart.LINE).first)
         first_lines.append(page.evaluate("performance.now()"))
     print(
         f"  opened five times: the first line drawn after {statistics.median(first_lines):.0f} ms (median), "
         f"{min(first_lines):.0f} at best; load {read_load()}"
     )
-    page.locator(".vertical-scrollbar.isolate div.top-7").first.wait_for()
-    page.locator(chart.BAR).nth(10).wait_for()
+    page_changes.wait_until_shown(
+        page.locator(".vertical-scrollbar.isolate div.top-7").first
+    )
+    page_changes.wait_until_shown(page.locator(chart.BAR).nth(10))
 
     # the task that every other one follows was made first, so it is at the bottom of a list ordered newest first,
     # which the page loads a part at a time as the list is scrolled down
-    _: int
-    for _ in range(30):
-        if chart.line(page, "task 00.0").count():
-            break
+    deadline: float = time.monotonic() + page_changes.WAIT_TIMEOUT
+    while not chart.line(page, "task 00.0").count():
+        if time.monotonic() >= deadline:
+            raise TimeoutError("the timeline did not load its first task")
         page.locator(".vertical-scrollbar.isolate").evaluate(
             "(element) => element.scrollTo(0, element.scrollHeight)"
         )
-        page.wait_for_timeout(500)
+        page_changes.wait_for_page_change([page], deadline)
     # the first task starts today, and Today puts today in the middle of the chart, whatever the first view was
     page.get_by_role("button", name="Today", exact=True).click()
-    chart.bar(page, "task 00.0").wait_for()
+    page_changes.wait_until_shown(chart.bar(page, "task 00.0"))
     point: browser.Point = chart.get_bar_point(page, "task 00.0")
     px_per_day: float = chart.read_px_per_day_at_rest(page)
     page.mouse.move(*point)

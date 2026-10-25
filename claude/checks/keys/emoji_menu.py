@@ -13,6 +13,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 MENU_ITEM: str = '[id^="emoji-item-"]'
@@ -138,7 +139,7 @@ def run(check: steps.Check) -> None:
     beside: pw.Page = ll.open_list(check, account, project, group_by=None)
     ll.select_line(beside, "windy day")
     beside.keyboard.press("Enter")
-    beside.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(beside.locator(ll.PANEL_TITLE))
     beside.locator("#full-screen-portal .ProseMirror", has_text="start").click()
     beside.keyboard.press("Control+End")
     beside.keyboard.type(" :umb")

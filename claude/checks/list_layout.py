@@ -13,6 +13,7 @@ import playwright.sync_api as pw
 
 import browser
 import instance as ins
+import page_changes
 import steps
 
 LINE: str = '[class~="group/list-block"]'
@@ -118,7 +119,7 @@ def open_list(
         f"/{check.instance.workspace}/projects/{project.id}/issues/",
         origin=origin,
     )
-    page.locator(LINE).first.wait_for()
+    page_changes.wait_until_shown(page.locator(LINE).first)
     return page
 
 
@@ -178,12 +179,12 @@ def read_menu_of_line(page: pw.Page, title: str) -> t.List[str]:
     """The entries of the menu that a right click on the line opens; the menu is closed again."""
     target: pw.Locator = line(page, title)
     target.click(button="right", position={"x": 6, "y": 10})
-    page.get_by_role("menu").wait_for()
+    page_changes.wait_until_shown(page.get_by_role("menu"))
     entries: t.List[str] = [
         entry.inner_text().strip() for entry in page.get_by_role("menuitem").all()
     ]
     page.keyboard.press("Escape")
-    page.get_by_role("menu").wait_for(state="detached")
+    page_changes.wait_until_removed(page.get_by_role("menu"))
     return entries
 
 
@@ -201,7 +202,7 @@ def close_message(page: pw.Page) -> None:
     page.locator(MESSAGE).hover()
     # by its label: the page keeps a message of a failure out of the tree of roles
     page.locator(MESSAGE).get_by_label("Close").click()
-    page.locator(MESSAGE).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(MESSAGE))
 
 
 def open_create_dialog(page: pw.Page, keys: str = "ni") -> pw.Locator:
@@ -209,12 +210,12 @@ def open_create_dialog(page: pw.Page, keys: str = "ni") -> pw.Locator:
     dialog: pw.Locator = page.locator(CREATE_DIALOG)
     # The page loses keys pressed while such a dialog is still there, also one that was just saved and is about
     # to close, which takes until the server has answered: a fault of the page that a person who types fast meets.
-    dialog.wait_for(state="detached")
+    page_changes.wait_until_removed(dialog)
     key: str
     for key in keys:
         page.keyboard.press(key)
-    dialog.wait_for()
-    page.wait_for_function("() => document.activeElement?.name === 'name'")
+    page_changes.wait_until_shown(dialog)
+    page_changes.wait_until_true(page, "() => document.activeElement?.name === 'name'")
     return dialog
 
 
@@ -235,7 +236,7 @@ def make_with_keys(
     shown: t.List[t.Any] = page.evaluate(SHOWN_JS)
     page.keyboard.type(title)
     page.keyboard.press("Control+Enter")
-    page.locator(CREATE_DIALOG).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(CREATE_DIALOG))
     return shown, ins.read_work_items(check.instance, project)[title]
 
 
@@ -244,9 +245,11 @@ def choose_option(page: pw.Page, button: pw.Locator, option: str) -> None:
     given the focus back to its button: until then a key that follows goes nowhere."""
     button.click()
     page.get_by_role("option").filter(has_text=option).first.click()
-    page.get_by_role("option").first.wait_for(state="detached")
-    page.wait_for_function(
-        "(button) => document.activeElement === button", arg=button.element_handle()
+    page_changes.wait_until_removed(page.get_by_role("option").first)
+    page_changes.wait_until_true(
+        page,
+        "(button) => document.activeElement === button",
+        arg=button.element_handle(),
     )
 
 
@@ -289,7 +292,7 @@ def plus_of_group(page: pw.Page, name: str) -> pw.Locator:
 def open_input_of_group(page: pw.Page, name: str) -> None:
     """A click on the "+" of a group; returns when the caret is in the input it opens."""
     plus_of_group(page, name).click()
-    page.wait_for_function("() => document.activeElement?.name === 'name'")
+    page_changes.wait_until_true(page, "() => document.activeElement?.name === 'name'")
 
 
 def read_description(check: steps.Check, project: ins.Project, name: str) -> str:
@@ -480,6 +483,8 @@ def stop_recording_box(page: pw.Page) -> t.List[Frame]:
 def read_box_frames(page: pw.Page, is_line_drawn: bool = True) -> t.List[Frame]:
     """The frames written down, once the box has come and gone; `is_line_drawn` tells whether the list draws
     the line at its new place, which it does not where that place is out of view."""
+    # FOR_REVIEWER: read every frame by Playwright, and not on a change of the page (page_changes.py): what is read
+    # is what the recorder writes in its own frame callbacks, which no change of the page tells of.
     page.wait_for_function(BOX_HAS_GONE_JS, arg=is_line_drawn)
     return stop_recording_box(page)
 

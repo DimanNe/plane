@@ -14,6 +14,7 @@ import playwright.sync_api as pw
 import browser
 import chart
 import instance as ins
+import page_changes
 import steps
 
 # the line that the timeline draws where a moved line would land
@@ -191,7 +192,7 @@ def run(check: steps.Check) -> None:
         (True, True, (chart.day(1), chart.day(2), True)),
     )
     page.reload()
-    page.locator(chart.LINE).first.wait_for()
+    page_changes.wait_until_shown(page.locator(chart.LINE).first)
     check.expect(
         "after a reload the lines stand in the same order",
         lambda: chart.read_lines(page),

@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -53,7 +54,7 @@ def run(check: steps.Check) -> None:
         ("c", "Cancelled", "S C sets Cancelled"),
     ]:
         page.keyboard.press("s")
-        page.locator(ll.PROPERTY_MENU).wait_for()
+        page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
         page.keyboard.press(letter)
         check.expect(
             f"{rule} (the stored state, menus open)",
@@ -62,7 +63,7 @@ def run(check: steps.Check) -> None:
         )
 
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("x")
     check.expect_stays(
         "S X, which no state begins with, changes nothing, and the menu stays open (the stored state, menus open)",

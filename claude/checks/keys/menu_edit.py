@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # The dialog that edits a work item: the title in its field, and whether the caret is there.
@@ -24,8 +25,10 @@ EDIT_DIALOG_JS: str = """
 
 def open_line_menu(page: pw.Page, title: str) -> None:
     ll.line(page, title).click(button="right", position={"x": 6, "y": 10})
-    page.get_by_role("menu").wait_for()
-    page.wait_for_function("() => document.activeElement?.closest('[role=\"menu\"]')")
+    page_changes.wait_until_shown(page.get_by_role("menu"))
+    page_changes.wait_until_true(
+        page, "() => document.activeElement?.closest('[role=\"menu\"]')"
+    )
 
 
 def open_comment_menu(page: pw.Page, comment_id: str) -> None:
@@ -36,8 +39,10 @@ def open_comment_menu(page: pw.Page, comment_id: str) -> None:
     page.locator(
         f'xpath=//*[@id="editor-container-{comment_id}"]/ancestor::*[.//button[@aria-label="Options"]][1]'
     ).get_by_role("button", name="Options").last.click()
-    page.get_by_role("menu").wait_for()
-    page.wait_for_function("() => document.activeElement?.closest('[role=\"menu\"]')")
+    page_changes.wait_until_shown(page.get_by_role("menu"))
+    page_changes.wait_until_true(
+        page, "() => document.activeElement?.closest('[role=\"menu\"]')"
+    )
 
 
 def run(check: steps.Check) -> None:
@@ -63,7 +68,7 @@ def run(check: steps.Check) -> None:
         ["edited", True],
     )
     page.keyboard.press("Escape")
-    page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.CREATE_DIALOG))
     open_line_menu(page, "edited")
     page.keyboard.press("e")
     check.expect(
@@ -72,11 +77,11 @@ def run(check: steps.Check) -> None:
         (["edited", True], 0),
     )
     page.keyboard.press("Escape")
-    page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.CREATE_DIALOG))
 
     ll.select_line(page, "edited")
     page.keyboard.press("Enter")
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     open_comment_menu(page, comment["id"])
     page.keyboard.press("e")
     check.expect(

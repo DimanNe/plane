@@ -22,6 +22,7 @@ import typing as t
 import playwright.sync_api as pw
 
 import instance as ins
+import page_changes
 import settle
 import steps
 
@@ -141,6 +142,7 @@ def open_page(
             for name, value in account.cookies.items()
         ]
     )
+    page_changes.watch_page_changes(context)
     settle.install_settle_watch(context, [project.id for project in check.projects])
     page: pw.Page = context.new_page()
     page.on(

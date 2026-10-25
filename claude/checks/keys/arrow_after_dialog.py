@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 MENU: str = '[role="menu"]'
@@ -39,14 +40,14 @@ def run(check: steps.Check) -> None:
         "button", name="Open workspace switcher"
     ).first
     switcher.click()
-    page.locator(MENU).first.wait_for()
+    page_changes.wait_until_shown(page.locator(MENU).first)
     page.keyboard.press("Escape")
-    page.locator(MENU).first.wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(MENU).first)
 
     ll.group_header(page, "Todo").get_by_text("Todo", exact=True).first.click()
     ll.open_create_dialog(page)
     page.keyboard.press("Escape")
-    page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.CREATE_DIALOG))
     check.expect(
         "a click on the empty Todo, N I and Escape: the focus is on the page again (the focus, menus open, selected)",
         lambda: read_focus_menus_and_selected(page),
@@ -62,7 +63,7 @@ def run(check: steps.Check) -> None:
 
     page.keyboard.press("Escape")
     page.reload()
-    ll.line(page, "being done").wait_for()
+    page_changes.wait_until_shown(ll.line(page, "being done"))
     ll.group_header(page, "Todo").get_by_text("Todo", exact=True).first.click()
     page.keyboard.press("ArrowUp")
     check.expect(

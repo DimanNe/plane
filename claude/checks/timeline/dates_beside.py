@@ -14,6 +14,7 @@ import playwright.sync_api as pw
 import browser
 import chart
 import instance as ins
+import page_changes
 import steps
 
 DIMENSION_LINE: str = 'div[class~="z-[3]"] > svg[class~="h-px"]'
@@ -54,7 +55,7 @@ def check_turns(check: steps.Check, page: pw.Page, project: ins.Project) -> None
     px_per_day: float = chart.get_px_per_day(page)
     start: browser.Point = chart.get_bar_point(page, "first")
     page.mouse.move(*start)
-    page.locator(DIMENSION_LINE).wait_for()
+    page_changes.wait_until_shown(page.locator(DIMENSION_LINE))
     start_date: pw.Locator = page.locator(
         'div[class~="z-[3]"] [class~="text-11"]'
     ).filter(has_text=chart.format_day(chart.day(1)))

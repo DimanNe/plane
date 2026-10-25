@@ -20,32 +20,10 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 VIEW: str = "#full-screen-portal"
-# Resolves to true once the condition put in place of %s holds of `arg`: at once, or at the change of the page that
-# makes it hold; to false when no change has made it hold in the time given.
-WAIT_FOR_PAGE_JS: str = """
-([arg, timeoutMs]) => new Promise((resolve) => {
-  const holds = %s;
-  if (holds(arg)) {
-    resolve(true);
-    return;
-  }
-  let watch = null;
-  const deadline = setTimeout(() => {
-    watch.disconnect();
-    resolve(false);
-  }, timeoutMs);
-  watch = new MutationObserver(() => {
-    if (!holds(arg)) return;
-    watch.disconnect();
-    clearTimeout(deadline);
-    resolve(true);
-  });
-  watch.observe(document, { childList: true, subtree: true, characterData: true, attributes: true });
-})
-"""
 # Whether the view beside the list shows the work item of this title, with its id.
 VIEW_SHOWS_JS: str = """
 ([panelTitle, view, title, id]) => document.querySelector(panelTitle)?.value === title
@@ -68,12 +46,6 @@ PASTE_INTO_BOX_JS: str = """
   });
 }
 """
-
-
-def wait_for_page_to_show(page: pw.Page, holds_js: str, arg: t.Any) -> None:
-    """Returns as soon as the page shows what `holds_js` tells of `arg`, or after a step's time; the step after it
-    says what the page showed."""
-    page.evaluate(WAIT_FOR_PAGE_JS % holds_js, [arg, steps.STEP_TIMEOUT * 1000])
 
 
 def read_clipboard(page: pw.Page) -> t.Optional[t.List[t.Any]]:
@@ -126,27 +98,22 @@ def run(check: steps.Check) -> None:
         id_of_work_item: str = f"{project.identifier}-{number}"
         ll.line(page, title).dblclick(position={"x": 6, "y": 10})
         shown: t.List[str] = [ll.PANEL_TITLE, VIEW, title, id_of_work_item]
-        wait_for_page_to_show(page, VIEW_SHOWS_JS, shown)
         check.expect(
             f"a double click on a line opens its work item beside the list, with the id in the header ({where})",
             lambda: page.evaluate(VIEW_SHOWS_JS, shown),
             True,
-            timeout=0,
         )
 
         page.locator(VIEW).get_by_text(id_of_work_item, exact=True).click()
-        wait_for_page_to_show(
-            page, "(message) => document.querySelector(message) !== null", ll.MESSAGE
-        )
+        page_changes.wait_until_shown(page.locator(ll.MESSAGE).first)
         check.expect(
             f"a click on the id in the view says that the id was copied ({where})",
             lambda: ll.read_messages(page),
             [f"ID copied! | {id_of_work_item} copied to clipboard"],
             timeout=0,
         )
-        # FOR_REVIEWER: the waits of this check's own are driven by events. Two that it shares with every check look
-        # on a schedule: expect_stays, which reads every 50 ms until settle.py (looking every 5 ms) says the page can
-        # no longer change, and Playwright's own waits, in ll.open_list and click(). PLANE-88 left both to PLANE-87.
+        # FOR_REVIEWER: every wait of this check is driven by the page's changes now (page_changes.py), but for
+        # click(), which retries by Playwright's own schedule while its element cannot take a click yet.
         check.expect_stays(
             f"the view stays on that work item ({where})",
             lambda: (ll.read_panel(page), page.evaluate(VIEW_SHOWS_JS, shown)),

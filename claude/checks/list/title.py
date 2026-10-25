@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -20,7 +21,9 @@ def read_names(check: steps.Check, project: ins.Project) -> t.List[str]:
 def edit_title(page: pw.Page, title: str) -> None:
     """A click on the title of a line; returns when the caret is in it."""
     ll.line(page, title).locator("p").first.click()
-    page.wait_for_function("() => document.activeElement?.tagName === 'INPUT'")
+    page_changes.wait_until_true(
+        page, "() => document.activeElement?.tagName === 'INPUT'"
+    )
 
 
 def run(check: steps.Check) -> None:

@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 OPEN: str = "Plan the release"
@@ -55,7 +56,7 @@ def read_counts(page: pw.Page) -> t.Dict[str, int]:
 def open_display(page: pw.Page) -> pw.Locator:
     page.get_by_role("button", name="Display").first.click()
     panel: pw.Locator = page.locator("[data-filters-dropdown]")
-    panel.get_by_role("spinbutton").wait_for()
+    page_changes.wait_until_shown(panel.get_by_role("spinbutton"))
     return panel
 
 
@@ -132,7 +133,7 @@ def run(check: steps.Check) -> None:
     window: t.Optional[t.Dict[str, int]] = page.viewport_size
     assert window is not None
     page.set_viewport_size(LOW_WINDOW)
-    page.wait_for_function(f"() => ({SCROLLED_JS})().length === 1")
+    page_changes.wait_until_true(page, f"() => ({SCROLLED_JS})().length === 1")
     page.evaluate(SCROLL_TO_BOTTOM_JS)
     scrolled: t.List[t.List[int]] = page.evaluate(SCROLLED_JS)
     check.expect_at_least(
@@ -180,7 +181,7 @@ def run(check: steps.Check) -> None:
     )
 
     page.reload()
-    page.locator(ll.LINE).first.wait_for()
+    page_changes.wait_until_shown(page.locator(ll.LINE).first)
     check.expect(
         "after a reload the list still hides every closed work item",
         lambda: read_shown(page),

@@ -10,12 +10,9 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
-
-
-def read_main_text(page: pw.Page) -> str:
-    page.wait_for_load_state("networkidle")
-    return page.locator("main").last.inner_text()
+import work_item_addresses as wa
 
 
 def run(check: steps.Check) -> None:
@@ -49,12 +46,14 @@ def run(check: steps.Check) -> None:
     page = browser.open_page(
         check, member, f"{workspace}/projects/{project.id}/issues/"
     )
-    old: str = read_main_text(page)
+    # what the old address shows once it has loaded: the offer to join the project
+    page_changes.wait_until_shown(page.get_by_role("button", name="Join project"))
+    old: str = wa.read_main_text(page)
     page.goto(f"{check.instance.url}{home}/")
     check.expect(
         "a member of the workspace who is not in the project: its short address shows what its old address "
         "shows, and stays as typed",
-        lambda: (page.evaluate("location.pathname"), read_main_text(page)),
+        lambda: (page.evaluate("location.pathname"), wa.read_main_text(page)),
         (f"{home}/", old),
     )
     page.context.close()
@@ -63,12 +62,12 @@ def run(check: steps.Check) -> None:
         check, administrator, f"{workspace}/browse/{project.identifier}-99999/"
     )
     # the page of one work item asks the server several times before it says that there is no such work item
-    page.get_by_text("does not exist").first.wait_for(timeout=40_000)
-    old = read_main_text(page)
+    page_changes.wait_until_shown(page.get_by_text("does not exist").first, timeout=40)
+    old = wa.read_main_text(page)
     page.goto(f"{check.instance.url}{home}-99999/")
     check.expect(
         "a number that no work item has: the short address shows what the page of such a work item shows",
-        lambda: read_main_text(page),
+        lambda: wa.read_main_text(page),
         old,
         timeout=40,
     )
@@ -77,7 +76,7 @@ def run(check: steps.Check) -> None:
         {administrator: ins.ROLE_ADMIN}, identifier="DRAFTS", name="Named as a page"
     )
     page.goto(f"{check.instance.url}{workspace}/projects/{drafts.id}/issues/")
-    page.get_by_role("button", name="Display").wait_for()
+    page_changes.wait_until_shown(page.get_by_role("button", name="Display"))
     check.expect(
         "a project whose identifier is a word of the app's own pages keeps its old address",
         lambda: page.evaluate("location.pathname"),

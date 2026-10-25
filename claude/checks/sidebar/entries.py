@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 SECTION: str = '[aria-label="Main sidebar"] [class~="group/sidebar-section"]'
@@ -94,7 +95,7 @@ def run(check: steps.Check) -> None:
     dialog: pw.Locator = page.get_by_role("dialog").filter(
         has_text="Customize navigation"
     )
-    dialog.wait_for()
+    page_changes.wait_until_shown(dialog)
     check.expect(
         '"Customize navigation" lists the entries that can be moved, without a box to tick',
         lambda: (sorted(page.evaluate(DIALOG_JS)[0]), page.evaluate(DIALOG_JS)[1]),

@@ -12,6 +12,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 SECTION: str = '[aria-label="Main sidebar"] [class~="group/sidebar-section"]'
@@ -202,7 +203,7 @@ def run(check: steps.Check) -> None:
     other: ins.Project = check.project({account: ins.ROLE_ADMIN})
     page.reload()
     # the sidebar draws its projects again when the page has loaded, and a project taken before then is let go
-    page.locator(ll.LINE).first.wait_for()
+    page_changes.wait_until_shown(page.locator(ll.LINE).first)
     projects: pw.Locator = section(page, "Projects")
 
     def read_projects() -> t.List[str]:
@@ -227,7 +228,8 @@ def run(check: steps.Check) -> None:
     ).bounding_box()
     assert box is not None
     grip: browser.Point = (box["x"] - 5, box["y"] + box["height"] / 2)
-    page.wait_for_function(
+    page_changes.wait_until_true(
+        page,
         """([x, y]) => {
           const handle = document.elementFromPoint(x, y)?.closest('[aria-label="Drag to rearrange"]');
           return handle && getComputedStyle(handle).opacity === '1';

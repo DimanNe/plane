@@ -2,8 +2,10 @@
 The steps of a check, and what one run of a check knows.
 
 A step states a rule and compares the whole of what is read with the whole of what is expected. It reads again
-until the two are the same or its time is over: the page is given the time it needs, and no step waits by the
-clock. A step that says something does not happen reads until the pages can no longer make it happen (settle.py). A step that fails says what it got and what it expected and leaves a picture of every page of the check.
+each time a page of the check has changed (page_changes.py) until the two are the same or its time is over: the
+page is given the time it needs, and no step waits by the clock. A step that says something does not happen reads
+until the pages can no longer make it happen (settle.py). A step that fails says what it got and what it expected
+and leaves a picture of every page of the check.
 A check goes on after a failed step, since the steps after it may be about other rules.
 """
 
@@ -15,12 +17,12 @@ import typing as t
 import playwright.sync_api as pw
 
 import instance as ins
+import page_changes
 import settle
 
 # How long a step reads again before it fails. The page answers a person within a second; on a machine that is
 # busy with other work a list of a hundred lines can take several.
 STEP_TIMEOUT: float = 15
-READ_AGAIN_AFTER: float = 0.05
 
 
 @dc.dataclass(frozen=True)
@@ -87,7 +89,7 @@ class Check:
         deadline: float = time.monotonic() + timeout
         got: t.Any = read_or_say_why(read)
         while got != expected and time.monotonic() < deadline:
-            time.sleep(READ_AGAIN_AFTER)
+            page_changes.wait_for_page_change(self.pages, deadline)
             got = read_or_say_why(read)
         if got == expected:
             self.steps.append(Step(rule, None))
@@ -101,18 +103,24 @@ class Check:
         change it (see settle.py): for a rule that says that something does not happen. It reads meanwhile too,
         so that a change that comes and goes again is seen."""
         settle.start_settle_waits(self.pages, STEP_TIMEOUT)
+        # the waits of the pages end by then, and each tells it as a change
+        deadline: float = time.monotonic() + STEP_TIMEOUT
         got: t.Any = read()
         results: t.Optional[t.List[t.Dict[str, t.Any]]] = settle.read_settle_results(
             self.pages
         )
-        while got == expected and results is None:
-            time.sleep(READ_AGAIN_AFTER)
+        while got == expected and results is None and time.monotonic() < deadline:
+            page_changes.wait_for_page_change(self.pages, deadline, is_each_frame=True)
             got = read()
             results = settle.read_settle_results(self.pages)
         if got != expected:
             self.fail(rule, f"got      {got!r}\n        expected {expected!r}")
             return
-        assert results is not None
+        if results is None:
+            results = settle.read_settle_results(self.pages)
+        if results is None:
+            self.fail(rule, f"a page did not end its wait after {STEP_TIMEOUT:.0f} s")
+            return
         unsettled: t.List[t.Any] = [
             result["pending"] for result in results if not result["settled"]
         ]

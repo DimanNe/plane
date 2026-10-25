@@ -8,6 +8,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -40,7 +41,7 @@ def run(check: steps.Check) -> None:
     )
     ll.line(page, "kept").locator("p").first.click(position={"x": 8, "y": 8})
     title: pw.Locator = page.locator('input[aria-label="Work item title"]')
-    title.wait_for()
+    page_changes.wait_until_shown(title)
     page.keyboard.press("Home")
     page.keyboard.press("Delete")
     page.keyboard.press("Shift+Delete")
@@ -54,10 +55,10 @@ def run(check: steps.Check) -> None:
         ("ept", 0, ["kept", "other"]),
     )
     page.keyboard.press("Escape")
-    title.wait_for(state="detached")
+    page_changes.wait_until_removed(title)
     page.keyboard.press("n")
     page.keyboard.press("i")
-    page.locator(ll.CREATE_DIALOG).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.CREATE_DIALOG))
     page.keyboard.press("Tab")
     page.keyboard.press("Delete")
     page.keyboard.press("Shift+Delete")

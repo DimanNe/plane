@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 EDITOR: str = '#full-screen-portal .ProseMirror[contenteditable="true"]'
@@ -24,7 +25,7 @@ def open_comment_menu(page: pw.Page, comment_id: str) -> None:
     page.locator(
         f'xpath=//*[@id="editor-container-{comment_id}"]/ancestor::*[.//button[@aria-label="Options"]][1]'
     ).get_by_role("button", name="Options").last.click()
-    page.get_by_role("menu").wait_for()
+    page_changes.wait_until_shown(page.get_by_role("menu"))
 
 
 def run(check: steps.Check) -> None:
@@ -37,7 +38,7 @@ def run(check: steps.Check) -> None:
     writes: t.List[str] = browser.record_writes(page)
     ll.select_line(page, "talked about")
     page.keyboard.press("Enter")
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     comment: pw.Locator = page.locator(EDITOR).last
     comment.click()
     page.keyboard.type("first line")

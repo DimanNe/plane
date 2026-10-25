@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # Where the caret is: at the end of the title, elsewhere in the title, in the description (the editable part that
@@ -128,7 +129,7 @@ def run(check: steps.Check) -> None:
         ("a title!", "second line"),
     )
     page.keyboard.press("Control+Enter")
-    dialog.wait_for(state="detached")
+    page_changes.wait_until_removed(dialog)
 
     ll.select_line(page, "with text")
     page.keyboard.press("Enter")
@@ -163,7 +164,7 @@ def run(check: steps.Check) -> None:
     description.click()
     work_item_page.keyboard.press("Control+Home")
     work_item_page.keyboard.type("/")
-    work_item_page.locator("#slash-command").wait_for()
+    page_changes.wait_until_shown(work_item_page.locator("#slash-command"))
     work_item_page.keyboard.press("ArrowUp")
     check.expect(
         "in the work item's page ↑ on the first line moves in the open menu of / and leaves the caret in the "

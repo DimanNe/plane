@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 import browser
 import chart
 import instance as ins
+import page_changes
 import steps
 
 
@@ -65,7 +66,9 @@ def take_way_out(
     page.locator('div[class~="z-[3]"] [class~="text-11"]').filter(
         has_text="too early"
     ).first.hover()
-    page.locator(chart.CARD).get_by_role("button", name=way).wait_for()
+    page_changes.wait_until_shown(
+        page.locator(chart.CARD).get_by_role("button", name=way)
+    )
     writes: t.List[str] = browser.record_writes(page)
     page.locator(chart.CARD).get_by_role("button", name=way).click()
     return project, page, writes

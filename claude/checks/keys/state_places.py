@@ -13,6 +13,7 @@ import browser
 import chart
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 PALETTE: str = "[cmdk-input]:not(.menu-choice-picture [cmdk-input])"
@@ -42,7 +43,7 @@ def run(check: steps.Check) -> None:
     page: pw.Page = ll.open_list(check, account, project, group_by=None)
     ll.select_line(page, "in the view")
     page.keyboard.press("Enter")
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     page.keyboard.press("s")
     check.expect(
         "the view beside the list open: S opens its menu of states",
@@ -64,7 +65,7 @@ def run(check: steps.Check) -> None:
     page = browser.open_page(
         check, account, f"/{check.instance.workspace}/projects/{project.id}/issues/"
     )
-    page.get_by_text("on the board", exact=True).first.wait_for()
+    page_changes.wait_until_shown(page.get_by_text("on the board", exact=True).first)
     writes: t.List[str] = browser.record_writes(page)
     page.keyboard.press("s")
     page.keyboard.press("d")
@@ -74,9 +75,9 @@ def run(check: steps.Check) -> None:
         [],
     )
     page.get_by_text("on the board", exact=True).first.click()
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("t")
     check.expect(
         "the board with the view of a work item open: S T sets Todo",
@@ -95,7 +96,7 @@ def run(check: steps.Check) -> None:
         account,
         f"/{check.instance.workspace}/browse/{project.identifier}-{sequence}/",
     )
-    page.get_by_text("on its page", exact=True).first.wait_for()
+    page_changes.wait_until_shown(page.get_by_text("on its page", exact=True).first)
     page.locator("body").click(position={"x": 5, "y": 300})
     page.keyboard.press("s")
     check.expect(
@@ -159,7 +160,7 @@ def run(check: steps.Check) -> None:
     page = ll.open_list(check, account, other, group_by=None)
     ll.select_line(page, "named otherwise")
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("d")
     check.expect(
         "a project without a state Done: D takes the first state of the group of done states",

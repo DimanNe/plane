@@ -75,8 +75,10 @@ check, spreads the checks over the run directories it is given, and removes what
 A check says in its first lines the rule it guards. Then it reads from top to bottom: the data it
 builds through `/api/v1/`, what a person does, with real pointer and key events, and what must
 then be true on the page and on the server. A step waits for what the page shows and never by
-the clock, unless its rule is that nothing happens. What two checks need is in the modules
-beside `run.py`.
+the clock, unless its rule is about time, such as a key repeat. It reads again when the page has
+changed (`page_changes.py`): `wait_until_shown`, `wait_until_removed` and `wait_until_true` take
+the place of Playwright's `wait_for` and `wait_for_function`, which read again on a clock or every
+frame. What two checks need is in the modules beside `run.py`.
 
 **A task that changes behaviour changes its check in the same commit**, and a task that settles
 a new rule adds a check for it.

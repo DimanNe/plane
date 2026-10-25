@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 
 import browser
 import instance as ins
+import page_changes
 import steps
 
 # For each project, by its name: whether its button in the sidebar says it is open, and whether its pages are shown,
@@ -49,7 +50,8 @@ def run(check: steps.Check) -> None:
     second: ins.Project = check.project({account: ins.ROLE_ADMIN}, cycle_view=True)
     projects: t.List[ins.Project] = [first, second]
     page: pw.Page = browser.open_page(check, account, f"/{check.instance.workspace}/")
-    page.wait_for_function(
+    page_changes.wait_until_true(
+        page,
         "(names) => names.every((name) => [...document.querySelectorAll('[aria-label=\"Main sidebar\"] p')]"
         ".some((text) => text.textContent.trim() === name))",
         arg=[first.name, second.name],

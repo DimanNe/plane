@@ -12,6 +12,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -19,7 +20,7 @@ def check_shared_list(
     check: steps.Check, page: pw.Page, where: str, has_filter: bool
 ) -> None:
     page.get_by_role("button", name="List Layout").first.click()
-    page.locator(ll.LINE).first.wait_for()
+    page_changes.wait_until_shown(page.locator(ll.LINE).first)
     check.expect(
         f"{where}: the lines have the state circle",
         lambda: page.locator(f'{ll.LINE} button[aria-label^="State, "]').count()
@@ -35,7 +36,7 @@ def check_shared_list(
         titles[1:2],
     )
     ll.line(page, "two").locator('button[aria-label^="State, "]').click(button="right")
-    page.get_by_role("menu").wait_for()
+    page_changes.wait_until_shown(page.get_by_role("menu"))
     check.expect(
         f"{where}: a right click on the state offers the filter by it"
         if has_filter
@@ -96,7 +97,7 @@ def run(check: steps.Check) -> None:
     )
     page.goto(f"{check.instance.url}{projects}/archives/issues/")
     line: pw.Locator = ll.line(page, "done")
-    line.wait_for()
+    page_changes.wait_until_shown(line)
     line.hover()
     check.expect(
         'the archive: a line shows no "..." button, also under the pointer',

@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 import instance as ins
 import list_add_in_group as ag
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -69,7 +70,7 @@ def check_groups_of_state(
     ag.close_dialog(page)
 
     ll.plus_of_group(page, "Done").click()
-    page.wait_for_function("() => document.activeElement?.name === 'name'")
+    page_changes.wait_until_true(page, "() => document.activeElement?.name === 'name'")
     page.keyboard.type("added to done")
     page.keyboard.press("Control+Enter")
     check.expect(
@@ -87,7 +88,7 @@ def check_groups_of_state(
         lambda: ll.read_groups(page)[2],
         ["In Progress", 1, 0, True],
     )
-    dialog.wait_for(state="detached")
+    page_changes.wait_until_removed(dialog)
     ll.plus_of_group(page, "In Progress").click()
     check.expect(
         'the "+" of a folded group unfolds it and opens the dialog in its state',

@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -97,7 +98,7 @@ def run(check: steps.Check) -> None:
     ll.select_line(page, "one")
     ll.line(page, "three").hover()
     ll.line(page, "three").get_by_role("button", name="Add child").click()
-    dialog.wait_for()
+    page_changes.wait_until_shown(dialog)
     page.keyboard.type("child by the line's button")
     page.keyboard.press("Control+Enter")
     check.expect(

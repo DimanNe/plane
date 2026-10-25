@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 STATE_AT_LINE: str = 'button[aria-label^="State, "]'
@@ -156,7 +157,7 @@ def run(check: steps.Check) -> None:
     )
     ll.select_line(page, "todo 1")
     page.keyboard.press("Enter")
-    page.locator(STATE_IN_VIEW_BESIDE).wait_for()
+    page_changes.wait_until_shown(page.locator(STATE_IN_VIEW_BESIDE))
     old_place = get_rect(ll.line(page, "todo 1"))
     ll.record_box(page, "todo 1", still="backlog 0")
     page.locator(STATE_IN_VIEW_BESIDE).click()

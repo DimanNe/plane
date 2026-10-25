@@ -8,6 +8,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 CARET_IN_DIALOG_DESCRIPTION_JS: str = """
@@ -45,7 +46,7 @@ def run(check: steps.Check) -> None:
         ("a title", "first words", True, ["with text"]),
     )
     page.keyboard.press("Control+Enter")
-    dialog.wait_for(state="detached")
+    page_changes.wait_until_removed(dialog)
     check.expect(
         "Ctrl+Enter saves the work item with its title and its description",
         lambda: ll.read_description(check, project, "a title"),

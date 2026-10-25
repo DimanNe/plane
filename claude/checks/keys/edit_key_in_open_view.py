@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -27,7 +28,7 @@ def run(check: steps.Check) -> None:
     page: pw.Page = ll.open_list(check, account, project, group_by=None)
     ll.select_line(page, "with text")
     page.keyboard.press("e")
-    page.wait_for_function(ll.CARET_IN_DESCRIPTION_JS, arg=ids["with text"])
+    page_changes.wait_until_true(page, ll.CARET_IN_DESCRIPTION_JS, arg=ids["with text"])
     page.keyboard.type("word ")
     check.expect(
         "the caret stands at the very beginning of a description that has text",
@@ -37,10 +38,10 @@ def run(check: steps.Check) -> None:
     page.locator(
         '#full-screen-portal button[aria-label="Close the peek view"]'
     ).first.click()
-    page.locator(ll.PANEL_TITLE).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.PANEL_TITLE))
     page.keyboard.press("ArrowDown")
     page.keyboard.press("Enter")
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     page.locator(ll.PANEL_TITLE).click()
     page.keyboard.press("End")
     page.keyboard.press("e")
@@ -52,13 +53,13 @@ def run(check: steps.Check) -> None:
     page.keyboard.press("Backspace")
     page.keyboard.press("Escape")
     page.keyboard.press("Escape")
-    page.locator(ll.PANEL_TITLE).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.PANEL_TITLE))
     page.keyboard.press("Enter")
-    page.locator(ll.PANEL_TITLE).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PANEL_TITLE))
     page.locator("body").click(position={"x": 5, "y": 400})
     ll.select_line(page, "third")
     page.keyboard.press("e")
-    page.wait_for_function(ll.CARET_IN_DESCRIPTION_JS, arg=ids["third"])
+    page_changes.wait_until_true(page, ll.CARET_IN_DESCRIPTION_JS, arg=ids["third"])
     page.keyboard.type("in place")
     check.expect(
         "with the view already open for the line, E puts the caret in its description",
@@ -66,5 +67,5 @@ def run(check: steps.Check) -> None:
         "in place",
     )
     page.keyboard.press("Escape")
-    page.locator(ll.PANEL_TITLE).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.PANEL_TITLE))
     page.context.close()

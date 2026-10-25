@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # The autocomplete of the field that holds the title of the open dialog of a new work item.
@@ -34,13 +35,13 @@ def run(check: steps.Check) -> None:
         ["off"],
     )
     page.keyboard.press("Escape")
-    page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.CREATE_DIALOG))
 
     intake: pw.Page = browser.open_page(
         check, account, f"/{check.instance.workspace}/projects/{project.id}/intake/"
     )
     intake.get_by_role("button", name="Add work item").click()
-    intake.locator('[role="dialog"] input[name="name"]').wait_for()
+    page_changes.wait_until_shown(intake.locator('[role="dialog"] input[name="name"]'))
     check.expect(
         "the title of the dialog of a work item for intake has autocomplete off",
         lambda: intake.evaluate(TITLE_AUTOCOMPLETE_JS),

@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # The state and the priority that the dialog for a new work item begins with, as its buttons name them.
@@ -31,7 +32,7 @@ def read_dialog(page: pw.Page) -> t.List[t.Any]:
 
 def close_dialog(page: pw.Page) -> None:
     page.keyboard.press("Escape")
-    page.locator(ll.CREATE_DIALOG).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.CREATE_DIALOG))
 
 
 def read_stored(
@@ -61,9 +62,9 @@ def read_members(check: steps.Check, path: str) -> t.List[str]:
 def check_list_of_cycle_or_module(
     check: steps.Check, page: pw.Page, where: str, members: str
 ) -> None:
-    page.locator(ll.LINE).first.wait_for()
+    page_changes.wait_until_shown(page.locator(ll.LINE).first)
     ll.plus_of_group(page, "Todo").click()
-    page.wait_for_function("() => document.activeElement?.name === 'name'")
+    page_changes.wait_until_true(page, "() => document.activeElement?.name === 'name'")
     page.keyboard.type(f"by the + of {where}")
     page.keyboard.press("Control+Enter")
     ll.select_line(page, "in todo")

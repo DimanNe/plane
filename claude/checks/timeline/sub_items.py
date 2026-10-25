@@ -7,6 +7,7 @@ import playwright.sync_api as pw
 
 import chart
 import instance as ins
+import page_changes
 import steps
 
 
@@ -47,7 +48,7 @@ def run(check: steps.Check) -> None:
             .filter(has_text="Order by")
             .last
         )
-        menu.wait_for()
+        page_changes.wait_until_shown(menu)
         check.expect(
             "  and its Display menu offers no choice of sub-work items",
             lambda: "sub-work items" in menu.inner_text().lower(),

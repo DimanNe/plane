@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -54,7 +55,7 @@ def run(check: steps.Check) -> None:
     # Playwright hands a request to the check only while the check calls it, and the reads below go to the server;
     # so nothing of the work item is held any more
     page.unroute(work_item)
-    page.wait_for_function(ll.CARET_IN_DESCRIPTION_JS, arg=ids["slow"])
+    page_changes.wait_until_true(page, ll.CARET_IN_DESCRIPTION_JS, arg=ids["slow"])
     page.keyboard.type("and after")
     check.expect(
         "when it has come, what was typed meanwhile is in its description, before what is typed after",
@@ -62,5 +63,5 @@ def run(check: steps.Check) -> None:
         "nc sd while it loads and after",
     )
     page.keyboard.press("Escape")
-    page.locator(ll.PANEL_TITLE).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.PANEL_TITLE))
     page.context.close()

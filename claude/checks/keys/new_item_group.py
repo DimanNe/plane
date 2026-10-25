@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -32,7 +33,7 @@ def run(check: steps.Check) -> None:
     )
     page.keyboard.press("n")
     page.keyboard.press("i")
-    page.locator(ll.CREATE_DIALOG).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.CREATE_DIALOG))
     page.keyboard.press("Escape")
     check.expect(
         "a dialog in which nothing was typed closes on Escape, without a question",

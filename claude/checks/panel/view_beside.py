@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 VIEW: str = "#full-screen-portal"
@@ -43,7 +44,7 @@ def run(check: steps.Check) -> None:
 
     ll.select_line(page, "with a description")
     page.keyboard.press("Enter")
-    close.wait_for()
+    page_changes.wait_until_shown(close)
     check.expect(
         'the right-most control of the view\'s header is the "x" that closes it',
         lambda: page.evaluate(

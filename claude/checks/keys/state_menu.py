@@ -13,6 +13,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # Writes down, from now on, the state marked in the first picture of a menu that the page leaves.
@@ -47,7 +48,7 @@ MENU_AT_LINE_JS: str = """
 def press_state_key(page: pw.Page, letter: str) -> None:
     page.evaluate(WATCH_PICTURE_JS)
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press(letter)
 
 
@@ -110,7 +111,7 @@ def run(check: steps.Check) -> None:
     )
 
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("ArrowDown")
     check.expect_stays(
         "S and Arrow Down: the menu stays open as an ordinary one",
@@ -128,7 +129,7 @@ def run(check: steps.Check) -> None:
         (0, [], "Cancelled"),
     )
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("r")
     check.expect(
         "S R in a project with no state Review: a message says so, and the menu stays open for a choice by hand",
@@ -149,7 +150,7 @@ def run(check: steps.Check) -> None:
 
     ll.line(page, "third").locator("p").first.click(position={"x": 8, "y": 8})
     title: pw.Locator = page.locator('input[aria-label="Work item title"]')
-    title.wait_for()
+    page_changes.wait_until_shown(title)
     page.keyboard.press("End")
     page.keyboard.press("s")
     page.keyboard.press("d")

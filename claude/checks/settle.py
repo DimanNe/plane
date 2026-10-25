@@ -104,6 +104,11 @@ SETTLE_WATCH_JS: str = """
     set(listener) { onmessage.set.call(this, wrapForSocket(listener)); },
   });
   const isMadeByPageAfterAct = () => firstActAt !== null && origin !== "socket" && !isCalledByCheck();
+  // what the wait under way does when something that it waits for has ended; null while none is under way
+  let onPendingEnded = null;
+  const tellPendingEnded = () => {
+    if (onPendingEnded) onPendingEnded();
+  };
 
   const originalSetTimeout = window.setTimeout.bind(window);
   const originalClearTimeout = window.clearTimeout.bind(window);
@@ -113,14 +118,21 @@ SETTLE_WATCH_JS: str = """
     const madeInOrigin = origin;
     let id;
     const run = typeof handler === "function"
-      ? function () { timers.delete(id); return runWithOrigin(madeInOrigin, handler, this, arguments); }
+      ? function () {
+          const wasCounted = timers.delete(id);
+          try {
+            return runWithOrigin(madeInOrigin, handler, this, arguments);
+          } finally {
+            if (wasCounted) tellPendingEnded();
+          }
+        }
       : handler;
     id = originalSetTimeout(run, delay, ...rest);
     if (isCounted) timers.set(id, String(handler).slice(0, 80));
     return id;
   };
   window.clearTimeout = function (id) {
-    timers.delete(id);
+    if (timers.delete(id)) tellPendingEnded();
     return originalClearTimeout(id);
   };
   const originalSetInterval = window.setInterval.bind(window);
@@ -133,7 +145,7 @@ SETTLE_WATCH_JS: str = """
     return id;
   };
   window.clearInterval = function (id) {
-    intervals.delete(id);
+    if (intervals.delete(id)) tellPendingEnded();
     return originalClearInterval(id);
   };
   const originalRequestAnimationFrame = window.requestAnimationFrame.bind(window);
@@ -144,27 +156,37 @@ SETTLE_WATCH_JS: str = """
     const madeInOrigin = origin;
     let id;
     id = originalRequestAnimationFrame(function () {
-      frameCallbacks.delete(id);
-      return runWithOrigin(madeInOrigin, callback, this, arguments);
+      const wasCounted = frameCallbacks.delete(id);
+      try {
+        return runWithOrigin(madeInOrigin, callback, this, arguments);
+      } finally {
+        if (wasCounted) tellPendingEnded();
+      }
     });
     if (isCounted) frameCallbacks.set(id, String(callback).slice(0, 80));
     return id;
   };
   window.cancelAnimationFrame = function (id) {
-    frameCallbacks.delete(id);
+    if (frameCallbacks.delete(id)) tellPendingEnded();
     return originalCancelAnimationFrame(id);
   };
   let requestsInFlight = 0;
   const originalFetch = window.fetch.bind(window);
   window.fetch = function () {
     requestsInFlight += 1;
-    return originalFetch.apply(null, arguments).finally(() => { requestsInFlight -= 1; });
+    return originalFetch.apply(null, arguments).finally(() => { requestsInFlight -= 1; tellPendingEnded(); });
   };
   const originalSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function () {
     requestsInFlight += 1;
-    this.addEventListener("loadend", () => { requestsInFlight -= 1; }, { once: true });
+    this.addEventListener("loadend", () => { requestsInFlight -= 1; tellPendingEnded(); }, { once: true });
     return originalSend.apply(this, arguments);
+  };
+  const awaitedAnimations = new WeakSet();
+  const awaitEnd = (animation) => {
+    if (awaitedAnimations.has(animation)) return;
+    awaitedAnimations.add(animation);
+    animation.finished.then(tellPendingEnded, tellPendingEnded);
   };
   const readPending = () => ({
     timers: [...timers.values()],
@@ -175,7 +197,10 @@ SETTLE_WATCH_JS: str = """
       .filter((animation) => animation.playState === "running" && animation.effect &&
                animation.effect.getComputedTiming().endTime !== Infinity &&
                firstActAt !== null && (animation.startTime === null || animation.startTime >= firstActAt))
-      .map((animation) => animation.animationName || animation.transitionProperty || animation.constructor.name),
+      .map((animation) => {
+        awaitEnd(animation);
+        return animation.animationName || animation.transitionProperty || animation.constructor.name;
+      }),
   });
   const isBusy = (pending) => pending.timers.length + pending.intervals.length + pending.frameCallbacks.length +
     pending.requestsInFlight + pending.animations.length > 0;
@@ -183,28 +208,33 @@ SETTLE_WATCH_JS: str = """
     ownProjects,
     // null until the wait that start() began has ended: then whether the page settled, and what was left if not
     result: null,
+    capTimer: null,
+    // The page is looked at when the wait starts and whenever something that it waited for has ended, and the
+    // end of the wait is told to the watch of page_changes.py as a change.
     start(capMs) {
       window.__settle.result = null;
-      const startedAt = performance.now();
-      const tick = () => {
-        if (performance.now() - startedAt > capMs) {
-          window.__settle.result = { settled: false, pending: readPending() };
-          return;
-        }
-        if (isBusy(readPending())) {
-          originalSetTimeout(tick, 5);
-          return;
-        }
+      originalClearTimeout(window.__settle.capTimer);
+      const end = (result) => {
+        originalClearTimeout(window.__settle.capTimer);
+        onPendingEnded = null;
+        window.__settle.result = result;
+        window.dispatchEvent(new Event("checks-settled"));
+      };
+      window.__settle.capTimer = originalSetTimeout(() => end({ settled: false, pending: readPending() }), capMs);
+      let isConfirming = false;
+      const look = () => {
+        if (isConfirming || isBusy(readPending())) return;
+        isConfirming = true;
         originalRequestAnimationFrame(() => originalRequestAnimationFrame(() => originalSetTimeout(() => {
-          if (isBusy(readPending())) {
-            tick();
-            return;
-          }
+          isConfirming = false;
+          // ended by its cap meanwhile, or busy again: what began then tells when it ends
+          if (onPendingEnded !== look || isBusy(readPending())) return;
           firstActAt = null;
-          window.__settle.result = { settled: true };
+          end({ settled: true });
         }, 0)));
       };
-      tick();
+      onPendingEnded = look;
+      look();
     },
   };
 })();

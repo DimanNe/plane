@@ -12,6 +12,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -58,7 +59,7 @@ def run(check: steps.Check) -> None:
     )
     ll.select_line(page, "first")
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("d")
     check.expect(
         "what the person changes here is stored: S D sets Done",

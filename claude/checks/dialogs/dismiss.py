@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 import browser
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -27,7 +28,7 @@ def run(check: steps.Check) -> None:
     search: pw.Locator = page.get_by_text("Workspace level", exact=True)
 
     page.get_by_placeholder("Search commands...").first.click()
-    search.wait_for()
+    page_changes.wait_until_shown(search)
     # the search hangs from the top of the window; the lower part of the list is outside it
     page.mouse.click(
         *browser.get_point(page.locator(".vertical-scrollbar.scrollbar-lg"), down=0.9)
@@ -36,7 +37,7 @@ def run(check: steps.Check) -> None:
         "the command search closes on a press outside it", lambda: search.count(), 0
     )
     page.get_by_placeholder("Search commands...").first.click()
-    search.wait_for()
+    page_changes.wait_until_shown(search)
     page.keyboard.press("Escape")
     check.expect("and on Escape", lambda: search.count(), 0)
 

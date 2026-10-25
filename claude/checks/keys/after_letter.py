@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # Writes down whether the picture of the menu was on the page when the next press came.
@@ -59,7 +60,7 @@ def run(check: steps.Check) -> None:
         (True, ["third"], "Done"),
     )
     page.keyboard.press("s")
-    page.locator(ll.PROPERTY_MENU).wait_for()
+    page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press("p")
     check.expect(
         "S P then acts on that line",

@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # The entries of the open menu from top to bottom: "---" for a line between them, " (off)" after one that
@@ -37,7 +38,7 @@ def read_entries_above_usual_ones(page: pw.Page) -> t.List[str]:
 def open_menu_at(page: pw.Page, title: str, value: str) -> None:
     """A right click on a value of a line, found by the name its button has."""
     ll.line(page, title).get_by_role("button", name=value).first.click(button="right")
-    page.get_by_role("menu").wait_for()
+    page_changes.wait_until_shown(page.get_by_role("menu"))
 
 
 def read_stored_filter(
@@ -143,7 +144,7 @@ def run(check: steps.Check) -> None:
     )
 
     ll.line(page, "todo low").locator("p").first.click(button="right")
-    page.get_by_role("menu").wait_for()
+    page_changes.wait_until_shown(page.get_by_role("menu"))
     check.expect(
         "a right click on the title of a line: the menu of the line, without entries for a filter",
         lambda: (read_entries_above_usual_ones(page), page.evaluate(MENU_JS)[0]),

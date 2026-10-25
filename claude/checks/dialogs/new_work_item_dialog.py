@@ -11,6 +11,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # The opacity and the scale of a dialog with the title of a work item, in every frame the page draws from now on,
@@ -79,6 +80,8 @@ def run(check: steps.Check) -> None:
 
     page.evaluate(RECORD_OPENING_JS)
     dialog: pw.Locator = ll.open_create_dialog(page)
+    # FOR_REVIEWER: read every frame by Playwright, and not on a change of the page (page_changes.py): what is read
+    # is what the recorder writes in its own frame callbacks, which no change of the page tells of.
     page.wait_for_function("() => window.__isOpened")
     frames: t.List[t.List[t.Any]] = page.evaluate("() => window.__openingFrames")
     check.expect(
@@ -93,7 +96,7 @@ def run(check: steps.Check) -> None:
         lambda: page.evaluate(NAME_DRAWN_JS),
         ["Create new work item", False],
     )
-    dialog.locator(".ProseMirror p").first.wait_for()
+    page_changes.wait_until_shown(dialog.locator(".ProseMirror p").first)
     check.expect(
         'until something is typed into it, the description says "Add description"',
         lambda: dialog.locator(".ProseMirror p").first.get_attribute(

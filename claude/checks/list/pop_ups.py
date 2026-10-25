@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 # Of the open menu: how far its list can scroll, the gaps between its options (negative where they overlap),
@@ -33,7 +34,7 @@ MENU_JS: str = """
 
 
 def read_menu(page: pw.Page) -> t.Dict[str, t.Any]:
-    page.get_by_role("option").first.wait_for()
+    page_changes.wait_until_shown(page.get_by_role("option").first)
     return page.evaluate(MENU_JS)
 
 
@@ -72,7 +73,7 @@ def run(check: steps.Check) -> None:
                 (False, []),
             )
             page.keyboard.press("Escape")
-            page.get_by_role("option").first.wait_for(state="detached")
+            page_changes.wait_until_removed(page.get_by_role("option").first)
 
     page.set_viewport_size({"width": 1440, "height": 900})
     line.locator('button[aria-label^="Labels"]').click()

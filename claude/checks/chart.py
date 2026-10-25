@@ -14,6 +14,7 @@ import playwright.sync_api as pw
 
 import browser
 import instance as ins
+import page_changes
 import steps
 
 # The kinds of an arrow as the timeline names them, and the relation type that stores each from its previous task.
@@ -245,11 +246,13 @@ def open_timeline(
     page: pw.Page = browser.open_page(
         check, account, f"/{check.instance.workspace}/projects/{project.id}/issues/"
     )
-    page.locator(LINE).first.wait_for()
-    page.wait_for_function(
-        "() => document.querySelector('.vertical-scrollbar.isolate div.top-7') !== null"
+    page_changes.wait_until_shown(page.locator(LINE).first)
+    page_changes.wait_until_true(
+        page,
+        "() => document.querySelector('.vertical-scrollbar.isolate div.top-7') !== null",
     )
-    page.wait_for_function(
+    page_changes.wait_until_true(
+        page,
         "(count) => document.querySelectorAll('g[class~=\"group/arrow\"]').length >= count",
         arg=arrows,
     )
@@ -559,7 +562,7 @@ def open_arrow_control(
     """A click on the arrow between two tasks; its control, open."""
     page.mouse.click(*get_arrow_point(page, previous, following, part))
     control: pw.Locator = page.locator(CONTROL)
-    control.wait_for()
+    page_changes.wait_until_shown(control)
     return control
 
 

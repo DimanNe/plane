@@ -10,6 +10,7 @@ import playwright.sync_api as pw
 
 import instance as ins
 import list_layout as ll
+import page_changes
 import steps
 
 
@@ -35,7 +36,7 @@ def run(check: steps.Check) -> None:
     ll.select_line(page, "first")
     page.keyboard.press("e")
     page.keyboard.type("sd nc ", delay=35)
-    page.wait_for_function(ll.CARET_IN_DESCRIPTION_JS, arg=ids["first"])
+    page_changes.wait_until_true(page, ll.CARET_IN_DESCRIPTION_JS, arg=ids["first"])
     page.keyboard.type("typed after")
     check.expect(
         "E opens the selected line beside the list, and what was typed before the editor was there stands in the "
@@ -52,7 +53,7 @@ def run(check: steps.Check) -> None:
         ("Backlog", 0),
     )
     page.keyboard.press("Escape")
-    page.locator(ll.PANEL_TITLE).wait_for(state="detached")
+    page_changes.wait_until_removed(page.locator(ll.PANEL_TITLE))
     page.keyboard.press("ArrowDown")
     check.expect(
         "Escape closes the view, and Arrow Down moves the selection again",

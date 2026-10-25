@@ -9,6 +9,7 @@ import playwright.sync_api as pw
 
 import browser
 import instance as ins
+import page_changes
 import steps
 import work_item_addresses as wa
 
@@ -55,7 +56,8 @@ def run(check: steps.Check) -> None:
     )
 
     other.goto(f"{check.instance.url}{workspace}/projects/{ins.NO_SUCH_ID}/issues/")
-    other.wait_for_load_state("networkidle")
+    # what the address shows once it has loaded: that the project does not exist
+    page_changes.wait_until_shown(other.get_by_text("does not exist").first)
     no_project: str = wa.read_main_text(other)
     other.goto(f"{check.instance.url}{workspace}/nosuch/")
     check.expect(

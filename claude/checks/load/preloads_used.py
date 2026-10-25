@@ -12,6 +12,7 @@ import browser
 import instance as ins
 import list_layout as ll
 import plane_runtime
+import page_changes
 import steps
 
 # Notes every address that the page's own code asks for, before that code runs. The browser keeps the timings of
@@ -56,7 +57,7 @@ def run(check: steps.Check) -> None:
     )
     page.context.add_init_script(RECORD_ASKED_JS)
     page.reload()
-    ll.line(page, "a line").wait_for()
+    page_changes.wait_until_shown(ll.line(page, "a line"))
     expected_preloads: t.List[str] = sorted(
         check.instance.url + path.replace("{re.workspace.1}", check.instance.workspace)
         for path in plane_runtime.PRELOADED_API_REQUESTS_OF_EVERY_PAGE
