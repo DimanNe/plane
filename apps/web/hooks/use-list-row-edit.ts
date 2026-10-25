@@ -8,13 +8,15 @@ import { useEffect } from "react";
 // plane imports
 import { useLatestCallback } from "@plane/hooks";
 // components
+import { isListKey } from "@/components/issues/issue-layouts/list/list-keys";
 import type { TListRow } from "@/components/issues/issue-layouts/list/utils";
-import { isTypingInInput, resolveShortcutKey } from "@/components/power-k/core/shortcut-handler";
+import { resolveShortcutKey } from "@/components/power-k/core/shortcut-handler";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
 
 type Props = {
+  containerRef: React.MutableRefObject<HTMLElement | null>;
   selectedRow: TListRow | undefined;
   openRow: (row: TListRow) => void;
 };
@@ -24,10 +26,10 @@ type Props = {
  * caret stands at the start of its description (hooks/use-description-caret.ts gives it the caret). A view that
  * shows the work item already stays as it is.
  *
- * Not while the focus is where the key is typed text or has another meaning (a field, an editor, a menu, a dialog).
+ * Only where the key is the list's (see list-keys.ts), not where it is typed text or has another meaning.
  */
 export const useListRowEdit = (props: Props) => {
-  const { selectedRow, openRow } = props;
+  const { containerRef, selectedRow, openRow } = props;
   // store hooks
   const { descriptionAwaitingCaret, awaitDescriptionCaret, takeTypedForDescription } = useListView();
   const { peekIssue } = useIssueDetail();
@@ -35,8 +37,8 @@ export const useListRowEdit = (props: Props) => {
   const handleKeyDown = useLatestCallback((e: KeyboardEvent) => {
     // the key by its place on the keyboard where the layout has no Latin letters, as the shortcuts of the app
     if (resolveShortcutKey(e, null) !== "e" || !selectedRow) return;
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
-    if (isTypingInInput(e.target)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
+    if (!isListKey(e, containerRef.current)) return;
     e.preventDefault();
     if (peekIssue?.issueId !== selectedRow.issueId) openRow(selectedRow);
     awaitDescriptionCaret(selectedRow.issueId);

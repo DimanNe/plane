@@ -16,10 +16,10 @@ import type {
   TIssueMap,
 } from "@plane/types";
 // components
+import { isListKey, isPressedInList } from "@/components/issues/issue-layouts/list/list-keys";
 import type { TListRow } from "@/components/issues/issue-layouts/list/utils";
 import { getIssueIdsOfList, getListRows } from "@/components/issues/issue-layouts/list/utils";
 import { getIssueBlockId } from "@/components/issues/issue-layouts/utils";
-import { isTypingInInput } from "@/components/power-k/core/shortcut-handler";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
@@ -36,9 +36,7 @@ type Props = {
   collapsedGroups: TIssueKanbanFilters;
 };
 
-const isPlainKey = (e: KeyboardEvent) => !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
-// a key pressed in a text field, an editor, a menu or a dialog is not for the list
-const isListKey = (e: KeyboardEvent) => isPlainKey(e) && !isTypingInInput(e.target);
+const isPlainKey = (e: KeyboardEvent) => !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
 
 /**
  * The selected row of the List layout: moved and opened with the keyboard, kept among the rows the list shows.
@@ -184,9 +182,15 @@ export const useListRowSelection = (props: Props) => {
     };
   }, [selectClickedRow]);
 
+  // While an arrow key is held the work item view beside the list does not follow the selection, and shows the row
+  // the selection stops on when the key is released. Only the release of such a key does that: an arrow key released
+  // in the title or the description of the work item in the view moved nothing of the list, and the view may show
+  // another work item than the selected row, such as a sub-work item opened from within it.
+  const isViewWaitingForKeyUpRef = useRef(false);
   const moveSelection = (e: KeyboardEvent, step: number) => {
-    // the arrow keys also leave the title of the selected row while it is edited
-    if (!isListKey(e) && !(isPlainKey(e) && selectedRow?.isEditing)) return;
+    // the arrow keys also leave the title of the selected row while it is edited, a field of the list
+    const isInEditedTitle = !!selectedRow?.isEditing && !e.defaultPrevented && isPressedInList(e, containerRef.current);
+    if (!isPlainKey(e) || !(isListKey(e, containerRef.current) || isInEditedTitle)) return;
     e.preventDefault();
     const row = selectedRow ? rows[selectedRowIndex + step] : getRowBesideLastClick(step);
     if (!row) return;
@@ -200,12 +204,14 @@ export const useListRowSelection = (props: Props) => {
     // The work item view beside the list shows the selected work item. A held key passes many rows, and each
     // one shown would load its work item, so the view waits for the row the selection stops on.
     if (peekIssue && !e.repeat) openRow(row);
+    isViewWaitingForKeyUpRef.current = !!peekIssue && e.repeat;
   };
 
   const showSelectedRowAfterHeldKey = useLatestCallback((e: KeyboardEvent) => {
+    if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || !isViewWaitingForKeyUpRef.current) return;
+    isViewWaitingForKeyUpRef.current = false;
     const row = rows[selectedRowIndex];
-    if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || !row || !peekIssue || peekIssue.issueId === row.issueId)
-      return;
+    if (!row || !peekIssue || peekIssue.issueId === row.issueId) return;
     openRow(row);
   });
   useEffect(() => {
@@ -215,12 +221,13 @@ export const useListRowSelection = (props: Props) => {
 
   const toggleSelectedRow = (e: KeyboardEvent, shouldExpand: boolean) => {
     const row = rows[selectedRowIndex];
-    if (!isListKey(e) || !row?.hasSubIssues || row.isExpanded === shouldExpand) return;
+    if (!isPlainKey(e) || !isListKey(e, containerRef.current) || !row?.hasSubIssues || row.isExpanded === shouldExpand)
+      return;
     e.preventDefault();
     toggleIssueCollapse(row.issueId);
   };
 
-  useListRowEdit({ selectedRow: rows[selectedRowIndex], openRow });
+  useListRowEdit({ containerRef, selectedRow: rows[selectedRowIndex], openRow });
   useKeypress("ArrowDown", (e) => moveSelection(e, 1));
   useKeypress("ArrowUp", (e) => moveSelection(e, -1));
   useKeypress("ArrowRight", (e) => toggleSelectedRow(e, true));
@@ -229,7 +236,8 @@ export const useListRowSelection = (props: Props) => {
     const row = rows[selectedRowIndex];
     // Enter on a button, or on a link outside the list, activates that
     const isOnRow = e.target instanceof HTMLAnchorElement && containerRef.current?.contains(e.target);
-    if (!isListKey(e) || !row || !(e.target === document.body || isOnRow)) return;
+    if (!isPlainKey(e) || !isListKey(e, containerRef.current) || !row || !(e.target === document.body || isOnRow))
+      return;
     e.preventDefault();
     openRow(row);
   });

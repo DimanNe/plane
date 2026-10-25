@@ -14,9 +14,9 @@ import { useLatestCallback } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import type { TIssue, TIssueMap } from "@plane/types";
 // components
+import { isListKey } from "@/components/issues/issue-layouts/list/list-keys";
 import type { TListRow } from "@/components/issues/issue-layouts/list/utils";
 import { getIssueBlockId } from "@/components/issues/issue-layouts/utils";
-import { isTypingInInput } from "@/components/power-k/core/shortcut-handler";
 // hooks
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
@@ -40,9 +40,8 @@ type Props = {
  * does, and only where that menu has it for this user and this work item: the menu itself is asked. Alone
  * the key opens the menu's question; with Shift the work item is deleted without one.
  *
- * Only Delete: Backspace is pressed too easily for a key that removes a work item. Not while the focus is where
- * the key has another meaning (a field, an editor, a menu, a dialog), nor in another part of the page, such as
- * the work item view beside the list. A held key deletes once.
+ * Only Delete: Backspace is pressed too easily for a key that removes a work item. Only where the key is the list's
+ * (see list-keys.ts), not in the work item view beside the list nor in a field. A held key deletes once.
  *
  * Returns the row that takes the place of a row deleted this way, for the selection to go on from.
  */
@@ -94,15 +93,12 @@ export const useListRowDelete = (props: Props) => {
   useKeypress("Delete", (e) => {
     const row = rows[selectedRowIndex];
     const issue = row && issuesMap[row.issueId];
-    const isKeyOfTheList =
-      !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !isTypingInInput(e.target);
-    const isFocusInTheList =
-      e.target === document.body || (e.target instanceof Node && containerRef.current?.contains(e.target));
     // a row that the list has not drawn, far from the visible part, is not deleted unseen
     const rowElement =
       row &&
       document.getElementById(getIssueBlockId(row.issueId, row.groupId))?.querySelector('[class~="group/list-block"]');
-    if (!isKeyOfTheList || !isFocusInTheList || !issue || !rowElement) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || !isListKey(e, containerRef.current)) return;
+    if (!issue || !rowElement) return;
     const isOffered = e.shiftKey
       ? hasContextMenuItem(rowElement, DELETE_MENU_ITEM_KEY)
       : runContextMenuItem(rowElement, DELETE_MENU_ITEM_KEY);

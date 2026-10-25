@@ -36,6 +36,7 @@ import { copyUrlToClipboard, findHowManyDaysLeft, generateWorkItemLink } from "@
 // components
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { NameDescriptionUpdateStatus } from "@/components/issues/issue-update-status";
+import { isTypingInInput } from "@/components/power-k/core/shortcut-handler";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
@@ -209,6 +210,8 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // a key pressed in a field, an editor, a menu or a dialog is that control's: ↓ on a property opens its menu
+      if (isTypingInInput(e.target)) return;
       if (e.key === "ArrowUp") {
         handleInboxIssueNavigation("prev");
       } else if (e.key === "ArrowDown") {
