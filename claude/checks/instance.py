@@ -18,6 +18,7 @@ import json
 import os
 import pathlib as pl
 import secrets
+import select
 import socket
 import string
 import subprocess
@@ -48,9 +49,12 @@ JSONObject: t.TypeAlias = t.Dict[str, t.Any]
 # The server limits what one address may do in a minute while it is not signed in, and a run does more:
 # - the form of the sign-in page lets an address in a few times, and a run has more accounts than that; so an
 #   account is signed in where the server keeps its sessions, the way Django's test client does it;
-# - a page asks first what instance this is, a question the server answers so many times, since it reads the
-#   session for it from the cookie of its admin pages, which a user does not have; without the answer the page
-#   says that Plane did not start. So the account's session goes under that cookie's name too.
+# - a page asks first what instance this is (/api/instances/), a question the server answers an address that is not
+#   signed in only some times a minute; it reads the session for it from the cookie of the admin pages, which a user
+#   does not have, and without the answer the page says that Plane did not start. So the account is also signed in
+#   to the admin pages, with a session of its own as a sign-in there makes it: a session under both cookies would be
+#   renewed (SessionStore.load) by whichever of the page's first requests comes first, and only the cookie of that
+#   request would get the renewed expiry.
 # The account is also past the pages of a first visit.
 ACCOUNT_MAKER: str = (
     textwrap.dedent("""\
@@ -63,9 +67,9 @@ ACCOUNT_MAKER: str = (
     import django
     django.setup()
     import django.conf as conf
-    import django.contrib.auth as auth
     import django.contrib.auth.hashers as hashers
     import django.http as http
+    import plane.authentication.utils.login as login
     import plane.db.models as db_models
 """)
     + plane_runtime.BOOTSTRAP_ADMINISTRATOR
@@ -87,6 +91,15 @@ ACCOUNT_MAKER: str = (
     printing: threading.Lock = threading.Lock()
 
 
+    def make_session(user: db_models.User, **signed_in_at: bool) -> str:
+        # the session that signing in to the app (is_app=True) or to its admin pages (is_admin=True) makes: the views
+        # that sign a person in make it with this call
+        request = http.HttpRequest()
+        request.session = importlib.import_module(conf.settings.SESSION_ENGINE).SessionStore()
+        login.user_login(request, user, **signed_in_at)
+        return request.session.session_key
+
+
     def sign_in(email: str) -> dict:
         user, _ = db_models.User.objects.get_or_create(email=email, defaults={"username": email})
         user.password = password_hash
@@ -96,13 +109,15 @@ ACCOUNT_MAKER: str = (
         db_models.Profile.objects.update_or_create(
             user=user, defaults={"is_onboarded": True, "is_tour_completed": True, "onboarding_step": seen}
         )
-        request = http.HttpRequest()
-        request.session = importlib.import_module(conf.settings.SESSION_ENGINE).SessionStore()
-        auth.login(request, user, backend=conf.settings.AUTHENTICATION_BACKENDS[0])
-        request.session.save()
-        cookies: dict = dict.fromkeys(
-            (conf.settings.SESSION_COOKIE_NAME, conf.settings.ADMIN_SESSION_COOKIE_NAME), request.session.session_key
-        )
+        # FOR_REVIEWER: every account is signed in to the admin pages, not only those of the checks that need them:
+        # every page asks /api/instances/ first, and a run opens more pages than an address that is not signed in
+        # gets answers in a minute (measured: the 31st request of a minute was answered 429). The second session
+        # adds about 2 ms to each account (9 ms in place of 7). It lasts as long as a sign-in to the admin pages
+        # (ADMIN_SESSION_COOKIE_AGE), longer than any check; the run's administrator opens no page.
+        cookies: dict = {
+            conf.settings.SESSION_COOKIE_NAME: make_session(user, is_app=True),
+            conf.settings.ADMIN_SESSION_COOKIE_NAME: make_session(user, is_admin=True),
+        }
         return {"user_id": str(user.id), "cookies": cookies}
 
 
@@ -185,6 +200,20 @@ def draw_name(length: int) -> str:
 CONNECTIONS: t.Dict[str, http.client.HTTPConnection] = {}
 
 
+# The proxy of an instance (Caddy) closes a connection that its client has left idle for a while. A run's main
+# process leaves its connection idle from the moment the instance is open until the run ends and closes the
+# instance, which can be longer; http.client finds that out only when the request it then sends is answered with
+# nothing.
+def is_connection_closed_by_server(connection: http.client.HTTPConnection) -> bool:
+    """Whether the server has closed a kept connection, or sent on it what no request asked for: either way the
+    connection can carry no further request."""
+    if connection.sock is None:
+        return False
+    poller: select.poll = select.poll()
+    poller.register(connection.sock, select.POLLIN)
+    return bool(poller.poll(0))
+
+
 def send(
     url: str, method: str, headers: t.Dict[str, str], body: t.Optional[bytes]
 ) -> t.Any:
@@ -192,6 +221,15 @@ def send(
     if parts.netloc not in CONNECTIONS:
         CONNECTIONS[parts.netloc] = http.client.HTTPConnection(parts.netloc, timeout=60)
     connection: http.client.HTTPConnection = CONNECTIONS[parts.netloc]
+    # FOR_REVIEWER: Caddy closes a client's connection after its idle timeout, 300 s by default (measured: the close
+    # came at 300.0 s, and at 2.0 s with the timeout set to 2 s), and the close reaches this socket through rootless
+    # Docker's port forwarding. The server could still close the connection while the request is on its way, but
+    # only if the request comes within that moment of the idle timeout's end. Other ways, not taken: a new
+    # connection after an idle time shorter than Caddy's (a second number, which must stay below Caddy's), or a main
+    # process that drops its connection once the instance is open (a check's process keeps its own between checks).
+    if is_connection_closed_by_server(connection):
+        # nothing has been sent on it since its last answer, and http.client opens a new connection for this request
+        connection.close()
     try:
         connection.request(
             method,
@@ -249,10 +287,10 @@ class AccountMaker:
     run's main process. The socket has an address and no file, and goes with the process."""
 
     def __init__(self, run_dir: pl.Path, password: str, workspace: str) -> None:
-        # FOR_REVIEWER: one account takes about 7 ms here, but its threads share one interpreter lock, so the 54
+        # FOR_REVIEWER: one account takes about 9 ms here, but its threads share one interpreter lock, so the 54
         # accounts that a run's checks ask for as they start are made one after another: the last waits about
-        # 0.4 s. Workers forked after Plane is loaded would make them side by side, at the cost of memory, which is
-        # what limits the instances a run can have; not done until that 0.4 s is on the path of the slowest check.
+        # 0.6 s. Workers forked after Plane is loaded would make them side by side, at the cost of memory, which is
+        # what limits the instances a run can have; not done until that 0.6 s is on the path of the slowest check.
         self.run_dir: pl.Path = run_dir
         self.log: pl.Path = run_dir / "checks" / "account-maker.log"
         self.log.parent.mkdir(exist_ok=True)
@@ -378,8 +416,8 @@ def read_account(email: str, password: str, reply: JSONObject) -> Account:
 
 
 def sign_in(instance: Instance, email: str) -> Account:
-    """Gives the account with this address a session, and makes the account when there is none: through the run's
-    account maker of the instance."""
+    """Signs the account with this address in, to the app and to its admin pages, and makes the account when there is
+    none: through the run's account maker of the instance."""
     connection: socket.socket
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.connect(instance.account_maker_address)
