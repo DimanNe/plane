@@ -15,11 +15,11 @@ export const hasServerAnswered = (error: unknown): boolean => {
 };
 
 // A page can be open, or be opened, while the API of its instance does not answer: the instance is stopped, or its API
-// did not start up (while it starts, the proxy holds the API's requests; see write_caddy_config() in
-// scripts/plane_runtime.py). A page whose first requests failed says that Plane didn't start up correctly until those
-// requests, made again, are answered. SWR makes a failed request again after ever longer waits, so the page came back
-// long after the server did. A request that the server did not answer is made again at a short fixed interval instead;
-// one that it did answer, such as a 403, keeps SWR's own retry.
+// did not start up (while it starts, its address keeps the requests until it answers them; see
+// apps/api/preload_and_wait.py). A page whose first requests failed says that Plane didn't start up correctly until
+// those requests, made again, are answered. SWR makes a failed request again after ever longer waits, so the page came
+// back long after the server did. A request that the server did not answer is made again at a short fixed interval
+// instead; one that it did answer, such as a 403, keeps SWR's own retry.
 export const retryWhileServerDoesNotAnswer: NonNullable<SWRConfiguration["onErrorRetry"]> = (
   error,
   key,

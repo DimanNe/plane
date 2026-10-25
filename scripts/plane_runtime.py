@@ -747,19 +747,6 @@ def get_preload_header(paths: t.List[str]) -> str:
 def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     ports: t.Dict[plane_config.Service, int] = SERVICE_PORTS
     origin_pattern: str = re.escape(plane_origin)
-    # FOR_REVIEWER: a page opened while the instance starts is now blank until the API answers, instead of saying
-    # "didn't start up correctly" and then "Not Authorized!": its held preloads take all the connections that the
-    # browser opens to one host, so its code loads only then. Measured, the list shows about 1 s after the API
-    # answers, where it showed about 4 s after. A page opened while the API is down for good, as after a failed
-    # start, waits as long as START_TIMEOUT before it says that Plane didn't start up.
-    # FOR_REVIEWER: Caddy holds a request by connecting again at a short interval; a refused connection on the
-    # loopback costs next to nothing. Without that polling, preload_and_wait.py could listen on the API's address
-    # before it loads the code and hand the socket to gunicorn (--bind fd://), so that the kernel queues the
-    # connections until the API accepts them. That changes how the API starts, the proxy would have to start after
-    # that listen, and a request would then wait without a bound for an API that never starts.
-    # FOR_REVIEWER: saves are not held. Held, a POST was tried again with an empty body and answered 502 after the
-    # wait, with request_buffers too. Caddy 2.11 sends again a body that request_buffers holds, so with it saves made
-    # while the instance starts could be held as well; that is a newer proxy image and buffered request bodies.
     caddy_config: str = f"""{{
     admin off
     auto_https off
@@ -772,28 +759,13 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
 # The API redirects to Plane's own origin, which is not the address a browser used when it came through another
 # interface of the host or a tunnel. Such a redirect is made relative, so the browser stays at the address it used.
 # The origin followed by "//" is left alone: made relative, it would name another host.
-# The proxy serves pages while the instance starts, before the API listens, and has the browser fetch the API's first
-# answers along with each page (see the preloads below). The browser keeps those answers until the app's own requests
-# take them, so a 502 would reach the app after the API is back: the app would say that Plane didn't start up and ask
-# again a moment later, once for each step of its loading. So a request without a body that finds no API listening waits
-# until the API accepts it, as long as start itself waits for a service to become ready. A request with a body, such as
-# a save, is answered 502 at once: Caddy 2.10 tries it again without its body.
-(api_upstream) {{
-    transport http {{
-        keepalive off
-    }}
-    header_down Location "^{origin_pattern}(/[^/]|/$)" "$1"
-    header_down Location "^{origin_pattern}([?#]|$)" "/$1"
-}}
 (api) {{
-    @without_body method GET HEAD
-    reverse_proxy @without_body 127.0.0.1:{ports[plane_config.Service.API]} {{
-        import api_upstream
-        lb_try_duration {START_TIMEOUT}s
-        lb_try_interval 50ms
-    }}
     reverse_proxy 127.0.0.1:{ports[plane_config.Service.API]} {{
-        import api_upstream
+        transport http {{
+            keepalive off
+        }}
+        header_down Location "^{origin_pattern}(/[^/]|/$)" "$1"
+        header_down Location "^{origin_pattern}([?#]|$)" "/$1"
     }}
 }}
 :{ports[plane_config.Service.PROXY]} {{
@@ -827,6 +799,8 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     # of the API then leads the code to ask the next question. The answers that do not depend on earlier ones are
     # asked for along with the page: the browser fetches them while the code loads, and the code's own requests
     # take them (a preload is only taken by a request of the same mode and credentials, hence use-credentials).
+    # The browser keeps a failed answer for the code just as well, so the proxy starts only once the API's address
+    # queues requests until the API answers them (start_api_then_proxy() and apps/api/preload_and_wait.py).
     # An address that is no file of the app is a page of the app (an asset that is not there, as after a new build,
     # is not); its first part names the workspace, unless it is one of the pages outside workspaces. That part goes
     # into a header, where a comma, a semicolon or an angle bracket would add or change preloads, so only what the
@@ -952,10 +926,16 @@ def wait_for_service_readiness(
                 process.stdout.close()
 
 
-def check_http_service(bind: BindAddress, path: str, timeout: float = 3) -> None:
+def check_http_service(
+    bind: BindAddress, path: str, timeout: float = START_TIMEOUT
+) -> None:
+    # The request waits behind those that reached the API while the instance started (see start_api_then_proxy()),
+    # however many they are: only start's own bound limits it.
+    # FOR_REVIEWER: it was 3 s at most; 400 requests made while the instance started took the API 4 s to answer, and
+    # start failed on its own probe.
     url: str = f"http://{bind.get_host_for_local_clients()}:{bind.port}{path}"
     response: http.client.HTTPResponse
-    with open_local_url(url, timeout=min(3, timeout)) as response:
+    with open_local_url(url, timeout=timeout) as response:
         if response.status != 200:
             raise RuntimeError(
                 f"Service readiness failed: {url}: HTTP {response.status}"
@@ -1488,14 +1468,17 @@ def start_proxy(
 def get_python_service_commands(
     run_dir: pl.Path,
 ) -> t.Dict[plane_config.Service, t.List[str]]:
+    """The arguments of apps/api/preload_and_wait.py for each Python service."""
     return {
         plane_config.Service.API: [
+            "--listen",
+            f"127.0.0.1:{SERVICE_PORTS[plane_config.Service.API]}",
             "gunicorn",
             "plane.wsgi:application",
             "--config",
             "python:plane.gunicorn_conf",
             "--bind",
-            f"127.0.0.1:{SERVICE_PORTS[plane_config.Service.API]}",
+            "fd://3",
             "--workers",
             "2",
             "--worker-class",
@@ -1745,9 +1728,47 @@ def start_plane_services(
             ),
         )
 
-    # Everything starts at once. The stores recover their data while the applications load their
-    # code, which takes longer; the three Python services then wait for START_SIGNAL, because they
-    # would connect to a store that is not ready yet.
+    def start_api_then_proxy() -> None:
+        # The proxy forwards to the API only once the API's address queues requests (see write_caddy_config()):
+        # before, it would answer them 502.
+        # FOR_REVIEWER: so the proxy serves about 0.2-0.3 s later than before. A page asked for in between, once the
+        # network container publishes the port, is refused, or gets an empty answer or a late one from rootless
+        # Docker's port forwarding, as it did before for a shorter while; no wait of 1 s was measured.
+        api_start_time: float = time.monotonic()
+        start_python_service(
+            run_dir,
+            plane_config.Service.API,
+            python_service_commands[plane_config.Service.API],
+            plane_environment,
+            api_image_id,
+            network_mode,
+            containers.get(plane_config.Service.API),
+        )
+        wait_for_service_readiness(
+            run_dir, plane_config.Service.API, "Plane listening:"
+        )
+        record_duration(
+            start_durations_ms,
+            plane_config.Service.PROXY,
+            functools.partial(
+                start_proxy,
+                run_dir,
+                bind,
+                image_ids[plane_config.Service.PROXY],
+                network_mode,
+                containers.get(plane_config.Service.PROXY),
+            ),
+        )
+        wait_for_service_readiness(
+            run_dir, plane_config.Service.API, "Plane code loaded:"
+        )
+        start_durations_ms[plane_config.Service.API] = round(
+            (time.monotonic() - api_start_time) * 1000, 3
+        )
+
+    # Everything starts at once, but the live server and the proxy, which wait for Redis and the API. The
+    # stores recover their data while the applications load their code, which takes longer; the three
+    # Python services then wait for START_SIGNAL, because they would connect to a store that is not ready yet.
     independent_jobs: Jobs = {
         plane_config.Service.POSTGRES: functools.partial(
             start_postgres,
@@ -1765,14 +1786,6 @@ def start_plane_services(
             image_ids[plane_config.Service.MINIO],
             network_mode,
             containers.get(plane_config.Service.MINIO),
-        ),
-        plane_config.Service.PROXY: functools.partial(
-            start_proxy,
-            run_dir,
-            bind,
-            image_ids[plane_config.Service.PROXY],
-            network_mode,
-            containers.get(plane_config.Service.PROXY),
         ),
         plane_config.Service.SPACE: functools.partial(
             start_space,
@@ -1794,41 +1807,60 @@ def start_plane_services(
                 containers.get(service),
             )
             for service, command in python_service_commands.items()
+            if service != plane_config.Service.API
         },
     }
-    run_jobs_in_parallel(
-        {
-            plane_config.Service.REDIS: start_redis_then_live,
-            **{
-                service: functools.partial(
-                    record_duration, start_durations_ms, service, operation
-                )
-                for service, operation in independent_jobs.items()
-            },
-        }
-    )
-    if not initialized or config.last_api_image != api_image_id:
-        run_api_command(
-            api_image_id,
-            ["python", "manage.py", "migrate", "--noinput"],
-            network_mode,
-            plane_environment,
+    try:
+        run_jobs_in_parallel(
+            {
+                plane_config.Service.REDIS: start_redis_then_live,
+                plane_config.Service.API: start_api_then_proxy,
+                **{
+                    service: functools.partial(
+                        record_duration, start_durations_ms, service, operation
+                    )
+                    for service, operation in independent_jobs.items()
+                },
+            }
         )
-    if not initialized:
-        management_command: t.List[str]
-        for management_command in (
-            ["register_instance", config.instance_id],
-            ["configure_instance"],
-            ["create_bucket"],
-        ):
+        if not initialized or config.last_api_image != api_image_id:
             run_api_command(
                 api_image_id,
-                ["python", "manage.py", *management_command],
+                ["python", "manage.py", "migrate", "--noinput"],
                 network_mode,
                 plane_environment,
             )
-        config.initialized = True
-        config.write(run_dir)
+        if not initialized:
+            management_command: t.List[str]
+            for management_command in (
+                ["register_instance", config.instance_id],
+                ["configure_instance"],
+                ["create_bucket"],
+            ):
+                run_api_command(
+                    api_image_id,
+                    ["python", "manage.py", *management_command],
+                    network_mode,
+                    plane_environment,
+                )
+            config.initialized = True
+            config.write(run_dir)
+    except BaseException:
+        # The API would wait for START_SIGNAL for good, and so would the requests that its address queued. Once it
+        # is killed the proxy answers them 502, and a page says that Plane didn't start up instead of loading for good.
+        # FOR_REVIEWER: nothing else limits how long a request queued while the API waits for START_SIGNAL waits. A
+        # start that fails after the signal leaves the API running, as before.
+        with contextlib.suppress(RuntimeError):
+            run_docker(
+                [
+                    "kill",
+                    "--signal",
+                    "SIGKILL",
+                    get_container_name(run_dir, plane_config.Service.API),
+                ],
+                capture=True,
+            )
+        raise
     run_docker(
         [
             "kill",
