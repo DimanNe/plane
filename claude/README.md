@@ -58,7 +58,7 @@ holds the tasks. So a session:
   at in enlarged screenshots, in the light and the dark theme. When an animation looks wrong,
   sample the geometry frame by frame before reading code.
 - What moves on the page is also tried in a real Chrome window started with the flags of the
-  owner's Chrome, which `tools/offscreen_chrome.sh PORT PROFILE_DIR FLAGS...` runs unseen. A
+  owner's Chrome, which `tools/offscreen_chrome.py PORT PROFILE_DIR FLAGS...` runs unseen. A
   headless browser draws differently: a transition that ended there never ended in his window.
 - Typing in the list, opening a pop-up and dragging on the timeline were made fast by measuring.
   A change near them is measured again, before and after, with `claude/checks/measure.py --run-dir RUN_DIR`.

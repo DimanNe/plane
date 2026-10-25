@@ -2,22 +2,22 @@
 The browser of a check, and what a person's hand does in any page.
 
 A check gets a browser of its own: a headless one, or a real Chrome window started unseen with the flag of the
-owner's Chrome (claude/tools/offscreen_chrome.sh). A real window draws differently from a headless browser, so
+owner's Chrome (claude/tools/offscreen_chrome.py). A real window draws differently from a headless browser, so
 every check passes in both. A window is started for one check and stopped after it: one that has served many
 checks stops giving pictures.
 """
 
+import concurrent.futures
 import contextlib
 import os
 import pathlib as pl
+import re
 import shutil
 import signal
-import socket
 import subprocess
-import time
+import tempfile
+import threading
 import typing as t
-import urllib.error
-import urllib.request
 
 import playwright.sync_api as pw
 
@@ -25,66 +25,80 @@ import instance as ins
 import settle
 import steps
 
-OFFSCREEN_CHROME: pl.Path = ins.REPOSITORY / "claude/tools/offscreen_chrome.sh"
+OFFSCREEN_CHROME: pl.Path = ins.REPOSITORY / "claude/tools/offscreen_chrome.py"
 WINDOW_START_TIMEOUT: float = 60
+# what Chrome writes on its standard error once its debugging port takes connections
+DEVTOOLS_LISTENING: re.Pattern[bytes] = re.compile(
+    rb"DevTools listening on (ws://\S+)\n"
+)
 Point: t.TypeAlias = t.Tuple[float, float]
 
 
-def find_free_port() -> int:
-    listener: socket.socket
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        return listener.getsockname()[1]
-
-
-def wait_for_debugging_port(port: int, window: "subprocess.Popen[bytes]") -> None:
-    deadline: float = time.monotonic() + WINDOW_START_TIMEOUT
-    while time.monotonic() < deadline:
-        if window.poll() is not None:
-            raise RuntimeError(f"{OFFSCREEN_CHROME} ended with {window.returncode}")
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=2)
-            return
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.2)
-    raise RuntimeError(f"Chrome did not open port {port} in {WINDOW_START_TIMEOUT} s")
+def copy_output_of_window_to_log(
+    window: "subprocess.Popen[bytes]",
+    log_path: pl.Path,
+    debugging_address: "concurrent.futures.Future[str]",
+) -> None:
+    """Writes what the window's processes say to the log as they say it, until they have all ended. Chrome says there
+    where its debugging port is once the port takes connections, and that address is given to `debugging_address`;
+    a window that ends without saying it gives the way it ended."""
+    assert window.stdout is not None
+    log: t.BinaryIO
+    with window.stdout, open(log_path, "wb") as log:
+        line: bytes
+        for line in window.stdout:
+            log.write(line)
+            log.flush()
+            found: t.Optional[re.Match[bytes]] = DEVTOOLS_LISTENING.fullmatch(line)
+            if found is not None and not debugging_address.done():
+                debugging_address.set_result(found.group(1).decode())
+    if not debugging_address.done():
+        debugging_address.set_exception(
+            RuntimeError(f"{OFFSCREEN_CHROME} ended with {window.wait()}")
+        )
 
 
 @contextlib.contextmanager
 def open_real_window(
     playwright: pw.Playwright, directory: pl.Path
 ) -> t.Iterator[pw.Browser]:
-    port: int = find_free_port()
     profile: pl.Path = directory / "chrome-profile"
     # Chrome makes a socket in TMPDIR, and the path of a socket may be no longer than about a hundred characters,
     # which the check's own directory can come near; so the window has a short one beside it
-    temporary: pl.Path = directory.parent / f"w{port}"
-    temporary.mkdir(exist_ok=True)
-    log: t.BinaryIO
-    with open(directory / "chrome.log", "wb") as log:
-        # in a session of its own, so that the script, the compositor and Chrome are stopped together
-        window: subprocess.Popen[bytes] = subprocess.Popen(
-            [
-                str(OFFSCREEN_CHROME),
-                str(port),
-                str(profile),
-                "--disable-frame-rate-limit",
-            ],
-            stdout=log,
-            stderr=log,
-            start_new_session=True,
-            env={**os.environ, "TMPDIR": str(temporary)},
-        )
+    temporary: pl.Path = pl.Path(tempfile.mkdtemp(prefix="w", dir=directory.parent))
+    # in a session of its own, so that the compositor and Chrome are stopped together; on port 0, which Chrome
+    # replaces with a free one
+    window: subprocess.Popen[bytes] = subprocess.Popen(
+        [str(OFFSCREEN_CHROME), "0", str(profile), "--disable-frame-rate-limit"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        env={**os.environ, "TMPDIR": str(temporary)},
+    )
+    # FOR_REVIEWER: the port was one that find_free_port saw free, which another process could take before Chrome
+    # did, and the port was then asked every 0.2 s whether it answered. Chrome now takes a free port itself and
+    # says which once it listens.
+    debugging_address: concurrent.futures.Future[str] = concurrent.futures.Future()
+    threading.Thread(
+        target=copy_output_of_window_to_log,
+        args=(window, directory / "chrome.log", debugging_address),
+        daemon=True,
+    ).start()
+    try:
         try:
-            wait_for_debugging_port(port, window)
-            yield playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
-        finally:
-            # a window that could not start under a heavy load has ended already, with its session
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(window.pid, signal.SIGTERM)
-            window.wait()
-            shutil.rmtree(profile, ignore_errors=True)
-            shutil.rmtree(temporary, ignore_errors=True)
+            address: str = debugging_address.result(timeout=WINDOW_START_TIMEOUT)
+        except TimeoutError:
+            raise RuntimeError(
+                f"Chrome did not open its debugging port in {WINDOW_START_TIMEOUT} s"
+            ) from None
+        yield playwright.chromium.connect_over_cdp(address)
+    finally:
+        # a window that could not start under a heavy load has ended already, with its session
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(window.pid, signal.SIGTERM)
+        window.wait()
+        shutil.rmtree(profile, ignore_errors=True)
+        shutil.rmtree(temporary, ignore_errors=True)
 
 
 @contextlib.contextmanager
