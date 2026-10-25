@@ -62,6 +62,7 @@ def run(check: steps.Check) -> None:
         ],
     )
     page: pw.Page = ll.open_list(check, account, project)
+    address_of_list: str = page.url
     todo: str = project.states["Todo"]
 
     open_menu_at(page, "todo high", "State")
@@ -93,8 +94,7 @@ def run(check: steps.Check) -> None:
     )
     page.keyboard.press("Escape")
     check.expect(
-        "one Escape closes the menu, and the right click opened nothing; the line is the selected one, as the "
-        "pointer moved onto it",
+        "one Escape closes the menu, and the right click opened nothing; it selected the line",
         lambda: (
             page.get_by_role("menu").count(),
             ll.read_selected(page),
@@ -114,6 +114,10 @@ def run(check: steps.Check) -> None:
         lambda: read_stored_filter(check, account, project),
         {"and": [{"state_id__in": todo}, {"priority__in": "high"}]},
     )
+    # The right clicks selected "todo high", and the address named its work item. The list that the filter drew anew
+    # has no line selected, and the address names the list again a moment later, before which a reload would open
+    # that work item beside the list.
+    page.wait_for_url(address_of_list)
     page.reload()
     check.expect(
         "after a reload the filter is the same",

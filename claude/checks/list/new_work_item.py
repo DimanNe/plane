@@ -101,8 +101,8 @@ def run(check: steps.Check) -> None:
     page.keyboard.type("child by the line's button")
     page.keyboard.press("Control+Enter")
     check.expect(
-        '"Add child" of a line other than the selected one, which the pointer selects on its way: Ctrl+Enter makes '
-        "a sub-work item of that line and closes the dialog, and that line stays selected",
+        '"Add child" of a line other than the selected one selects that line: Ctrl+Enter makes a sub-work item of '
+        "that line and closes the dialog, and that line stays selected",
         lambda: (
             read_parent(check, project, "child by the line's button"),
             dialog.count(),

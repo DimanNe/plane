@@ -138,8 +138,8 @@ def run(check: steps.Check) -> None:
         timeout=0,
     )
     check.expect(
-        f"{way}: the state is stored, and the selection went with the line, which the pointer selected on its way "
-        "to the state: out of view",
+        f"{way}: the state is stored, and the selection went with the line, which the click on its state "
+        "selected: out of view",
         lambda: (
             ins.read_state_name(check.instance, project, "todo 0"),
             ll.read_selected(page),

@@ -146,8 +146,7 @@ def run(check: steps.Check) -> None:
     ll.select_line(page, "plain")
     full.locator("p").first.click(button="right")
     check.expect(
-        "a right click on a line opens one menu and does not open the line; the line is the selected one, as the "
-        "pointer moved onto it",
+        "a right click on a line opens one menu, selects the line and does not open it",
         lambda: (read_menus(page), ll.read_selected(page), ll.read_panel(page)),
         (1, ["full"], None),
     )

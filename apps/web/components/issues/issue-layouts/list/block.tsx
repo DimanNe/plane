@@ -93,8 +93,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const { getIsIssuePeeked, peekIssue, setPeekIssue } = useIssueDetail(
     isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
   );
-  const { getIsRowSelected, getIsRowSelectedByHover, getIsRowTitleEdited, setSelectedRow, toggleIssueCollapse } =
-    useListView();
+  const { getIsRowSelected, getIsRowTitleEdited, setSelectedRow, toggleIssueCollapse } = useListView();
 
   const handleIssuePeekOverview = (issue: TIssue) =>
     workspaceSlug &&
@@ -187,11 +186,9 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
       }}
       onClick={(e) => {
         if (isInAnotherGroup) return handleIssuePeekOverview(issue);
-        // a click selects the row, and confirms a row the pointer selected by moving over it; a double click, or
-        // Enter on the row, opens it and ends the editing of its title
+        // a click selects the row; a double click, or Enter on the row, opens it and ends the editing of its title
         const isOpening = e.detail !== 1;
-        if (isOpening || !getIsRowSelected(issue.id, groupId) || getIsRowSelectedByHover(issue.id, groupId))
-          setSelectedRow({ issueId: issue.id, groupId });
+        if (isOpening || !getIsRowSelected(issue.id, groupId)) setSelectedRow({ issueId: issue.id, groupId });
         // the work item view beside the list follows the selection while it is open
         if (isOpening || isPeekOpenOnPressRef.current) handleIssuePeekOverview(issue);
       }}

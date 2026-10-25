@@ -1,7 +1,7 @@
 """
 A line of the list shows the state of its work item as a circle left of the title, and nowhere else. The
 circle of a started state is filled by how far that state stands among the started ones of its project. A
-click on the circle opens the states to choose from, and opens nothing else.
+click on the circle opens the states to choose from and selects the line, and opens nothing else.
 """
 
 import typing as t
@@ -73,7 +73,7 @@ def run(check: steps.Check) -> None:
         {"backlog": 0, "todo": 0, "started": 0.5, "done": None},
     )
 
-    address: str = page.url
+    address_of_list: str = page.url
     circle(page, "todo").click()
     check.expect(
         "a click on the circle opens the states of the project to choose from",
@@ -81,10 +81,10 @@ def run(check: steps.Check) -> None:
         sorted(project.states),
     )
     check.expect(
-        "the click opens no work item and leaves the address; the line is the selected one, as the pointer moved "
-        "onto it",
+        "the click selects the line, and the address names its work item, as it names every selected one; the "
+        "click opens no work item",
         lambda: (page.url, ll.read_selected(page), ll.read_panel(page)),
-        (address, ["todo"], None),
+        (f"{address_of_list.rstrip('/')}-2/", ["todo"], None),
     )
     page.get_by_role("option").filter(has_text="In Progress").click()
     check.expect(

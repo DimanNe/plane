@@ -77,10 +77,8 @@ export const ProjectWorkItemsAddress = observer(function ProjectWorkItemsAddress
   const getAddress = useLatestCallback(() => {
     const project = getProjectById(projectId);
     if (!workspaceSlug || !project) return undefined;
-    // the selected line is what the user touched last; the panel comes after it when a key is held. A line that the
-    // pointer only moved over is no place the user went to, and the address stays with the line before.
-    const selectedRow = listView.selectedRow?.isByHover ? listView.rowBeforeHover : listView.selectedRow;
-    const workItemId = selectedRow?.issueId ?? issueDetail.peekIssue?.issueId;
+    // the selected line is what the user touched last; the panel comes after it when a key is held
+    const workItemId = listView.selectedRow?.issueId ?? issueDetail.peekIssue?.issueId;
     const workItem = workItemId ? issueDetail.issue.getIssueById(workItemId) : undefined;
     const workItemProject = getProjectById(workItem?.project_id);
     return workItem && workItemProject

@@ -36,14 +36,6 @@ type Props = {
   collapsedGroups: TIssueKanbanFilters;
 };
 
-/**
- * What is open over the list for the selected row, or for the page: a menu (of a property, the right-click menu)
- * or a dialog. The selected row it was opened for, and that its keys act on, stays selected while the pointer
- * crosses other rows on its way.
- */
-const POP_UP_OVER_THE_LIST =
-  '[role="menu"], [role="listbox"], [role="alertdialog"], [role="dialog"][aria-modal="true"], [data-select-popup]:not([data-closed])';
-
 const isPlainKey = (e: KeyboardEvent) => !e.defaultPrevented && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
 // a key pressed in a text field, an editor, a menu or a dialog is not for the list
 const isListKey = (e: KeyboardEvent) => isPlainKey(e) && !isTypingInInput(e.target);
@@ -123,9 +115,6 @@ export const useListRowSelection = (props: Props) => {
   const openRow = (row: TListRow) => {
     const issue = issuesMap[row.issueId];
     if (!workspaceSlug || !issue?.project_id) return;
-    // a key that opens the row the pointer selected confirms it, as a click does
-    if (selectedRow?.isByHover && selectedRow.issueId === row.issueId)
-      setSelectedRow({ issueId: selectedRow.issueId, groupId: selectedRow.groupId });
     setPeekIssue({
       workspaceSlug: workspaceSlug.toString(),
       projectId: issue.project_id,
@@ -167,6 +156,34 @@ export const useListRowSelection = (props: Props) => {
     );
   };
 
+  // A click on a control of a row (its state, "Add child", a right click for its menu) selects the row too, so that
+  // the keys then act on the work item the person was busy with. The controls keep their clicks from the row, whose
+  // own click would open the work item, so the row's handler never hears of them.
+  // FOR_REVIEWER: the owner approved this rule while the pointer still selected the row on its way to the control.
+  // A drag, which ends without a click, selects nothing; nor does a Ctrl or Cmd click, which opens the work item in
+  // another tab and leaves this one, its address included, as it was. The address follows this selection as it
+  // follows every other, so a reload after such a click opens the work item beside the list (list/state_circle,
+  // list/filter_from_line). While the pointer selected, the address stayed with the row before; keeping that for a
+  // click on a control would take a second kind of selection again.
+  const selectClickedRow = useLatestCallback((e: MouseEvent) => {
+    if (e.type === "click" && (e.ctrlKey || e.metaKey)) return;
+    if (!(e.target instanceof Element) || !containerRef.current?.contains(e.target)) return;
+    const rowElement = e.target.closest('[id^="issue_"]');
+    // a row of a work item in another group, which only shows the structure, is not among the rows
+    const clickedRow = rowElement && rows.find((row) => getIssueBlockId(row.issueId, row.groupId) === rowElement.id);
+    if (!clickedRow || (clickedRow.issueId === selectedRow?.issueId && clickedRow.groupId === selectedRow.groupId))
+      return;
+    setSelectedRow({ issueId: clickedRow.issueId, groupId: clickedRow.groupId });
+  });
+  useEffect(() => {
+    document.addEventListener("click", selectClickedRow, true);
+    document.addEventListener("contextmenu", selectClickedRow, true);
+    return () => {
+      document.removeEventListener("click", selectClickedRow, true);
+      document.removeEventListener("contextmenu", selectClickedRow, true);
+    };
+  }, [selectClickedRow]);
+
   const moveSelection = (e: KeyboardEvent, step: number) => {
     // the arrow keys also leave the title of the selected row while it is edited
     if (!isListKey(e) && !(isPlainKey(e) && selectedRow?.isEditing)) return;
@@ -195,37 +212,6 @@ export const useListRowSelection = (props: Props) => {
     document.addEventListener("keyup", showSelectedRowAfterHeldKey);
     return () => document.removeEventListener("keyup", showSelectedRowAfterHeldKey);
   }, [showSelectedRowAfterHeldKey]);
-
-  // The pointer selects the row it moves over, and the keys act on that row and go on from it. Only a move of the
-  // pointer itself does: a row that comes under a still pointer as the list scrolls, for one that a held key
-  // selects, takes nothing from the keys.
-  // FOR_REVIEWER: Chrome, as the checks drive it headless and in windows, sends no pointer move for such a row, so
-  // list/hover_selects passes without the comparison of places below. It is there for a browser that does send
-  // one, at the place the pointer already was.
-  const lastPointerPlaceRef = useRef<{ screenX: number; screenY: number } | undefined>(undefined);
-  const selectHoveredRow = useLatestCallback((e: PointerEvent) => {
-    const lastPlace = lastPointerPlaceRef.current;
-    lastPointerPlaceRef.current = { screenX: e.screenX, screenY: e.screenY };
-    // the first move a page hears is a move: the browser has no place before it to measure it from
-    const hasPointerMoved = !lastPlace || lastPlace.screenX !== e.screenX || lastPlace.screenY !== e.screenY;
-    // FOR_REVIEWER: decided this way: a held button is a drag or a selection of text, an edited title keeps its
-    // row, and an open menu or dialog keeps the row it was opened for. A drag of a row hears no pointer moves at
-    // all while it lasts. The view beside the list does not follow the hover, as it follows a key: it would load
-    // every work item the pointer crosses; Enter, a click or a key opens the hovered one.
-    if (!hasPointerMoved || e.pointerType !== "mouse" || e.buttons !== 0 || selectedRow?.isEditing) return;
-    if (!(e.target instanceof Element) || !containerRef.current?.contains(e.target)) return;
-    if (document.querySelector(POP_UP_OVER_THE_LIST)) return;
-    const rowElement = e.target.closest('[id^="issue_"]');
-    // a row of a work item in another group, which only shows the structure, is not among the rows
-    const hoveredRow = rowElement && rows.find((row) => getIssueBlockId(row.issueId, row.groupId) === rowElement.id);
-    if (!hoveredRow || (hoveredRow.issueId === selectedRow?.issueId && hoveredRow.groupId === selectedRow.groupId))
-      return;
-    setSelectedRow({ issueId: hoveredRow.issueId, groupId: hoveredRow.groupId, isByHover: true });
-  });
-  useEffect(() => {
-    document.addEventListener("pointermove", selectHoveredRow);
-    return () => document.removeEventListener("pointermove", selectHoveredRow);
-  }, [selectHoveredRow]);
 
   const toggleSelectedRow = (e: KeyboardEvent, shouldExpand: boolean) => {
     const row = rows[selectedRowIndex];
