@@ -17,7 +17,7 @@ import { cn } from "@plane/utils";
 import useDebounce from "@/hooks/use-debounce";
 import type { TIssueOperations } from "./issue-detail";
 import {
-  moveCaretToDescriptionOnEnter,
+  moveCaretToDescriptionOnEnterOrArrowDown,
   useMoveCaretToTitleOnArrowUp,
 } from "./move-caret-between-title-and-description";
 // hooks
@@ -168,7 +168,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
               disabled={disabled}
               value={title}
               onChange={handleTitleChange}
-              onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, descriptionEditorRef)}
+              onKeyDown={(e) => moveCaretToDescriptionOnEnterOrArrowDown(e, descriptionEditorRef)}
               maxLength={255}
               placeholder={t("issue.title.label")}
               onFocus={() => setIsLengthVisible(true)}

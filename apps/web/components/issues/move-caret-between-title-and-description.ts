@@ -10,8 +10,9 @@ import type { EditorRefApi } from "@plane/editor";
 
 /**
  * The title of a work item and its description are typed as one text: a title is one line, and what one writes after
- * it is the description. So Enter in the title goes on in the description, and ↑ on the description's first line goes
- * back to the title, in the dialog of a new work item and in the view of a work item alike.
+ * it is the description. So Enter in the title and ↓ on its last line go on in the description, and ↑ on the
+ * description's first line goes back to the title, in the dialog of a new work item and in the view of a work item
+ * alike.
  *
  * The description is the editable part that follows the title in the page, the first one after it.
  */
@@ -21,14 +22,24 @@ const findDescriptionAfter = (title: HTMLElement) =>
   );
 
 /**
- * Enter in the title gives the caret to the description, at its very beginning. Enter with a modifier key is left to
- * whoever handles it (Ctrl+Enter saves the dialog), and so is the Enter that ends the composition of a character in
- * an input method.
- *
  * The editor puts its caret at the beginning of the description, but takes the focus only a frame later, and a key
  * typed in that frame would still go to the title. So the description takes the focus here at once.
  */
-export const moveCaretToDescriptionOnEnter = (
+const moveCaretToStartOfDescription = (
+  title: HTMLElement,
+  descriptionEditorRef: React.RefObject<EditorRefApi | null>
+) => {
+  const description = findDescriptionAfter(title);
+  descriptionEditorRef.current?.focus("start");
+  description?.focus({ preventScroll: true });
+};
+
+/**
+ * Enter in the title gives the caret to the description, at its very beginning. Enter with a modifier key is left to
+ * whoever handles it (Ctrl+Enter saves the dialog), and so is the Enter that ends the composition of a character in
+ * an input method.
+ */
+const moveCaretToDescriptionOnEnter = (
   event: React.KeyboardEvent<HTMLElement>,
   descriptionEditorRef: React.RefObject<EditorRefApi | null>
 ) => {
@@ -36,9 +47,59 @@ export const moveCaretToDescriptionOnEnter = (
   if (event.nativeEvent.isComposing) return;
   // Enter would save the form of the dialog, and break the title of the view into two lines
   event.preventDefault();
-  const description = findDescriptionAfter(event.currentTarget);
-  descriptionEditorRef.current?.focus("start");
-  description?.focus({ preventScroll: true });
+  moveCaretToStartOfDescription(event.currentTarget, descriptionEditorRef);
+};
+
+/**
+ * Whether the caret of the title is on its last line. The title of the dialog is an input, of one line. The title of
+ * the view is a textarea, which wraps a long title over several lines and tells where its caret is only as an offset
+ * in its text. Where a line wraps, one offset is both the end of the upper line and the start of the lower one: the
+ * caret is drawn at the end of the upper line when End or a click right of that line put it there, and at the start
+ * of the lower one otherwise. Only the browser knows which, so it is asked to move the caret to the end of the line
+ * where it is drawn.
+ */
+const isCaretOnLastLineOfTitle = (title: HTMLInputElement | HTMLTextAreaElement) => {
+  if (title instanceof HTMLInputElement) return true;
+  const caret = title.selectionEnd;
+  if (caret === title.value.length) return true;
+  // FOR_REVIEWER: Selection.modify is in no standard. Chrome moves the caret of a textarea by it; in a browser that
+  // does not, ↓ on the last line does what it did before, and the next ↓, at the end of the title, goes to the
+  // description. Laying the title out again in a hidden copy of its box, the other way, cannot tell on which of the
+  // two lines a caret at a wrap is drawn: with it, keys/arrow_down_in_title failed at the end of a line that wraps.
+  document.getSelection()?.modify("move", "forward", "lineboundary");
+  const isOnLastLine = title.selectionEnd === title.value.length;
+  // a caret that did not move is left alone: set again, it would be drawn at the start of the lower line
+  if (title.selectionEnd !== caret) title.setSelectionRange(caret, caret);
+  return isOnLastLine;
+};
+
+/**
+ * ↓ on the last line of the title gives the caret to the description, at its very beginning, as Enter does. On an
+ * earlier line of a title that wraps ↓ is the title's, and so is ↓ with a modifier key, over a selection, in the
+ * composition of a character in an input method, or while the description is not shown yet.
+ */
+const moveCaretToDescriptionOnArrowDown = (
+  event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  descriptionEditorRef: React.RefObject<EditorRefApi | null>
+) => {
+  if (event.key !== "ArrowDown" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+  if (event.nativeEvent.isComposing) return;
+  const title = event.currentTarget;
+  if (!descriptionEditorRef.current || title.selectionStart !== title.selectionEnd) return;
+  if (!isCaretOnLastLineOfTitle(title)) return;
+  event.preventDefault();
+  // FOR_REVIEWER: the caret goes to the start of the description, where Enter puts it, and not to the column it had
+  // in the title; so ↑ and ↓ mirror each other: ↑ goes to the end of the title. The nearest column would ask the
+  // editor for the position at a point, which its ref does not offer.
+  moveCaretToStartOfDescription(title, descriptionEditorRef);
+};
+
+export const moveCaretToDescriptionOnEnterOrArrowDown = (
+  event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  descriptionEditorRef: React.RefObject<EditorRefApi | null>
+) => {
+  moveCaretToDescriptionOnEnter(event, descriptionEditorRef);
+  moveCaretToDescriptionOnArrowDown(event, descriptionEditorRef);
 };
 
 /** Where a collapsed selection is drawn: in an empty line, which has no text to draw it in, where its line is. */

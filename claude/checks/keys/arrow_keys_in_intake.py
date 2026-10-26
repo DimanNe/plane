@@ -121,7 +121,11 @@ def run(check: steps.Check) -> None:
         check, page, "ArrowUp", "↑ in the title stays there", "in the title"
     )
     press_and_expect(
-        check, page, "ArrowDown", "↓ in the title stays there", "in the title"
+        check,
+        page,
+        "ArrowDown",
+        "↓ on the last line of the title goes to the start of the description",
+        'on the line "one"',
     )
 
     last_line: t.Optional[pw.FloatRect] = (

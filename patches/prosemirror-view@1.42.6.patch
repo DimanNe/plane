@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index d52a5260a7b9924b2865053ea1e8c6484225277b..211fb89c21efe44dc523c047979bf79b44c69e9b 100644
+index d52a5260a7b9924b2865053ea1e8c6484225277b..a92a070e941213bb5fc182bf75d556648dc618e8 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -3682,7 +3682,8 @@ handlers.focus = function (view) {
@@ -12,8 +12,19 @@ index d52a5260a7b9924b2865053ea1e8c6484225277b..211fb89c21efe44dc523c047979bf79b
      }, 20);
    }
  };
+@@ -5306,7 +5307,9 @@ var EditorView = function () {
+     value: function focus() {
+       this.domObserver.stop();
+       if (this.editable) focusPreventScroll(this.dom);
+-      selectionToDOM(this);
++      // Plane: as in the focus handler, a caret that a key has moved since the focus is not put back. Tiptap's focus
++      // command calls this a frame after the editor took the focus.
++      if (this.input.lastKeyCodeTime < this.input.lastFocus) selectionToDOM(this);
+       this.domObserver.start();
+     }
+   }, {
 diff --git a/dist/index.js b/dist/index.js
-index dc0d117b85e1da3eae915b4d8ff8e5e604683861..a792fc57ee2f54dd553750e0bdcd830461253ad6 100644
+index dc0d117b85e1da3eae915b4d8ff8e5e604683861..df8f40adddb4f115e594cd4451394451444fb870 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -3928,7 +3928,9 @@ handlers.focus = view => {
@@ -27,3 +38,15 @@ index dc0d117b85e1da3eae915b4d8ff8e5e604683861..a792fc57ee2f54dd553750e0bdcd8304
                  selectionToDOM(view);
          }, 20);
      }
+@@ -5755,7 +5757,10 @@ class EditorView {
+         this.domObserver.stop();
+         if (this.editable)
+             focusPreventScroll(this.dom);
+-        selectionToDOM(this);
++        // Plane: as in the focus handler, a caret that a key has moved since the focus is not put back. Tiptap's focus
++        // command calls this a frame after the editor took the focus.
++        if (this.input.lastKeyCodeTime < this.input.lastFocus)
++            selectionToDOM(this);
+         this.domObserver.start();
+     }
+     /**

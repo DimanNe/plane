@@ -2,9 +2,10 @@
 While the caret is in the title or the description of the work item open in the view beside the list, the arrow keys
 move the caret and nothing else: the same work item stays open, and the list's selection stays where it is. ↑ goes
 up the description line by line, from its first line to the end of the title, and in the title to its start; ↓ goes
-down the description line by line and stays on its last line, and in the title goes to its end. So it is with a line
-above and a line below the open work item's, after a double click on its line with the pointer passing over those
-lines on its way to the view, and after the view went on to a sub-work item, whose line is not the selected one.
+from the title to the start of the description, down the description line by line, and stays on its last line. So it
+is with a line above and a line below the open work item's, after a double click on its line with the pointer passing
+over those lines on its way to the view, and after the view went on to a sub-work item, whose line is not the selected
+one.
 """
 
 import typing as t
@@ -58,17 +59,17 @@ def get_point_on_line(page: pw.Page, title: str) -> t.Tuple[float, float]:
     return box["x"] + 100, box["y"] + box["height"] / 2
 
 
-def click_on_line_of_description(
-    page: pw.Page, work_item_id: str, text: str, is_at_end: bool
+def click_on_end_of_line_of_description(
+    page: pw.Page, work_item_id: str, text: str
 ) -> None:
-    """A click at the start or the end of a line of the description; the pointer goes there as a hand moves it."""
+    """A click at the end of a line of the description; the pointer goes there as a hand moves it."""
     box: t.Optional[pw.FloatRect] = (
         page.locator(f'#full-screen-portal [id="editor-container-{work_item_id}"] p')
         .filter(has_text=text)
         .bounding_box()
     )
     assert box is not None
-    x: float = box["x"] + (box["width"] - 2 if is_at_end else 1)
+    x: float = box["x"] + box["width"] - 2
     y: float = box["y"] + box["height"] / 2
     page.mouse.move(x, y, steps=10)
     page.mouse.click(x, y)
@@ -109,8 +110,8 @@ def go_through_with_arrow_keys(
     work_item_id: str,
     open_and_selected: t.Tuple[str, t.List[str]],
 ) -> None:
-    """From the end of the description's last line up to the title, then from the start of its first line down to
-    its last line and once more."""
+    """From the end of the description's last line up to the title and to its start, then down from the title through
+    the description to its last line and once more."""
     first, *middle, last = LINES_OF_DESCRIPTION
 
     def press(key: str, caret: str) -> None:
@@ -123,13 +124,7 @@ def go_through_with_arrow_keys(
         press("ArrowUp", f'on the line "{line}"')
     press("ArrowUp", "at the end of the title")
     press("ArrowUp", "at the start of the title")
-    press("ArrowDown", "at the end of the title")
-    click_on_line_of_description(page, work_item_id, first, is_at_end=False)
-    check.expect(
-        f"{situation}: a click at the start of the description puts the caret on its first line",
-        lambda: read_caret(page, work_item_id),
-        f'on the line "{first}"',
-    )
+    press("ArrowDown", f'on the line "{first}"')
     for line in [*middle, last]:
         press("ArrowDown", f'on the line "{line}"')
     press("ArrowDown", f'on the line "{last}"')
@@ -176,9 +171,7 @@ def run(check: steps.Check) -> None:
     view_title: t.Optional[pw.FloatRect] = page.locator(ll.PANEL_TITLE).bounding_box()
     assert view_title is not None
     page.mouse.move(view_title["x"] + 10, y, steps=5)
-    click_on_line_of_description(
-        page, ids["edited"], LINES_OF_DESCRIPTION[-1], is_at_end=True
-    )
+    click_on_end_of_line_of_description(page, ids["edited"], LINES_OF_DESCRIPTION[-1])
     check.expect(
         f"{situation}: a click at the end of the description puts the caret on its last line",
         lambda: read_caret(page, ids["edited"]),
@@ -206,9 +199,7 @@ def run(check: steps.Check) -> None:
         ),
         ("edited", LINES_OF_DESCRIPTION, ["parent"]),
     )
-    click_on_line_of_description(
-        page, ids["edited"], LINES_OF_DESCRIPTION[-1], is_at_end=True
-    )
+    click_on_end_of_line_of_description(page, ids["edited"], LINES_OF_DESCRIPTION[-1])
     check.expect(
         f"{situation}: a click at the end of the description puts the caret on its last line",
         lambda: read_caret(page, ids["edited"]),

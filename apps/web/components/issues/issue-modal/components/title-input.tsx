@@ -24,7 +24,7 @@ import { getTabIndex } from "@plane/utils";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import {
-  moveCaretToDescriptionOnEnter,
+  moveCaretToDescriptionOnEnterOrArrowDown,
   useMoveCaretToTitleOnArrowUp,
 } from "../../move-caret-between-title-and-description";
 
@@ -87,7 +87,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
                   onChange(e.target.value);
                   handleFormChange();
                 }}
-                onKeyDown={(e) => moveCaretToDescriptionOnEnter(e, descriptionEditorRef)}
+                onKeyDown={(e) => moveCaretToDescriptionOnEnterOrArrowDown(e, descriptionEditorRef)}
                 ref={issueTitleRef || ref}
                 // FOR_REVIEWER: "Work item title", the words of the view's title, in place of "Title".
                 placeholder={t("issue.title.label")}
