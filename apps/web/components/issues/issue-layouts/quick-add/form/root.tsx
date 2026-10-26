@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import type { UseFormRegister, UseFormSetFocus } from "react-hook-form";
 // plane constants
 // plane helpers
+import { EmojiMenuInTextField } from "@plane/editor";
 import { useOutsideClickDetector } from "@plane/hooks";
 // types
 import type { TIssue } from "@plane/types";
@@ -48,6 +49,11 @@ export const QuickAddIssueFormRoot = observer(function QuickAddIssueFormRoot(pro
   const projectDetail = getProjectById(projectId);
   // refs
   const ref = useRef<HTMLFormElement>(null);
+  // the title, which the form of each layout draws
+  const titleRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    titleRef.current = ref.current?.querySelector<HTMLInputElement>('input[name="name"]') ?? null;
+  });
   // click detection
   useKeypress("Escape", onClose);
   useOutsideClickDetector(ref, onClose);
@@ -71,14 +77,17 @@ export const QuickAddIssueFormRoot = observer(function QuickAddIssueFormRoot(pro
   if (!CurrentLayoutQuickAddIssueForm) return <></>;
 
   return (
-    <CurrentLayoutQuickAddIssueForm
-      ref={ref}
-      isOpen={isOpen}
-      projectDetail={projectDetail}
-      hasError={hasError}
-      register={register}
-      onSubmit={onSubmit}
-      isEpic={isEpic}
-    />
+    <>
+      <CurrentLayoutQuickAddIssueForm
+        ref={ref}
+        isOpen={isOpen}
+        projectDetail={projectDetail}
+        hasError={hasError}
+        register={register}
+        onSubmit={onSubmit}
+        isEpic={isEpic}
+      />
+      <EmojiMenuInTextField fieldRef={titleRef} />
+    </>
   );
 });

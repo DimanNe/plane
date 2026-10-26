@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Measures, on a running instance, what was made fast by measuring: typing in the description of a work item, the
-Display pop-up, the dialog of a new work item, opening the timeline of some hundreds of work items, and dragging and
-the wheel there, and ↓ held over a hundred lines of a list. It builds its
+Measures, on a running instance, what was made fast by measuring: typing in the description of a work item and in
+its titles, the Display pop-up, the dialog of a new work item, opening the timeline of some hundreds of work items,
+and dragging and the wheel there, and ↓ held over a hundred lines of a list. It builds its
 own data in a workspace of its own, prints the numbers with the machine's load beside them, and judges nothing: a
 change near these is measured before and after, on the same machine at the same load.
 
@@ -117,6 +117,10 @@ KEY_REPEATS_PER_SECOND: int = 30
 # The lines that ↓ is held over: about as many as the owner's list where it crawled.
 HELD_ARROW_LINES: int = 100
 MEASUREMENTS: t.Tuple[str, ...] = ("typing", "timeline", "held-arrow")
+# 40 keys of words, as a title is typed.
+TITLE_KEYS: str = "fix the save of a draft as it is typed. "
+# 40 keys of a shortcode after ":", 4 times: the emoji menu follows every key, and the space closes it.
+EMOJI_KEYS: str = " :umbrella" * 4
 
 
 def read_load() -> str:
@@ -212,6 +216,76 @@ def measure_traced(
     )
 
 
+def measure_typing_in_titles(page: pw.Page, cdp: pw.CDPSession) -> None:
+    """In the title beside the list that `page` shows, in the title of a line edited in place, and in the title of
+    the dialog of N I: each key runs what follows the text typed after ":"."""
+    page.locator(ll.PANEL_TITLE).click()
+    page.keyboard.press("End")
+    run: int
+    for run in range(1, 3):
+        measure_counters(
+            page,
+            cdp,
+            f"40 keys typed in the title beside the list ({run})",
+            lambda: page.keyboard.type(TITLE_KEYS, delay=33),
+            40,
+        )
+    measure_counters(
+        page,
+        cdp,
+        "40 keys of shortcodes after ':' in the title beside the list",
+        lambda: page.keyboard.type(EMOJI_KEYS, delay=33),
+        40,
+    )
+    # the space closes the menu that the last shortcode opened, so that Escape closes the view
+    page.keyboard.press("Space")
+    page.keyboard.press("Escape")
+    page_changes.wait_until_removed(page.locator(ll.PANEL_TITLE))
+    ll.line(page, "line 5").locator("p").first.click()
+    title: pw.Locator = page.locator(f"{ll.LINE} input")
+    page_changes.wait_until_shown(title)
+    for run in range(1, 3):
+        measure_counters(
+            page,
+            cdp,
+            f"40 keys typed in the title of a line, edited in place ({run})",
+            lambda: page.keyboard.type(TITLE_KEYS, delay=33),
+            40,
+        )
+    measure_counters(
+        page,
+        cdp,
+        "40 keys of shortcodes after ':' in the title of a line",
+        lambda: page.keyboard.type(EMOJI_KEYS, delay=33),
+        40,
+    )
+    page.keyboard.press("Space")
+    page.keyboard.press("Escape")
+    page_changes.wait_until_removed(title)
+    dialog: pw.Locator = ll.open_create_dialog(page)
+    for run in range(1, 3):
+        measure_counters(
+            page,
+            cdp,
+            f"40 keys typed in the title of the dialog of N I ({run})",
+            lambda: page.keyboard.type(TITLE_KEYS, delay=33),
+            40,
+        )
+    measure_counters(
+        page,
+        cdp,
+        "40 keys of shortcodes after ':' in the title of the dialog",
+        lambda: page.keyboard.type(EMOJI_KEYS, delay=33),
+        40,
+    )
+    # an empty title is no change that the dialog asks about before it closes
+    page.keyboard.press("Space")
+    page.keyboard.press("Control+a")
+    page.keyboard.press("Backspace")
+    page.keyboard.press("Escape")
+    page_changes.wait_until_removed(dialog)
+
+
 def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
     project: ins.Project = check.project({account: ins.ROLE_ADMIN})
     ins.make_work_items(
@@ -275,6 +349,7 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
             lambda: page.keyboard.type("a" * 40, delay=33),
             40,
         )
+    measure_typing_in_titles(page, cdp)
     page.context.close()
 
 

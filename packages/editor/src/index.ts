@@ -27,3 +27,4 @@ export * from "@/types";
 
 // additional exports
 export { TrailingNode } from "@/extensions/trailing-node";
+export { EmojiMenuInTextField } from "@/extensions/emoji/components/emoji-menu-in-text-field";

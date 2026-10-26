@@ -22,10 +22,16 @@ export type EmojiListRef = {
   onKeyDown: (props: SuggestionKeyDownProps) => boolean;
 };
 
-export type EmojisListDropdownProps = SuggestionProps<EmojiItem, { name: string }> & {
+export type EmojisListDropdownProps = Pick<
+  SuggestionProps<EmojiItem, { name: string }>,
+  "items" | "command" | "query"
+> & {
   onClose: () => void;
   forceOpen?: boolean;
 };
+
+// how many emojis the menu offers at most, in the editor and in a text field (emoji-menu-in-text-field.tsx)
+export const EMOJI_MENU_LENGTH = 5;
 
 /**
  * The menu shows once something is typed after ":", or at once when the slash command "Emoji" opened it, and only

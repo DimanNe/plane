@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { setToast } from "@plane/blocks/toast";
+import { EmojiMenuInTextField } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -79,17 +80,23 @@ export const IssueBlockTitle = observer(function IssueBlockTitle(props: Props) {
     handleBlur(e.currentTarget.value);
   };
 
+  // FOR_REVIEWER: the emoji menu and its data come with the editor, which the list already loads before it draws its
+  // first line, so this import adds nothing to that load. Were the editor loaded only when a work item opens, this
+  // import would bring it back, and the menu would rather be loaded at the first ":" typed here.
   if (isEdited)
     return (
-      <input
-        ref={inputRef}
-        defaultValue={issue.name}
-        maxLength={255}
-        aria-label={t("issue.title.label")}
-        className={cn(className, "min-w-0 flex-1 bg-transparent outline-none")}
-        onBlur={(e) => handleBlur(e.currentTarget.value)}
-        onKeyDown={handleKeyDown}
-      />
+      <>
+        <input
+          ref={inputRef}
+          defaultValue={issue.name}
+          maxLength={255}
+          aria-label={t("issue.title.label")}
+          className={cn(className, "min-w-0 flex-1 bg-transparent outline-none")}
+          onBlur={(e) => handleBlur(e.currentTarget.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <EmojiMenuInTextField fieldRef={inputRef} />
+      </>
     );
 
   return (

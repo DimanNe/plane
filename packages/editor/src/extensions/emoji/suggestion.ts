@@ -17,7 +17,7 @@ import { updateFloatingUIFloaterPosition } from "@/helpers/floating-ui";
 import type { CommandListInstance } from "@/helpers/tippy";
 import { DROPDOWN_NAVIGATION_KEYS } from "@/helpers/tippy";
 // local imports
-import { EmojisListDropdown, isEmojiMenuShown } from "./components/emojis-list";
+import { EMOJI_MENU_LENGTH, EmojisListDropdown, isEmojiMenuShown } from "./components/emojis-list";
 import type { EmojisListDropdownProps, EmojiItem } from "./components/emojis-list";
 import type { ExtendedEmojiStorage } from "./emoji";
 
@@ -35,7 +35,7 @@ export const emojiSuggestion: EmojiOptions["suggestion"] = {
         .slice(0, 5);
       return defaultEmojis as EmojiItem[];
     }
-    return findEmojisMatchingQuery(emojis, query, 5) as EmojiItem[];
+    return findEmojisMatchingQuery(emojis, query, EMOJI_MENU_LENGTH) as EmojiItem[];
   },
 
   allowSpaces: false,

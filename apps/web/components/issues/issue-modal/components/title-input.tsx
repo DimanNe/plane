@@ -15,6 +15,7 @@ import { ETabIndices } from "@plane/constants";
 // types
 import { useTranslation } from "@plane/i18n";
 import type { EditorRefApi } from "@plane/editor";
+import { EmojiMenuInTextField } from "@plane/editor";
 import type { TIssue } from "@plane/types";
 // ui
 
@@ -94,6 +95,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: TIssueTi
                 autoFocus
                 tabIndex={getIndex("name")}
               />
+              <EmojiMenuInTextField fieldRef={issueTitleRef} />
             </div>
           </Field>
         )}

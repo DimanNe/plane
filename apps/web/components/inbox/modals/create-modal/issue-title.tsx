@@ -4,10 +4,12 @@
  * See the LICENSE file for details.
  */
 
+import { useRef } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { Input, InputGroup } from "@makeplane/propel/components/input";
 import { ETabIndices } from "@plane/constants";
+import { EmojiMenuInTextField } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
 
@@ -29,6 +31,7 @@ export const InboxIssueTitle = observer(function InboxIssueTitle(props: TInboxIs
 
   const { getIndex } = getTabIndex(ETabIndices.INTAKE_ISSUE_FORM, isMobile);
   const { t } = useTranslation();
+  const titleRef = useRef<HTMLInputElement>(null);
   return (
     <div className="space-y-1">
       <InputGroup size="2xl">
@@ -44,7 +47,9 @@ export const InboxIssueTitle = observer(function InboxIssueTitle(props: TInboxIs
           placeholder={t("title")}
           tabIndex={getIndex("name")}
           required
+          ref={titleRef}
         />
+        <EmojiMenuInTextField fieldRef={titleRef} />
       </InputGroup>
       {isTitleLengthMoreThan255Character && (
         <span className="text-11 text-danger-primary">{t("title_should_be_less_than_255_characters")}</span>

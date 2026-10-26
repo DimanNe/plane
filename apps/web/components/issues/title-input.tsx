@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { Field } from "@makeplane/propel/components/field";
 import { TextArea } from "@makeplane/propel/components/text-area";
 import type { EditorRefApi } from "@plane/editor";
+import { EmojiMenuInTextField } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import type { TNameDescriptionLoader } from "@plane/types";
 // types
@@ -174,6 +175,7 @@ export const IssueTitleInput = observer(function IssueTitleInput(props: IssueTit
               onFocus={() => setIsLengthVisible(true)}
               onBlur={() => setIsLengthVisible(false)}
             />
+            <EmojiMenuInTextField fieldRef={titleRef} />
           </div>
         </Field>
         <div
