@@ -430,6 +430,112 @@ class ServiceReadinessTests(unittest.TestCase):
             self.wait_for_readiness(b"service ready\n", b"", probe)
 
 
+class RunningInstanceTests(unittest.TestCase):
+    def test_start_keeps_running_only_the_instance_as_asked(self) -> None:
+        run_dir: pl.Path = pl.Path("/srv/checks-1")
+        bind: runtime.BindAddress = runtime.BindAddress.parse("127.0.0.1:12141")
+        image_ids: t.Dict[plane_config.Service, str] = {
+            service: "sha256:built" for service in plane_config.Service
+        }
+        commands: t.Dict[plane_config.Service, t.List[str]] = (
+            runtime.get_python_service_commands(run_dir)
+        )
+        api_command: t.List[str] = commands[plane_config.Service.API]
+        workers_at: int = api_command.index("--workers") + 1
+        other_api_workers: t.List[str] = [
+            *api_command[:workers_at],
+            str(runtime.API_WORKERS + 1),
+            *api_command[workers_at + 1 :],
+        ]
+
+        def make_container(
+            service: plane_config.Service,
+            command: t.Optional[t.List[str]] = None,
+            image: str = "sha256:built",
+            network_mode: str = "container:network-id",
+            port: int = 12141,
+        ) -> runtime.Container:
+            is_network: bool = service == plane_config.Service.NETWORK
+            return {
+                "Id": "network-id" if is_network else f"{service.value}-id",
+                "Name": f"/plane-x-{service.value}",
+                "Image": image,
+                "State": {"Running": True},
+                "Config": {
+                    "Labels": {},
+                    "Cmd": runtime.get_python_service_argv(command or commands[service])
+                    if service in commands
+                    else ["serve"],
+                },
+                "HostConfig": {
+                    "NetworkMode": "bridge" if is_network else network_mode,
+                    "PortBindings": {
+                        "8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(port)}]
+                    }
+                    if is_network
+                    else {},
+                },
+            }
+
+        def make_running(**changed: runtime.Container) -> runtime.Containers:
+            running: runtime.Containers = {
+                service: make_container(service) for service in plane_config.Service
+            }
+            name: str
+            container: runtime.Container
+            for name, container in changed.items():
+                running[plane_config.Service(name)] = container
+            return running
+
+        class Tc(t.NamedTuple):
+            name: str
+            running: runtime.Containers
+            expected: bool
+
+        api: plane_config.Service = plane_config.Service.API
+        tcs: t.List[Tc] = [
+            Tc("every service as this script starts it", make_running(), True),
+            Tc(
+                "the API with another number of workers",
+                make_running(api=make_container(api, command=other_api_workers)),
+                False,
+            ),
+            Tc(
+                "a service on an image other than the one just built",
+                make_running(api=make_container(api, image="sha256:older")),
+                False,
+            ),
+            Tc(
+                "a service outside the namespace of the network container",
+                make_running(api=make_container(api, network_mode="bridge")),
+                False,
+            ),
+            Tc(
+                "the network container on another port",
+                make_running(
+                    network=make_container(plane_config.Service.NETWORK, port=12142)
+                ),
+                False,
+            ),
+            Tc(
+                "no network container",
+                {
+                    service: container
+                    for service, container in make_running().items()
+                    if service != plane_config.Service.NETWORK
+                },
+                False,
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: bool = runtime.is_running_instance_as_asked(
+                run_dir, tc.running, bind, image_ids
+            )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+
 class BindAddressTests(unittest.TestCase):
     def test_parse_accepts_only_ipv4_and_port_in_range(self) -> None:
         class Tc(t.NamedTuple):

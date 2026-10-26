@@ -71,6 +71,11 @@ SERVICE_PORTS: t.Dict[plane_config.Service, int] = {
 }
 # Tells a Python service that loaded its code to run; see apps/api/preload_and_wait.py.
 START_SIGNAL: str = "SIGURG"
+# The threads of one process of the API take turns under Python's interpreter lock, so each process answers on one
+# processor at most, and a check instance answers many checks at once (claude/checks): with more processes its
+# slowest checks wait less for it. Each process holds memory of its own, and so do the database connections its
+# threads keep, which must stay fewer than Postgres's max_connections (see DATABASE_CONN_MAX_AGE).
+API_WORKERS: int = 4
 # The one instance that start --persist-auto systemd starts at every boot: a unit of the user's systemd, which
 # itself starts at boot because the user lingers (see dockerfiles/20_plane). One unit, so that persisting another
 # run directory moves it rather than adding a second instance on the same port.
@@ -94,6 +99,7 @@ class ContainerState(t.TypedDict, total=False):
 
 class ContainerConfig(t.TypedDict):
     Labels: t.Dict[str, str]
+    Cmd: t.List[str]
 
 
 class ContainerHostConfig(t.TypedDict):
@@ -657,8 +663,9 @@ def get_plane_environment(
         "SESSION_COOKIE_AGE": str(400 * 24 * 60 * 60),
         "DATABASE_URL": f"postgresql://plane:{service_secrets[plane_config.SecretName.POSTGRES]}@127.0.0.1:{SERVICE_PORTS[plane_config.Service.POSTGRES]}/plane",
         # Opening a database connection was a large part of a small API request. Each thread of the API, the worker
-        # and beat keeps its connection for later requests and tasks: about twenty per instance, well under
-        # Postgres's max_connections (see start_postgres()).
+        # and beat keeps its connection for later requests and tasks, and each API worker one more for its relay of
+        # changes (apps/api/plane/db/change_notifications.py): together they must stay under Postgres's
+        # max_connections (see start_postgres()), which bounds API_WORKERS.
         "DATABASE_CONN_MAX_AGE": "60",
         "REDIS_URL": f"redis://127.0.0.1:{redis_port}/0",
         "AMQP_URL": f"redis://127.0.0.1:{redis_port}/1",
@@ -1480,7 +1487,7 @@ def get_python_service_commands(
             "--bind",
             "fd://3",
             "--workers",
-            "2",
+            str(API_WORKERS),
             "--worker-class",
             "gthread",
             "--threads",
@@ -1520,6 +1527,10 @@ def get_python_service_commands(
     }
 
 
+def get_python_service_argv(command: t.Sequence[str]) -> t.List[str]:
+    return ["python", "preload_and_wait.py", *command]
+
+
 def start_python_service(
     run_dir: pl.Path,
     service: plane_config.Service,
@@ -1533,7 +1544,7 @@ def start_python_service(
         run_dir,
         service,
         image_id,
-        ["python", "preload_and_wait.py", *command],
+        get_python_service_argv(command),
         env=plane_environment,
         mounts=[(run_dir / "logs", pl.Path("/code/plane/logs"))],
         network_mode=network_mode,
@@ -1632,6 +1643,52 @@ def start_network_container(
     )
 
 
+def is_running_instance_as_asked(
+    run_dir: pl.Path,
+    running: Containers,
+    bind: BindAddress,
+    image_ids: t.Dict[plane_config.Service, str],
+) -> bool:
+    """Whether the running containers are this instance as asked for, which a start keeps running: the images just
+    built, the requested bind address, every service in the namespace of the running network container, and the
+    Python services with this script's commands. A command that changes, such as the API's with another
+    API_WORKERS, runs on the same images: without comparing commands, a running instance would keep the old one
+    until it is stopped."""
+    network_container: t.Optional[Container] = running.get(plane_config.Service.NETWORK)
+    proxy_port: int = SERVICE_PORTS[plane_config.Service.PROXY]
+    image_services: t.Dict[plane_config.Service, plane_config.Service] = {
+        plane_config.Service.NETWORK: plane_config.Service.POSTGRES,
+        plane_config.Service.WORKER: plane_config.Service.API,
+        plane_config.Service.BEAT: plane_config.Service.API,
+    }
+    python_service_commands: t.Dict[plane_config.Service, t.List[str]] = (
+        get_python_service_commands(run_dir)
+    )
+    return not (
+        network_container is None
+        or network_container["HostConfig"]["PortBindings"]
+        != {
+            f"{proxy_port}/tcp": [
+                {"HostIp": str(bind.host), "HostPort": str(bind.port)}
+            ]
+        }
+        or any(
+            container["Image"] != image_ids[image_services.get(name, name)]
+            or (
+                name != plane_config.Service.NETWORK
+                and container["HostConfig"]["NetworkMode"]
+                != "container:" + network_container["Id"]
+            )
+            or (
+                name in python_service_commands
+                and container["Config"]["Cmd"]
+                != get_python_service_argv(python_service_commands[name])
+            )
+            for name, container in running.items()
+        )
+    )
+
+
 def start_plane_services(
     run_dir: pl.Path,
     config: plane_config.InstanceConfig,
@@ -1647,33 +1704,7 @@ def start_plane_services(
         for name, container in containers.items()
         if container["State"]["Running"]
     }
-    network_container: t.Optional[Container] = running.get(plane_config.Service.NETWORK)
-    proxy_port: int = SERVICE_PORTS[plane_config.Service.PROXY]
-    image_services: t.Dict[plane_config.Service, plane_config.Service] = {
-        plane_config.Service.NETWORK: plane_config.Service.POSTGRES,
-        plane_config.Service.WORKER: plane_config.Service.API,
-        plane_config.Service.BEAT: plane_config.Service.API,
-    }
-    # What already runs is kept only if it is this instance as asked for: the images just built,
-    # the requested bind address, every service in the namespace of the running network container.
-    if running and (
-        network_container is None
-        or network_container["HostConfig"]["PortBindings"]
-        != {
-            f"{proxy_port}/tcp": [
-                {"HostIp": str(bind.host), "HostPort": str(bind.port)}
-            ]
-        }
-        or any(
-            container["Image"] != image_ids[image_services.get(name, name)]
-            or (
-                name != plane_config.Service.NETWORK
-                and container["HostConfig"]["NetworkMode"]
-                != "container:" + network_container["Id"]
-            )
-            for name, container in running.items()
-        )
-    ):
+    if running and not is_running_instance_as_asked(run_dir, running, bind, image_ids):
         stop_plane_containers(run_dir, timings).result()
         containers = get_containers(run_dir)
     service_secrets: plane_config.ServiceSecrets = config.secrets
