@@ -11,7 +11,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Underline } from "@tiptap/extension-underline";
-import { Markdown } from "tiptap-markdown";
+import { MarkdownWithHTMLContent } from "./markdown";
 // extensions
 import {
   CustomCalloutExtension,
@@ -105,7 +105,7 @@ export const CoreEditorExtensions = (args: TArguments): Extensions => {
     }),
     CustomCodeBlockExtension,
     CustomCodeInlineExtension,
-    Markdown.configure({
+    MarkdownWithHTMLContent.configure({
       html: true,
       transformCopiedText: false,
       transformPastedText: true,
