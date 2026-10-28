@@ -11,8 +11,8 @@ A check is a file GROUP/NAME.py beside this one; it is named GROUP/NAME, and GRO
 first lines say the rule it guards. Each step prints as the rule it checks; the status is 1 when a step failed.
 
 An instance is one started by scripts/plane_runtime.py; nothing but its run directory is needed. The checks are
-spread over the run directories given, several at once on each. Nothing of a run outlives it, however it ends
-(see run_scope.py).
+spread over the run directories given, several at once on each, those that took longest when they last ran start
+first (see order_longest_first). Nothing of a run outlives it, however it ends (see run_scope.py).
 
 A check makes its own accounts and its own projects, in a workspace of the run, and removes the projects when
 it has passed. What a failed check left stays, with the way to sign in printed beside the failure, and so does
@@ -27,6 +27,8 @@ import concurrent.futures
 import dataclasses as dc
 import gc
 import importlib.util
+import json
+import math
 import multiprocessing
 import os
 import pathlib as pl
@@ -203,6 +205,64 @@ def print_outcome(outcome: Outcome) -> None:
     sys.stdout.flush()
 
 
+# How long each check of the runs that an instance served took, kept in the instance's run directory beside the
+# directories of the checks that failed there: {name: {"seconds": ..., "written": ...}}, `written` being the moment
+# the run wrote it.
+SECONDS_TAKEN: str = "seconds-taken.json"
+
+
+def read_seconds_taken(instances: t.Sequence[ins.Instance]) -> t.Dict[str, float]:
+    """How long each check took in the last run that one of the instances served. A check that none of their runs
+    had is not there."""
+    # FOR_REVIEWER: the times are run_check's own (Outcome.seconds), kept in each instance's run directory, where
+    # run.py keeps the rest of what a run leaves there (run.lock, account-maker.log, what failed checks left). An
+    # instance serves one run at a time (ins.lock_instance), so no two runs write one file at once, and two
+    # checkouts that run suites side by side use instances of their own. Weighed against it: the checkout, where
+    # run.py writes nothing today, and the user's cache, which every checkout and session would share. Every
+    # instance of a run keeps the times of all its checks, wherever each ran, so that a run on fewer of them, as the
+    # windowed suite on 4 after the headless one on 7, knows every check; and as each instance's file is as recent as
+    # the last run it served, a check's time is the one written last. A failed check's time is kept too: like any
+    # time, it changes only when the check starts.
+    latest: t.Dict[str, t.Dict[str, float]] = {}
+    instance: ins.Instance
+    for instance in instances:
+        path: pl.Path = instance.run_dir / "checks" / SECONDS_TAKEN
+        if not path.exists():
+            continue
+        name: str
+        taken: t.Dict[str, float]
+        for name, taken in json.loads(path.read_text()).items():
+            if name not in latest or taken["written"] > latest[name]["written"]:
+                latest[name] = taken
+    return {name: taken["seconds"] for name, taken in latest.items()}
+
+
+def write_seconds_taken(instance: ins.Instance, outcomes: t.Sequence[Outcome]) -> None:
+    """Keeps in the instance how long each check of the run took, wherever it ran, with what earlier runs kept of
+    the others."""
+    path: pl.Path = instance.run_dir / "checks" / SECONDS_TAKEN
+    kept: t.Dict[str, t.Dict[str, float]] = (
+        json.loads(path.read_text()) if path.exists() else {}
+    )
+    written: float = time.time()
+    outcome: Outcome
+    for outcome in outcomes:
+        kept[outcome.name] = {"seconds": outcome.seconds, "written": written}
+    # a run killed while it writes leaves the file of the run before, whole
+    new: pl.Path = path.with_name(f"{SECONDS_TAKEN}.new")
+    new.write_text(json.dumps(kept, indent=1, sort_keys=True))
+    new.replace(path)
+
+
+def order_longest_first(
+    names: t.Sequence[str], seconds_taken: t.Dict[str, float]
+) -> t.List[str]:
+    """The checks that took longest start first, so that the short ones fill the places that free up and no long
+    check waits for a place at the end of a run. A check that has not run yet starts before them all, its time
+    unknown. run_checks_at_once deals the checks out to the instances in turn, so each gets its share of long ones."""
+    return sorted(names, key=lambda name: -seconds_taken.get(name, math.inf))
+
+
 def run_checks_at_once(
     names: t.Sequence[str],
     instances: t.Sequence[ins.Instance],
@@ -278,8 +338,14 @@ class RunChecks(Command):
                 opening.map(ins.open_instance, self.run_dirs)
             )
         outcomes: t.List[Outcome] = run_checks_at_once(
-            names, instances, self.is_real_window, self.at_once
+            order_longest_first(names, read_seconds_taken(instances)),
+            instances,
+            self.is_real_window,
+            self.at_once,
         )
+        instance: ins.Instance
+        for instance in instances:
+            write_seconds_taken(instance, outcomes)
         failed: t.List[Outcome] = [
             outcome
             for outcome in outcomes
