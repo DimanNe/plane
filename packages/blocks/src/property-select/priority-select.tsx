@@ -33,6 +33,10 @@ export type PrioritySelectProps = {
   testId?: string;
   /** Tab order of the trigger, for forms that sequence focus explicitly (e.g. the work item create modal). */
   tabIndex?: number;
+  /** For a caller that opens the dropdown itself — see `SelectProps` for the three. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  finalFocus?: boolean;
 };
 
 /**
@@ -53,6 +57,9 @@ export function PrioritySelect(props: PrioritySelectProps) {
     tooltip,
     testId,
     tabIndex,
+    open,
+    onOpenChange,
+    finalFocus,
   } = props;
   const { t } = useTranslation();
 
@@ -70,6 +77,9 @@ export function PrioritySelect(props: PrioritySelectProps) {
       placeholder={placeholder}
       showSearch={false}
       onClose={onClose}
+      open={open}
+      onOpenChange={onOpenChange}
+      finalFocus={finalFocus}
       pinSelected={false}
       getOptionValue={(option) => option.key}
       getOptionLabel={labelOf}

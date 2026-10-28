@@ -39,8 +39,8 @@ export interface IIssueListViewStore {
   /** Ends the wait and returns what was typed during it. */
   takeTypedForDescription: () => string;
   /**
-   * The state keys have changed the selected line of this work item, and the change is being stored. If it sends
-   * the line to another group, the selection is left at the place of the line, for the line that takes it.
+   * The state or priority keys have changed the selected line of this work item, and the change is being stored. If
+   * it sends the line to another group, the selection is left at the place of the line, for the line that takes it.
    */
   leaveSelectionAtPlaceOf: (issueId: string, change: Promise<unknown>) => void;
   isSelectionLeftAtPlaceOf: (issueId: string) => boolean;

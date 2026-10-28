@@ -16,8 +16,6 @@ import list_layout as ll
 import page_changes
 import steps
 
-PALETTE: str = "[cmdk-input]:not(.menu-choice-picture [cmdk-input])"
-
 
 def run(check: steps.Check) -> None:
     account: ins.Account = check.account()
@@ -101,7 +99,7 @@ def run(check: steps.Check) -> None:
     page.keyboard.press("s")
     check.expect(
         "the page of a work item: S opens the palette's page of states",
-        lambda: page.locator(PALETTE).count(),
+        lambda: page.locator(ll.PALETTE).count(),
         1,
     )
     page.keyboard.press("c")
@@ -109,7 +107,7 @@ def run(check: steps.Check) -> None:
         "and C sets Cancelled and closes the palette",
         lambda: (
             ins.read_state_name(check.instance, project, "on its page"),
-            page.locator(PALETTE).count(),
+            page.locator(ll.PALETTE).count(),
         ),
         ("Cancelled", 0),
     )

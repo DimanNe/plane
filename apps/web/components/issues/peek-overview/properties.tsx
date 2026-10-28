@@ -32,7 +32,7 @@ import { PrioritySelect } from "@/components/dropdowns/priority/priority-select"
 import { StateSelect } from "@/components/dropdowns/state/state-select";
 import { MilestoneDueDateWarning } from "@/components/milestones/due-date-warning";
 import { MilestoneSelect } from "@/components/milestones/select";
-import { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
+import { usePropertyMenuOfKey } from "@/components/power-k/hooks/use-property-menu-of-key";
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 import { WorkItemSidebarProperties } from "@/components/work-item-types/sidebar-properties";
 // helpers
@@ -67,7 +67,8 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
   const { getStateById } = useProjectState();
   const { getUserDetails } = useMember();
   const { data: userProfile } = useUserProfile();
-  const stateMenuOfKey = useStateMenuOfKey("peek", issueId);
+  const stateMenuOfKey = usePropertyMenuOfKey("state", "peek", issueId);
+  const priorityMenuOfKey = usePropertyMenuOfKey("priority", "peek", issueId);
   // derived values
   const issue = getIssueById(issueId);
   if (!issue) return <></>;
@@ -122,6 +123,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             disabled={disabled}
             variant="select-ghost-md"
             tooltip
+            {...priorityMenuOfKey}
           />
         </SidebarPropertyListItem>
 

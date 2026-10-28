@@ -16,37 +16,9 @@ import list_layout as ll
 import page_changes
 import steps
 
-# Writes down, from now on, the state marked in the first picture of a menu that the page leaves.
-WATCH_PICTURE_JS: str = """
-() => {
-  window.__marked = null;
-  const watch = new MutationObserver(() => {
-    const marked = document.querySelector('.menu-choice-picture [role="option"][data-highlighted]');
-    if (marked) {
-      window.__marked = marked.textContent;
-      watch.disconnect();
-    }
-  });
-  watch.observe(document.body, { childList: true, subtree: true, attributes: true });
-}
-"""
-# Where the open menu is against the state of a line: how far its left edge is from the control's, and whether it
-# stands just below or just above it; and whether the caret is in its search.
-MENU_AT_LINE_JS: str = """
-([line, popupSelector]) => {
-  const popup = document.querySelector(popupSelector);
-  const control = line.querySelector('[data-filter-property="state_id"] button');
-  if (!popup || !control) return null;
-  const menu = popup.getBoundingClientRect();
-  const box = control.getBoundingClientRect();
-  return [Math.abs(menu.left - box.left) <= 3, Math.min(Math.abs(menu.top - box.bottom), Math.abs(box.top - menu.bottom)) <= 10,
-    document.activeElement?.tagName === 'INPUT' && popup.contains(document.activeElement)];
-}
-"""
-
 
 def press_state_key(page: pw.Page, letter: str) -> None:
-    page.evaluate(WATCH_PICTURE_JS)
+    page.evaluate(ll.WATCH_PICTURE_JS)
     page.keyboard.press("s")
     page_changes.wait_until_shown(page.locator(ll.PROPERTY_MENU))
     page.keyboard.press(letter)
@@ -71,12 +43,12 @@ def run(check: steps.Check) -> None:
     check.expect(
         "S on the selected line opens the menu of states at that line's state, with the caret in its search",
         lambda: page.evaluate(
-            MENU_AT_LINE_JS,
-            [ll.line(page, "second").element_handle(), ll.PROPERTY_MENU],
+            ll.MENU_AT_CONTROL_JS,
+            [ll.line(page, "second").element_handle(), ll.PROPERTY_MENU, "state_id"],
         ),
         [True, True, True],
     )
-    page.evaluate(WATCH_PICTURE_JS)
+    page.evaluate(ll.WATCH_PICTURE_JS)
     page.keyboard.press("d")
     check.expect(
         "D: the state is Done at once, the menu has closed, and its picture marked Done",

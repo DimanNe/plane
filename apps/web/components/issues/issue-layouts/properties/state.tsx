@@ -11,7 +11,7 @@ import type { TIssue } from "@plane/types";
 // components
 import { StateSelect } from "@/components/dropdowns/state/state-select";
 import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
-import type { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
+import type { usePropertyMenuOfKey } from "@/components/power-k/hooks/use-property-menu-of-key";
 // hooks
 import { useListView } from "@/hooks/store/use-list-view";
 
@@ -19,7 +19,7 @@ type TIssuePropertyState = {
   issue: TIssue;
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
   isReadOnly: boolean;
-  stateMenuOfKey: ReturnType<typeof useStateMenuOfKey>;
+  stateMenuOfKey: ReturnType<typeof usePropertyMenuOfKey>;
 };
 
 const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {

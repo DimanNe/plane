@@ -11,10 +11,16 @@ import { PowerKCommandRegistry } from "@/components/power-k/core/registry";
 import type { TPowerKContextType, TPowerKPageType } from "@/components/power-k/core/types";
 
 /**
- * The state menu of a work item that the key S holds open: of its selected line of the list, or of the peek view.
- * `focusedBefore`: what had the focus when S was pressed, for the focus to go back to when the menu closes.
+ * The menu of a property of a work item that a key holds open, its states (S) or its priorities (P): of its selected
+ * line of the list, or of the peek view. `focusedBefore`: what had the focus when the key was pressed, for the focus
+ * to go back to when the menu closes.
  */
-export type TStateMenuOfKey = { workItemId: string; place: "list" | "peek"; focusedBefore: HTMLElement | undefined };
+export type TPropertyMenuOfKey = {
+  property: "state" | "priority";
+  workItemId: string;
+  place: "list" | "peek";
+  focusedBefore: HTMLElement | undefined;
+};
 
 export interface IBasePowerKStore {
   // observables
@@ -24,11 +30,11 @@ export interface IBasePowerKStore {
   activeContext: TPowerKContextType | null;
   activePage: TPowerKPageType | null;
   topNavInputRef: React.RefObject<HTMLInputElement | null> | null;
-  stateMenuOfKey: TStateMenuOfKey | undefined;
+  propertyMenuOfKey: TPropertyMenuOfKey | undefined;
   setActiveContext: (entity: TPowerKContextType | null) => void;
   setActivePage: (page: TPowerKPageType | null) => void;
   setTopNavInputRef: (ref: React.RefObject<HTMLInputElement | null> | null) => void;
-  setStateMenuOfKey: (menu: TStateMenuOfKey | undefined) => void;
+  setPropertyMenuOfKey: (menu: TPropertyMenuOfKey | undefined) => void;
   // toggle actions
   togglePowerKModal: (value?: boolean) => void;
   toggleShortcutsListModal: (value?: boolean) => void;
@@ -42,7 +48,7 @@ export class BasePowerKStore implements IBasePowerKStore {
   activeContext: TPowerKContextType | null = null;
   activePage: TPowerKPageType | null = null;
   topNavInputRef: React.RefObject<HTMLInputElement | null> | null = null;
-  stateMenuOfKey: TStateMenuOfKey | undefined = undefined;
+  propertyMenuOfKey: TPropertyMenuOfKey | undefined = undefined;
 
   constructor() {
     makeObservable(this, {
@@ -53,14 +59,14 @@ export class BasePowerKStore implements IBasePowerKStore {
       activeContext: observable,
       activePage: observable,
       topNavInputRef: observable.ref,
-      stateMenuOfKey: observable.ref,
+      propertyMenuOfKey: observable.ref,
       // toggle actions
       togglePowerKModal: action,
       toggleShortcutsListModal: action,
       setActiveContext: action,
       setActivePage: action,
       setTopNavInputRef: action,
-      setStateMenuOfKey: action,
+      setPropertyMenuOfKey: action,
     });
   }
 
@@ -89,11 +95,11 @@ export class BasePowerKStore implements IBasePowerKStore {
   };
 
   /**
-   * Sets the state menu that the key S holds open
+   * Sets the property menu that a key holds open
    * @param menu
    */
-  setStateMenuOfKey = (menu: TStateMenuOfKey | undefined) => {
-    this.stateMenuOfKey = menu;
+  setPropertyMenuOfKey = (menu: TPropertyMenuOfKey | undefined) => {
+    this.propertyMenuOfKey = menu;
   };
 
   /**

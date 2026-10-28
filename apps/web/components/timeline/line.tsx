@@ -21,7 +21,7 @@ import { TITLE_TEXT_SIZES } from "@/components/issues/issue-layouts/list/block-t
 import { IssuePropertyPriority } from "@/components/issues/issue-layouts/properties/priority";
 import { IssuePropertyState } from "@/components/issues/issue-layouts/properties/state";
 import { getBlockViewDetails } from "@/components/issues/issue-layouts/utils";
-import { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
+import { usePropertyMenuOfKey } from "@/components/power-k/hooks/use-property-menu-of-key";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useListView } from "@/hooks/store/use-list-view";
@@ -117,7 +117,8 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
   // derived values
   const issue = getIssueById(taskId);
   const isSelected = getIsRowSelected(taskId, ALL_ISSUES);
-  const stateMenuOfKey = useStateMenuOfKey("list", isSelected ? taskId : undefined);
+  const stateMenuOfKey = usePropertyMenuOfKey("state", "list", isSelected ? taskId : undefined);
+  const priorityMenuOfKey = usePropertyMenuOfKey("priority", "list", isSelected ? taskId : undefined);
   const cellClassName = cn("group-hover/line:bg-layer-transparent-hover", {
     "bg-layer-transparent-selected group-hover/line:bg-layer-transparent-selected": isSelected,
   });
@@ -176,7 +177,12 @@ export const TimelineLine = observer(function TimelineLine(props: Props) {
             isReadOnly={!props.isEditable}
             stateMenuOfKey={stateMenuOfKey}
           />
-          <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!props.isEditable} />
+          <IssuePropertyPriority
+            issue={issue}
+            updateIssue={updateIssue}
+            isReadOnly={!props.isEditable}
+            priorityMenuOfKey={priorityMenuOfKey}
+          />
         </span>
         <LineName taskId={taskId} name={issue.name} />
         <LineDuration taskId={taskId} />

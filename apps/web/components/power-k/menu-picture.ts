@@ -10,8 +10,8 @@
  */
 type TMenuKind = { menu: string; item: string; highlighted: string };
 
-/** The state menu of a line of the list and of the peek view. */
-export const STATE_SELECT_MENU: TMenuKind = {
+/** The menu of a property, its state or its priority, at a line of the list and in the peek view. */
+export const PROPERTY_MENU: TMenuKind = {
   menu: "[data-select-popup]",
   item: '[role="option"]',
   highlighted: "data-highlighted",

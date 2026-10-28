@@ -26,7 +26,7 @@ import { IssueProperties } from "@/components/issues/issue-layouts/properties";
 import { IssuePropertyPriority } from "@/components/issues/issue-layouts/properties/priority";
 import { IssuePropertyState } from "@/components/issues/issue-layouts/properties/state";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
-import { useStateMenuOfKey } from "@/components/power-k/hooks/use-state-menu-of-key";
+import { usePropertyMenuOfKey } from "@/components/power-k/hooks/use-property-menu-of-key";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -118,7 +118,9 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const canEditIssueProperties = !isInAnotherGroup && canEditProperties(issue?.project_id ?? undefined);
   const isDraggingAllowed = canDrag && canEditIssueProperties;
   const isTitleEdited = getIsRowTitleEdited(issueId, groupId);
-  const stateMenuOfKey = useStateMenuOfKey("list", getIsRowSelected(issueId, groupId) ? issueId : undefined);
+  const issueIdIfSelected = getIsRowSelected(issueId, groupId) ? issueId : undefined;
+  const stateMenuOfKey = usePropertyMenuOfKey("state", "list", issueIdIfSelected);
+  const priorityMenuOfKey = usePropertyMenuOfKey("priority", "list", issueIdIfSelected);
 
   useEffect(() => {
     const element = issueRef.current;
@@ -297,7 +299,12 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                 stateMenuOfKey={stateMenuOfKey}
               />
               {displayProperties?.priority && (
-                <IssuePropertyPriority issue={issue} updateIssue={updateIssue} isReadOnly={!canEditIssueProperties} />
+                <IssuePropertyPriority
+                  issue={issue}
+                  updateIssue={updateIssue}
+                  isReadOnly={!canEditIssueProperties}
+                  priorityMenuOfKey={priorityMenuOfKey}
+                />
               )}
             </div>
             <IssueBlockTitle

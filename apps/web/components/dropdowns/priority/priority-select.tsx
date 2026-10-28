@@ -26,6 +26,10 @@ type PrioritySelectWebProps = {
   tooltip?: SelectTooltip;
   /** Tab order of the trigger, for forms that sequence focus explicitly (`ETabIndices`). */
   tabIndex?: number;
+  /** For the menu that a key opens — see `usePropertyMenuOfKey`. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  finalFocus?: boolean;
 };
 
 /**

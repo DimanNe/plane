@@ -11,11 +11,15 @@ import type { TIssue } from "@plane/types";
 // components
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
 import { filterValueProps } from "@/components/issues/issue-layouts/quick-action-dropdowns/filter-menu-helper";
+import type { usePropertyMenuOfKey } from "@/components/power-k/hooks/use-property-menu-of-key";
+// hooks
+import { useListView } from "@/hooks/store/use-list-view";
 
 type TIssuePropertyPriority = {
   issue: TIssue;
   updateIssue: ((projectId: string | null, issueId: string, data: Partial<TIssue>) => Promise<void>) | undefined;
   isReadOnly: boolean;
+  priorityMenuOfKey: ReturnType<typeof usePropertyMenuOfKey>;
 };
 
 const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
@@ -28,7 +32,9 @@ const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
  * The row itself is a link, so the click must not reach it.
  */
 export const IssuePropertyPriority = observer(function IssuePropertyPriority(props: TIssuePropertyPriority) {
-  const { issue, updateIssue, isReadOnly } = props;
+  const { issue, updateIssue, isReadOnly, priorityMenuOfKey } = props;
+  // store hooks
+  const { leaveSelectionAtPlaceOf } = useListView();
 
   return (
     // oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions
@@ -40,11 +46,16 @@ export const IssuePropertyPriority = observer(function IssuePropertyPriority(pro
     >
       <PrioritySelect
         value={issue.priority}
-        onChange={(priority) => updateIssue?.(issue.project_id, issue.id, { priority })}
+        onChange={(priority) => {
+          const change = updateIssue?.(issue.project_id, issue.id, { priority });
+          // chosen by hand in the menu that the key P opened: as chosen there by its letter
+          if (change && priorityMenuOfKey.open) leaveSelectionAtPlaceOf(issue.id, change);
+        }}
         disabled={isReadOnly}
         variant="icon-sm"
         className="focus-visible:ring-inset [&_svg]:size-4"
         tooltip
+        {...priorityMenuOfKey}
       />
     </div>
   );

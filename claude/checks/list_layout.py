@@ -32,6 +32,36 @@ QUESTION: str = '[role="dialog"]:has-text("Are you sure"), [role="alertdialog"]:
 PROPERTY_MENU: str = "[data-select-popup]:not([data-closed], .menu-choice-picture, .menu-choice-picture *)"
 # pixels a level of sub-work items is indented by
 INDENT: int = 24
+# The palette, open with its search, which is not the picture of it that a key leaves when it chooses there.
+PALETTE: str = "[cmdk-input]:not(.menu-choice-picture [cmdk-input])"
+# Writes down, from now on, the item marked in the first picture of a menu that the page leaves.
+WATCH_PICTURE_JS: str = """
+() => {
+  window.__marked = null;
+  const watch = new MutationObserver(() => {
+    const marked = document.querySelector('.menu-choice-picture [role="option"][data-highlighted]');
+    if (marked) {
+      window.__marked = marked.textContent;
+      watch.disconnect();
+    }
+  });
+  watch.observe(document.body, { childList: true, subtree: true, attributes: true });
+}
+"""
+# Where the open menu is against the control of a property on a line (its data-filter-property, such as "state_id"
+# or "priority"): whether its left edge is at the control's and it stands just below or just above it, and whether
+# the caret is in its search.
+MENU_AT_CONTROL_JS: str = """
+([line, popupSelector, property]) => {
+  const popup = document.querySelector(popupSelector);
+  const control = line.querySelector(`[data-filter-property="${property}"] button`);
+  if (!popup || !control) return null;
+  const menu = popup.getBoundingClientRect();
+  const box = control.getBoundingClientRect();
+  return [Math.abs(menu.left - box.left) <= 3, Math.min(Math.abs(menu.top - box.bottom), Math.abs(box.top - menu.bottom)) <= 10,
+    document.activeElement?.tagName === 'INPUT' && popup.contains(document.activeElement)];
+}
+"""
 
 # A line that goes to another place is carried there as a picture of itself, which is not a line of the list.
 IS_OF_THE_LIST_JS: str = (
