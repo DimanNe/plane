@@ -278,6 +278,118 @@ class StartTests(unittest.TestCase):
             self.assertEqual(build.call_count, 0)
 
 
+class PrepareAndRestartTests(unittest.TestCase):
+    def test_builds_only_for_a_start_that_would_be_accepted_and_restarts_only_after_the_build(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            image_tag_of_instance: str
+            bind_of_persisted: t.Optional[str]
+            build_error: t.Optional[str]
+            expected: t.Tuple[t.List[str], t.Optional[str]]
+
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir: pl.Path = pl.Path(temporary).resolve() / "instance"
+            plane_git_path: pl.Path = pl.Path(temporary).resolve() / "plane-git"
+            start: runtime.StartCommand = runtime.StartCommand(
+                run_dir,
+                plane_git_path,
+                runtime.BindAddress.parse("0.0.0.0:12001"),
+                plane_config.ImageTag("plane-47"),
+            )
+            tcs: t.List[Tc] = [
+                Tc(
+                    "an instance of this image tag",
+                    "plane-47",
+                    None,
+                    None,
+                    (["build", "pull", "start"], None),
+                ),
+                Tc(
+                    "an instance of another image tag",
+                    "plane-48",
+                    None,
+                    None,
+                    (
+                        [],
+                        "The instance runs the images plane-local-*:plane-48, and this command names "
+                        "plane-local-*:plane-47: pass --image-tag plane-48, or another --run-dir",
+                    ),
+                ),
+                Tc(
+                    "a failed build",
+                    "plane-47",
+                    None,
+                    "Command failed (1): docker buildx build: see stderr",
+                    (["build"], "Command failed (1): docker buildx build: see stderr"),
+                ),
+                Tc(
+                    "the instance of the persist-auto unit, with its arguments",
+                    "plane-47",
+                    "0.0.0.0:12001",
+                    None,
+                    (["build", "pull", "start"], None),
+                ),
+                Tc(
+                    "the instance of the persist-auto unit, with another address",
+                    "plane-47",
+                    "127.0.0.1:12001",
+                    None,
+                    (
+                        [],
+                        f"{runtime.PERSIST_AUTO_UNIT_NAME} starts {run_dir} with --bind 127.0.0.1:12001 and "
+                        f"--image-tag plane-47, from the checkout {plane_git_path}: pass the same, change what it "
+                        "starts with start --persist-auto systemd, or stop starting it at boot with start "
+                        "--persist-auto none",
+                    ),
+                ),
+            ]
+            i: int
+            tc: Tc
+            for i, tc in enumerate(tcs):
+                config: plane_config.InstanceConfig = plane_config.InstanceConfig.make()
+                config.image_tag = plane_config.ImageTag(tc.image_tag_of_instance)
+                config.write(run_dir)
+                steps: t.List[str] = []
+
+                def build(*_: t.Any) -> None:
+                    steps.append("build")
+                    if tc.build_error is not None:
+                        raise RuntimeError(tc.build_error)
+
+                error: t.Optional[str] = None
+                with (
+                    mock.patch.object(
+                        runtime,
+                        "get_persist_auto_start_of",
+                        return_value=None
+                        if tc.bind_of_persisted is None
+                        else dc.replace(
+                            start,
+                            bind=runtime.BindAddress.parse(tc.bind_of_persisted),
+                        ),
+                    ),
+                    mock.patch.object(runtime, "build_our_images", side_effect=build),
+                    mock.patch.object(
+                        runtime,
+                        "pull_and_resolve_external_images",
+                        side_effect=lambda: steps.append("pull"),
+                    ),
+                    mock.patch.object(
+                        runtime.StartCommand,
+                        "run",
+                        side_effect=lambda: steps.append("start"),
+                    ),
+                ):
+                    try:
+                        runtime.PrepareAndRestartCommand(start).run()
+                    except RuntimeError as raised:
+                        error = str(raised)
+                actual: t.Tuple[t.List[str], t.Optional[str]] = (steps, error)
+                self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+
 class PlaneEnvironmentTests(unittest.TestCase):
     def test_instances_on_one_host_name_their_cookies_apart_and_a_restored_backup_keeps_them(
         self,
@@ -431,7 +543,9 @@ class ServiceReadinessTests(unittest.TestCase):
 
 
 class RunningInstanceTests(unittest.TestCase):
-    def test_start_keeps_running_only_the_instance_as_asked(self) -> None:
+    def test_start_replaces_the_services_not_as_asked_and_every_one_for_a_store_or_the_network(
+        self,
+    ) -> None:
         run_dir: pl.Path = pl.Path("/srv/checks-1")
         bind: runtime.BindAddress = runtime.BindAddress.parse("127.0.0.1:12141")
         image_ids: t.Dict[plane_config.Service, str] = {
@@ -490,32 +604,61 @@ class RunningInstanceTests(unittest.TestCase):
         class Tc(t.NamedTuple):
             name: str
             running: runtime.Containers
-            expected: bool
+            expected: t.Set[plane_config.Service]
 
         api: plane_config.Service = plane_config.Service.API
+        every_service: t.Set[plane_config.Service] = set(plane_config.Service)
         tcs: t.List[Tc] = [
-            Tc("every service as this script starts it", make_running(), True),
+            Tc("every service as this script starts it", make_running(), set()),
             Tc(
                 "the API with another number of workers",
                 make_running(api=make_container(api, command=other_api_workers)),
-                False,
+                {api},
             ),
             Tc(
                 "a service on an image other than the one just built",
                 make_running(api=make_container(api, image="sha256:older")),
-                False,
+                {api},
+            ),
+            Tc(
+                "the clients on images other than those just built, after a change of the web app",
+                make_running(
+                    live=make_container(
+                        plane_config.Service.LIVE, image="sha256:older"
+                    ),
+                    space=make_container(
+                        plane_config.Service.SPACE, image="sha256:older"
+                    ),
+                    proxy=make_container(
+                        plane_config.Service.PROXY, image="sha256:older"
+                    ),
+                ),
+                {
+                    plane_config.Service.LIVE,
+                    plane_config.Service.SPACE,
+                    plane_config.Service.PROXY,
+                },
             ),
             Tc(
                 "a service outside the namespace of the network container",
                 make_running(api=make_container(api, network_mode="bridge")),
-                False,
+                {api},
+            ),
+            Tc(
+                "a store on an image other than the one this script names",
+                make_running(
+                    redis=make_container(
+                        plane_config.Service.REDIS, image="sha256:older"
+                    )
+                ),
+                every_service,
             ),
             Tc(
                 "the network container on another port",
                 make_running(
                     network=make_container(plane_config.Service.NETWORK, port=12142)
                 ),
-                False,
+                every_service,
             ),
             Tc(
                 "no network container",
@@ -524,14 +667,16 @@ class RunningInstanceTests(unittest.TestCase):
                     for service, container in make_running().items()
                     if service != plane_config.Service.NETWORK
                 },
-                False,
+                every_service - {plane_config.Service.NETWORK},
             ),
         ]
         i: int
         tc: Tc
         for i, tc in enumerate(tcs):
-            actual: bool = runtime.is_running_instance_as_asked(
-                run_dir, tc.running, bind, image_ids
+            actual: t.Set[plane_config.Service] = (
+                runtime.get_running_services_to_replace(
+                    run_dir, tc.running, bind, image_ids
+                )
             )
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
@@ -1430,6 +1575,25 @@ class CommandLineTests(unittest.TestCase):
             ),
             Tc(
                 [
+                    "prepare-and-restart",
+                    "--run-dir",
+                    "run",
+                    "--bind",
+                    "0.0.0.0:12001",
+                    "--image-tag",
+                    "plane-47",
+                ],
+                runtime.PrepareAndRestartCommand(
+                    runtime.StartCommand(
+                        pl.Path("run"),
+                        plane_git_path,
+                        runtime.BindAddress(ipaddress.IPv4Address("0.0.0.0"), 12001),
+                        plane_config.ImageTag("plane-47"),
+                    )
+                ),
+            ),
+            Tc(
+                [
                     "bootstrap-user",
                     "--run-dir",
                     "run",
@@ -1449,10 +1613,11 @@ class CommandLineTests(unittest.TestCase):
             actual: runtime.Command = runtime.parse_cli_command(tc.argv)
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.argv}")
 
-    def test_start_and_import_need_a_bind_address(self) -> None:
+    def test_start_prepare_and_restart_and_import_need_a_bind_address(self) -> None:
         argv: t.List[str]
         for argv in (
             ["start", "--run-dir", "run"],
+            ["prepare-and-restart", "--run-dir", "run"],
             ["import", "--run-dir", "run", "--input", "/dev/null"],
         ):
             with (

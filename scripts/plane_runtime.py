@@ -1643,17 +1643,20 @@ def start_network_container(
     )
 
 
-def is_running_instance_as_asked(
+def get_running_services_to_replace(
     run_dir: pl.Path,
     running: Containers,
     bind: BindAddress,
     image_ids: t.Dict[plane_config.Service, str],
-) -> bool:
-    """Whether the running containers are this instance as asked for, which a start keeps running: the images just
-    built, the requested bind address, every service in the namespace of the running network container, and the
-    Python services with this script's commands. A command that changes, such as the API's with another
-    API_WORKERS, runs on the same images: without comparing commands, a running instance would keep the old one
-    until it is stopped."""
+) -> t.Set[plane_config.Service]:
+    """The running services that a start stops and starts again, because they are not as asked: on another image
+    than the one just built, outside the namespace of the running network container, or, for the Python services,
+    with another command than this script's. A command that changes, such as the API's with another API_WORKERS,
+    runs on the same images: without comparing commands, a running instance would keep the old one until it is
+    stopped. The other services go on serving, so that the start after a prepare stops only what the new images
+    change: after a change of the web app alone, the API keeps answering. Every service runs in the namespace of the
+    network container, and the applications keep connections to the stores, which a restart of a store would break
+    under them; so a network container or a store that is not as asked replaces every service."""
     network_container: t.Optional[Container] = running.get(plane_config.Service.NETWORK)
     proxy_port: int = SERVICE_PORTS[plane_config.Service.PROXY]
     image_services: t.Dict[plane_config.Service, plane_config.Service] = {
@@ -1664,29 +1667,33 @@ def is_running_instance_as_asked(
     python_service_commands: t.Dict[plane_config.Service, t.List[str]] = (
         get_python_service_commands(run_dir)
     )
-    return not (
-        network_container is None
-        or network_container["HostConfig"]["PortBindings"]
-        != {
-            f"{proxy_port}/tcp": [
-                {"HostIp": str(bind.host), "HostPort": str(bind.port)}
-            ]
-        }
-        or any(
-            container["Image"] != image_ids[image_services.get(name, name)]
-            or (
-                name != plane_config.Service.NETWORK
-                and container["HostConfig"]["NetworkMode"]
-                != "container:" + network_container["Id"]
-            )
-            or (
-                name in python_service_commands
-                and container["Config"]["Cmd"]
-                != get_python_service_argv(python_service_commands[name])
-            )
-            for name, container in running.items()
+    if network_container is None or network_container["HostConfig"]["PortBindings"] != {
+        f"{proxy_port}/tcp": [{"HostIp": str(bind.host), "HostPort": str(bind.port)}]
+    }:
+        return set(running)
+    not_as_asked: t.Set[plane_config.Service] = {
+        name
+        for name, container in running.items()
+        if container["Image"] != image_ids[image_services.get(name, name)]
+        or (
+            name != plane_config.Service.NETWORK
+            and container["HostConfig"]["NetworkMode"]
+            != "container:" + network_container["Id"]
         )
-    )
+        or (
+            name in python_service_commands
+            and container["Config"]["Cmd"]
+            != get_python_service_argv(python_service_commands[name])
+        )
+    }
+    if not_as_asked & {
+        plane_config.Service.NETWORK,
+        plane_config.Service.POSTGRES,
+        plane_config.Service.REDIS,
+        plane_config.Service.MINIO,
+    }:
+        return set(running)
+    return not_as_asked
 
 
 def start_plane_services(
@@ -1704,8 +1711,12 @@ def start_plane_services(
         for name, container in containers.items()
         if container["State"]["Running"]
     }
-    if running and not is_running_instance_as_asked(run_dir, running, bind, image_ids):
-        stop_plane_containers(run_dir, timings).result()
+    replaced: t.Set[plane_config.Service] = get_running_services_to_replace(
+        run_dir, running, bind, image_ids
+    )
+    if replaced:
+        log(f"Replacing: {', '.join(sorted(replaced))}")
+        stop_plane_containers(run_dir, timings, replaced).result()
         containers = get_containers(run_dir)
     service_secrets: plane_config.ServiceSecrets = config.secrets
     create_instance_directories(run_dir)
@@ -2003,11 +2014,13 @@ def wait_until_docker_has_recorded_stops(
 
 
 def stop_plane_containers(
-    run_dir: pl.Path, timings: Timings
+    run_dir: pl.Path,
+    timings: Timings,
+    services: t.Collection[plane_config.Service] = tuple(plane_config.Service),
 ) -> concurrent.futures.Future[None]:
-    """Stops every service and returns what Docker still has to finish.
+    """Stops these services, by default every one, and returns what Docker still has to finish.
 
-    When this returns, no service writes data any more. Still in progress are the stop of the
+    When this returns, none of them writes data any more. Still in progress are the stop of the
     network container, where Docker needs longer to remove the network than everything else
     here takes, and Docker's own record that the other containers have stopped. A caller with
     other work to do, such as writing the archive, does it before it waits for the returned
@@ -2017,7 +2030,7 @@ def stop_plane_containers(
     running: Containers = {
         name: container
         for name, container in get_containers(run_dir).items()
-        if container["State"]["Running"]
+        if container["State"]["Running"] and name in services
     }
     # Their main processes get a signal directly, see signal_processes_and_wait_for_exit().
     # MinIO is asked to stop; the others are killed, which PostgreSQL and Redis recover from.
@@ -2644,6 +2657,42 @@ class StartCommand(Command):
 
 
 @dc.dataclass(frozen=True)
+class PrepareAndRestartCommand(Command):
+    """Builds the images while the instance goes on serving on the old ones, then starts it, which replaces the
+    services whose images changed (see get_running_services_to_replace()): the instance is down only for that."""
+
+    start: StartCommand
+
+    def run(self) -> None:
+        run_dir: pl.Path = resolve_run_dir(self.start.run_dir)
+        plane_git_path: pl.Path = resolve_home(self.start.plane_git_path)
+        # What start would refuse is refused before the build, which takes minutes and retags images: under another
+        # tag than the instance's, it would replace the images that other instances start with, the owner's too.
+        require_separate_source_and_run_directory(plane_git_path, run_dir)
+        require_same_image_tag_as_instance(
+            plane_config.InstanceConfig.read_existing(run_dir), self.start.image_tag
+        )
+        persisted: t.Optional[StartCommand] = get_persist_auto_start_of(run_dir)
+        if persisted is not None:
+            require_same_start_as_persisted(self.start, persisted)
+        # A failed build ends the command here, and the instance goes on running its old images.
+        # FOR_REVIEWER: the images are tagged one by one as they are built, so a build that fails after the API's
+        # leaves the new API image tagged beside the old images of the clients, and the next start (at boot, too)
+        # runs that mix; plain prepare does the same. Changing the tags only once all are built needs the ids of
+        # untagged builds, which buildx's --iidfile does not give with Docker's containerd image store here.
+        build_our_images(plane_git_path, self.start.image_tag)
+        pull_and_resolve_external_images()
+        # Through the persist-auto unit when it starts this instance, as start does: the unit's ExecReload= runs the
+        # same start, so systemd knows of it and never runs the unit's ExecStop= beside it, which a start of its own
+        # would race with at a poweroff.
+        # FOR_REVIEWER: a stop of the unit during the reload, as at a poweroff in the seconds of the restart, has
+        # systemd end the reload (SIGTERM) and mark the unit failed, so its ExecStop=, the export on shutdown with it,
+        # does not run (tried with a unit of its own); a start by hand of this instance goes the same way. The build,
+        # which takes minutes, runs before, outside the unit, where a poweroff stops and exports as usual.
+        self.start.run()
+
+
+@dc.dataclass(frozen=True)
 class StopCommand(Command):
     run_dir: pl.Path
     export_on_shutdown: t.Optional[ExportOnShutdown] = None
@@ -2928,7 +2977,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
     start_parser: argparse.ArgumentParser = subparsers.add_parser(
         "start",
         help="Start Plane using the data in --run-dir.",
-        description="Start Plane containers and wait until each service is ready. Initialize databases if --run-dir is empty. Use the current Docker image tags; run prepare after source changes.",
+        description="Start Plane containers and wait until each service is ready. Initialize databases if --run-dir is empty. Use the current Docker image tags; run prepare after source changes. Of a running instance, stop and start again only the services whose images or commands changed, or every service when its address or the image of a store changed.",
     )
     start_parser.add_argument(
         "--plane-git-path",
@@ -2961,7 +3010,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         "--persist-auto",
         type=PersistAuto,
         choices=list(PersistAuto),
-        help=f"systemd: also start this instance at every boot, and export it on shutdown (see --export-basename), through the unit {PERSIST_AUTO_UNIT_NAME} of the user's systemd, which keeps these arguments; run again with other arguments to change them. From then on, start, stop, export and import of this run directory go through the unit, and systemctl --user start, stop, restart and status work on it. none: remove that unit, then start as without --persist-auto.",
+        help=f"systemd: also start this instance at every boot, and export it on shutdown (see --export-basename), through the unit {PERSIST_AUTO_UNIT_NAME} of the user's systemd, which keeps these arguments; run again with other arguments to change them. From then on, start, prepare-and-restart, stop, export and import of this run directory go through the unit, and systemctl --user start, stop, restart and status work on it. none: remove that unit, then start as without --persist-auto.",
     )
     # FOR_REVIEWER: as the task says, --persist-auto systemd needs --export-basename, so every persisted instance is
     # exported on shutdown. Without --persist-auto systemd both export options are refused rather than ignored: only
@@ -2976,6 +3025,36 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         "--export-dir",
         metavar="PATH",
         help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: the directory that contains the checkout of this script, {plane_git_path.parent}.",
+    )
+    prepare_and_restart_parser: argparse.ArgumentParser = subparsers.add_parser(
+        "prepare-and-restart",
+        help="Run prepare while Plane keeps running, then restart what the new images change.",
+        description="Build the Plane images from this checkout as prepare does, while the instance in --run-dir keeps running on its previous images, then start it as start does: only the services whose images changed are stopped and started again, and migrations run if the API image changed. A stopped instance is started. If the build fails, the instance keeps running as it was. The instance that start --persist-auto systemd starts is restarted through that unit.",
+    )
+    prepare_and_restart_parser.add_argument(
+        "--plane-git-path",
+        default=str(plane_git_path),
+        metavar="PATH",
+        help="Plane checkout containing application sources, packages and Dockerfiles. Default: the checkout containing this script.",
+    )
+    prepare_and_restart_parser.add_argument(
+        "--run-dir",
+        required=True,
+        metavar="PATH",
+        help="Directory containing the databases, uploads, and settings for this instance.",
+    )
+    prepare_and_restart_parser.add_argument(
+        "--bind",
+        type=BindAddress.parse,
+        required=True,
+        metavar="IPV4:PORT",
+        help="Host address and port the browser reaches Plane on, as for start. Another address than the running instance's restarts every service there.",
+    )
+    prepare_and_restart_parser.add_argument(
+        "--image-tag",
+        type=parse_image_tag,
+        metavar="TAG",
+        help="Build and run the images plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs. An instance runs only the images of its first start: another tag is refused before anything is built.",
     )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
@@ -3131,6 +3210,15 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
             image_tag=args.image_tag,
             persist_auto=args.persist_auto,
             export_on_shutdown=export_on_shutdown,
+        )
+    elif args.subparser_name == "prepare-and-restart":
+        return PrepareAndRestartCommand(
+            StartCommand(
+                run_dir=pl.Path(args.run_dir),
+                plane_git_path=pl.Path(args.plane_git_path),
+                bind=args.bind,
+                image_tag=args.image_tag,
+            )
         )
     elif args.subparser_name == "stop":
         return StopCommand(

@@ -12,6 +12,7 @@ user's systemd. Every subcommand has `--help`.
 ./scripts/plane_runtime.py export --run-dir RUN --output backup.zstd              # stop, then write the backup
 ./scripts/plane_runtime.py import --run-dir RUN --bind IP:PORT --input backup.zstd # replace everything, then start
 ./scripts/plane_runtime.py start --run-dir RUN --bind IP:PORT [--persist-auto systemd --export-basename NAME [--export-dir DIR]]
+./scripts/plane_runtime.py prepare-and-restart --run-dir RUN --bind IP:PORT      # build while it runs, then restart what changed
 ./scripts/plane_runtime.py stop|status --run-dir RUN
 ```
 
@@ -48,7 +49,12 @@ cookie.
 
 Images are built from the checkout by `prepare` (or on first use when missing). After changing
 sources run `prepare` again; the next `start` sees the new API image and runs Django migrations
-before the applications come up.
+before the applications come up. A `start` of a running instance stops and starts again only the
+services whose images or commands changed: after a change of the web app alone, the proxy, the live
+server and Spaces, while the API keeps answering. Another address, or another image of a store,
+restarts every service. `prepare-and-restart` is `prepare` and then that `start`: it builds while
+the instance still runs on its old images, so the instance is down only while those services
+restart, and a failed build leaves it running as it was.
 
 Start waits for each service's own "ready" line in its log (and for the container not to exit),
 then makes one protocol request to it: PostgreSQL, Redis and MinIO are asked inside their
@@ -102,9 +108,9 @@ with these arguments and from this checkout, at every boot, and this script's `s
 user's systemd starts at boot because the user lingers (`loginctl enable-linger`). There is one such
 unit: running the command again with another run directory or address stops the old instance and moves
 the unit. `systemctl --user start|stop|restart|status plane-persist-auto` work on it, and `start`,
-`stop`, `export` and `import` of that run directory go through it, so that systemd always knows whether
-the instance runs. `start --persist-auto none` removes the unit and then starts the instance once, as a
-plain `start` does.
+`prepare-and-restart`, `stop`, `export` and `import` of that run directory go through it, so that
+systemd always knows whether the instance runs. `start --persist-auto none` removes the unit and then
+starts the instance once, as a plain `start` does.
 
 The unit's stop exports the instance when the user's systemd itself stops, which for a lingering user
 is when the VM powers off or reboots: `crosvm powerbtn`, or `poweroff` or `reboot` inside the VM. The
