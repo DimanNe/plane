@@ -823,15 +823,25 @@ def write_caddy_config(run_dir: pl.Path, plane_origin: str) -> None:
     # The build names a code file after a hash of its contents, so such a file never changes and is kept for good;
     # an address of one that is not there is answered with the page instead. The page, which names the files of the
     # latest build, is checked at every load, whatever address it answers.
+    # Most requests of a page's load are for code files, and each matcher of the pages below looks on disk again for
+    # the file of the address: a code file that is there is answered first, with one look.
+    @asset_on_disk {{
+        path /assets/*
+        file {{
+            root /srv/web
+        }}
+    }}
+    handle @asset_on_disk {{
+        root * /srv/web
+        encode zstd gzip
+        @hashed_asset path_regexp ^/assets/[^/]+-[A-Za-z0-9_-]{{8,}}\\.[A-Za-z0-9]+$
+        header @hashed_asset Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }}
     handle {{
         root * /srv/web
         try_files {{path}} /index.html
         encode zstd gzip
-        @hashed_asset {{
-            file
-            path_regexp ^/assets/[^/]+-[A-Za-z0-9_-]{{8,}}\\.[A-Za-z0-9]+$
-        }}
-        header @hashed_asset Cache-Control "public, max-age=31536000, immutable"
         @answered_with_page not file
         header @answered_with_page Cache-Control "no-cache"
         @page_of_app {{
