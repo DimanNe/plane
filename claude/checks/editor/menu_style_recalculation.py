@@ -3,7 +3,8 @@ Opening and closing a menu of the editor recalculates the style of the menu's el
 every element of the page: with the list and a work item beside it, that made each key that opens or closes the menu
 several times as slow as another key. So it is for the emoji menu in a description and in a title, the slash
 commands, mentions, the menu of the bubble menu's "Text", and the menus of a table's rows and of its columns. A click
-beside the emoji menu closes it and reaches nothing under it, and in a title the caret stays.
+beside the emoji menu closes it and reaches nothing under it, also after the view beside the list drew again while the
+menu showed, and in a title the caret stays.
 """
 
 import json
@@ -42,21 +43,29 @@ def trace_style_recalculations(
     ]
 
 
+def open_menu_by(act: t.Callable[[], None], menu: pw.Locator) -> None:
+    act()
+    page_changes.wait_until_shown(menu.first)
+
+
+def close_menu_by(act: t.Callable[[], None], menu: pw.Locator) -> None:
+    act()
+    page_changes.wait_until_removed(menu.first)
+
+
 def open_and_close(
     open_menu: t.Callable[[], None],
     menu: pw.Locator,
     close_menu: t.Callable[[], None],
 ) -> None:
-    open_menu()
-    page_changes.wait_until_shown(menu.first)
-    close_menu()
-    page_changes.wait_until_removed(menu.first)
+    open_menu_by(open_menu, menu)
+    close_menu_by(close_menu, menu)
 
 
 def run(check: steps.Check) -> None:
     account: ins.Account = check.account()
     project: ins.Project = check.project({account: ins.ROLE_ADMIN})
-    ins.make_work_items(
+    ids: t.Dict[str, str] = ins.make_work_items(
         check.instance,
         project,
         [
@@ -94,18 +103,36 @@ def run(check: steps.Check) -> None:
     recalculated: t.List[int] = trace_style_recalculations(
         check,
         page,
-        lambda: open_and_close(
-            lambda: page.keyboard.type("u"),
-            page.locator(EMOJI_ITEM),
-            lambda: page.mouse.click(*beside),
+        lambda: open_menu_by(lambda: page.keyboard.type("u"), page.locator(EMOJI_ITEM)),
+    )
+    # A change that another session makes to the work item makes the view beside the list draw while the menu shows,
+    # as a save of the description does after a pause; the menu then handles a press beside it before the view does
+    # (helpers/floating-ui.ts of the editor says why that matters).
+    ins.call_api(
+        check.instance,
+        "PATCH",
+        f"/projects/{project.id}/work-items/{ids['line 3']}/",
+        {"priority": "high"},
+    )
+    page_changes.wait_until_shown(
+        page.locator("#full-screen-portal").get_by_role(
+            "button", name="Priority, High", exact=True
+        )
+    )
+    recalculated += trace_style_recalculations(
+        check,
+        page,
+        lambda: close_menu_by(
+            lambda: page.mouse.click(*beside), page.locator(EMOJI_ITEM)
         ),
     )
     # FOR_REVIEWER: the description does not keep its caret: it goes to the paragraph at the height of the click, or
     # out of the description below its last paragraph, before this change as after it. The title's menu keeps it by
     # cancelling the press (emoji-menu-in-text-field.tsx). Filed in the backlog of the tracker.
     check.expect(
-        "a click beside the emoji menu of a description, on another line of the list, closes the menu and neither "
-        "selects nor opens that line (menu, selected, view beside the list)",
+        "a click beside the emoji menu of a description, on another line of the list, after another session changed "
+        "the work item while the menu showed, closes the menu and neither selects nor opens that line (menu, "
+        "selected, view beside the list)",
         lambda: (
             page.locator(EMOJI_ITEM).count(),
             ll.read_selected(page),
