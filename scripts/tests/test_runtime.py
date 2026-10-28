@@ -543,31 +543,20 @@ class ServiceReadinessTests(unittest.TestCase):
 
 
 class RunningInstanceTests(unittest.TestCase):
-    def test_start_replaces_the_services_not_as_asked_and_every_one_for_a_store_or_the_network(
+    def test_start_replaces_the_services_not_as_asked_and_every_one_for_a_store_the_network_or_another_script(
         self,
     ) -> None:
-        run_dir: pl.Path = pl.Path("/srv/checks-1")
         bind: runtime.BindAddress = runtime.BindAddress.parse("127.0.0.1:12141")
         image_ids: t.Dict[plane_config.Service, str] = {
             service: "sha256:built" for service in plane_config.Service
         }
-        commands: t.Dict[plane_config.Service, t.List[str]] = (
-            runtime.get_python_service_commands(run_dir)
-        )
-        api_command: t.List[str] = commands[plane_config.Service.API]
-        workers_at: int = api_command.index("--workers") + 1
-        other_api_workers: t.List[str] = [
-            *api_command[:workers_at],
-            str(runtime.API_WORKERS + 1),
-            *api_command[workers_at + 1 :],
-        ]
 
         def make_container(
             service: plane_config.Service,
-            command: t.Optional[t.List[str]] = None,
             image: str = "sha256:built",
             network_mode: str = "container:network-id",
             port: int = 12141,
+            labels: t.Optional[t.Dict[str, str]] = None,
         ) -> runtime.Container:
             is_network: bool = service == plane_config.Service.NETWORK
             return {
@@ -576,10 +565,10 @@ class RunningInstanceTests(unittest.TestCase):
                 "Image": image,
                 "State": {"Running": True},
                 "Config": {
-                    "Labels": {},
-                    "Cmd": runtime.get_python_service_argv(command or commands[service])
-                    if service in commands
-                    else ["serve"],
+                    "Labels": {"org.plane.local.script": runtime.RUNTIME_SCRIPT_DIGEST}
+                    if labels is None
+                    else labels,
+                    "Cmd": ["serve"],
                 },
                 "HostConfig": {
                     "NetworkMode": "bridge" if is_network else network_mode,
@@ -611,11 +600,6 @@ class RunningInstanceTests(unittest.TestCase):
         tcs: t.List[Tc] = [
             Tc("every service as this script starts it", make_running(), set()),
             Tc(
-                "the API with another number of workers",
-                make_running(api=make_container(api, command=other_api_workers)),
-                {api},
-            ),
-            Tc(
                 "a service on an image other than the one just built",
                 make_running(api=make_container(api, image="sha256:older")),
                 {api},
@@ -643,6 +627,22 @@ class RunningInstanceTests(unittest.TestCase):
                 "a service outside the namespace of the network container",
                 make_running(api=make_container(api, network_mode="bridge")),
                 {api},
+            ),
+            Tc(
+                "a service that another version of this script made",
+                make_running(
+                    api=make_container(
+                        api, labels={"org.plane.local.script": "sha256 of another"}
+                    )
+                ),
+                every_service,
+            ),
+            Tc(
+                "a service made before containers were labelled with their script",
+                make_running(
+                    postgres=make_container(plane_config.Service.POSTGRES, labels={})
+                ),
+                every_service,
             ),
             Tc(
                 "a store on an image other than the one this script names",
@@ -674,9 +674,7 @@ class RunningInstanceTests(unittest.TestCase):
         tc: Tc
         for i, tc in enumerate(tcs):
             actual: t.Set[plane_config.Service] = (
-                runtime.get_running_services_to_replace(
-                    run_dir, tc.running, bind, image_ids
-                )
+                runtime.get_running_services_to_replace(tc.running, bind, image_ids)
             )
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 

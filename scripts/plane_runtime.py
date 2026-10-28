@@ -82,6 +82,13 @@ API_WORKERS: int = 4
 PERSIST_AUTO_UNIT_NAME: str = "plane-persist-auto.service"
 # What the unit runs: this script, in the checkout that persisted it.
 PLANE_RUNTIME_SCRIPT: pl.Path = pl.Path(__file__).resolve()
+# What a container gets besides its image, its arguments, its environment and the configuration files written for it,
+# follows from these two files, the instance's configuration and --bind. Every container is labelled with this, read as
+# the process starts, so that a start can tell the containers that another version of the script made.
+RUNTIME_SCRIPT_DIGEST: str = hashlib.sha256(
+    PLANE_RUNTIME_SCRIPT.read_bytes()
+    + pl.Path(plane_config.__file__).resolve().read_bytes()
+).hexdigest()
 # The owner's level for the export on shutdown: there is one export per poweroff, kept as a backup, so its size
 # counts for more than the time it adds to the poweroff.
 EXPORT_ON_SHUTDOWN_ZSTD_LEVEL: int = 20
@@ -1180,6 +1187,8 @@ def start_container(
         f"org.plane.local.target={run_dir}",
         "--label",
         f"org.plane.local.service={service}",
+        "--label",
+        f"org.plane.local.script={RUNTIME_SCRIPT_DIGEST}",
     ]
     if published_port is not None:
         args += ["--publish", published_port]
@@ -1644,19 +1653,18 @@ def start_network_container(
 
 
 def get_running_services_to_replace(
-    run_dir: pl.Path,
     running: Containers,
     bind: BindAddress,
     image_ids: t.Dict[plane_config.Service, str],
 ) -> t.Set[plane_config.Service]:
     """The running services that a start stops and starts again, because they are not as asked: on another image
-    than the one just built, outside the namespace of the running network container, or, for the Python services,
-    with another command than this script's. A command that changes, such as the API's with another API_WORKERS,
-    runs on the same images: without comparing commands, a running instance would keep the old one until it is
-    stopped. The other services go on serving, so that the start after a prepare stops only what the new images
-    change: after a change of the web app alone, the API keeps answering. Every service runs in the namespace of the
-    network container, and the applications keep connections to the stores, which a restart of a store would break
-    under them; so a network container or a store that is not as asked replaces every service."""
+    than the one just built, or outside the namespace of the running network container. The other services go on
+    serving, so that the start after a prepare stops only what the new images change: after a change of the web app
+    alone, the API keeps answering. Every service runs in the namespace of the network container, and the
+    applications keep connections to the stores, which a restart of a store would break under them; so a network
+    container or a store that is not as asked replaces every service. So does a container that another version of
+    this script made (RUNTIME_SCRIPT_DIGEST): on the same images, a script may change what several services must
+    agree on, such as the number of API workers and the Postgres connections that they need."""
     network_container: t.Optional[Container] = running.get(plane_config.Service.NETWORK)
     proxy_port: int = SERVICE_PORTS[plane_config.Service.PROXY]
     image_services: t.Dict[plane_config.Service, plane_config.Service] = {
@@ -1664,12 +1672,20 @@ def get_running_services_to_replace(
         plane_config.Service.WORKER: plane_config.Service.API,
         plane_config.Service.BEAT: plane_config.Service.API,
     }
-    python_service_commands: t.Dict[plane_config.Service, t.List[str]] = (
-        get_python_service_commands(run_dir)
-    )
-    if network_container is None or network_container["HostConfig"]["PortBindings"] != {
-        f"{proxy_port}/tcp": [{"HostIp": str(bind.host), "HostPort": str(bind.port)}]
-    }:
+    if (
+        network_container is None
+        or network_container["HostConfig"]["PortBindings"]
+        != {
+            f"{proxy_port}/tcp": [
+                {"HostIp": str(bind.host), "HostPort": str(bind.port)}
+            ]
+        }
+        or any(
+            (container["Config"]["Labels"] or {}).get("org.plane.local.script")
+            != RUNTIME_SCRIPT_DIGEST
+            for container in running.values()
+        )
+    ):
         return set(running)
     not_as_asked: t.Set[plane_config.Service] = {
         name
@@ -1679,11 +1695,6 @@ def get_running_services_to_replace(
             name != plane_config.Service.NETWORK
             and container["HostConfig"]["NetworkMode"]
             != "container:" + network_container["Id"]
-        )
-        or (
-            name in python_service_commands
-            and container["Config"]["Cmd"]
-            != get_python_service_argv(python_service_commands[name])
         )
     }
     if not_as_asked & {
@@ -1712,7 +1723,7 @@ def start_plane_services(
         if container["State"]["Running"]
     }
     replaced: t.Set[plane_config.Service] = get_running_services_to_replace(
-        run_dir, running, bind, image_ids
+        running, bind, image_ids
     )
     if replaced:
         log(f"Replacing: {', '.join(sorted(replaced))}")
@@ -2977,7 +2988,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
     start_parser: argparse.ArgumentParser = subparsers.add_parser(
         "start",
         help="Start Plane using the data in --run-dir.",
-        description="Start Plane containers and wait until each service is ready. Initialize databases if --run-dir is empty. Use the current Docker image tags; run prepare after source changes. Of a running instance, stop and start again only the services whose images or commands changed, or every service when its address or the image of a store changed.",
+        description="Start Plane containers and wait until each service is ready. Initialize databases if --run-dir is empty. Use the current Docker image tags; run prepare after source changes. Of a running instance, stop and start again only the services whose images changed, or every service when its address, the image of a store or this script changed.",
     )
     start_parser.add_argument(
         "--plane-git-path",
@@ -3029,7 +3040,7 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
     prepare_and_restart_parser: argparse.ArgumentParser = subparsers.add_parser(
         "prepare-and-restart",
         help="Run prepare while Plane keeps running, then restart what the new images change.",
-        description="Build the Plane images from this checkout as prepare does, while the instance in --run-dir keeps running on its previous images, then start it as start does: only the services whose images changed are stopped and started again, and migrations run if the API image changed. A stopped instance is started. If the build fails, the instance keeps running as it was. The instance that start --persist-auto systemd starts is restarted through that unit.",
+        description="Build the Plane images from this checkout as prepare does, while the instance in --run-dir keeps running on its previous images, then start it as start does: only the services whose images changed are stopped and started again, every service after a change of this script, and migrations run if the API image changed. A stopped instance is started. If the build fails, the instance keeps running as it was. The instance that start --persist-auto systemd starts is restarted through that unit.",
     )
     prepare_and_restart_parser.add_argument(
         "--plane-git-path",

@@ -50,11 +50,12 @@ cookie.
 Images are built from the checkout by `prepare` (or on first use when missing). After changing
 sources run `prepare` again; the next `start` sees the new API image and runs Django migrations
 before the applications come up. A `start` of a running instance stops and starts again only the
-services whose images or commands changed: after a change of the web app alone, the proxy, the live
-server and Spaces, while the API keeps answering. Another address, or another image of a store,
-restarts every service. `prepare-and-restart` is `prepare` and then that `start`: it builds while
-the instance still runs on its old images, so the instance is down only while those services
-restart, and a failed build leaves it running as it was.
+services whose images changed: after a change of the web app alone, the proxy, the live server and
+Spaces, while the API keeps answering. Another address, another image of a store, or another version
+of this script, which may give the services other arguments or settings, restarts every service.
+`prepare-and-restart` is `prepare` and then that `start`: it builds while the instance still runs on
+its old images, so the instance is down only while those services restart, and a failed build leaves
+it running as it was.
 
 Start waits for each service's own "ready" line in its log (and for the container not to exit),
 then makes one protocol request to it: PostgreSQL, Redis and MinIO are asked inside their
