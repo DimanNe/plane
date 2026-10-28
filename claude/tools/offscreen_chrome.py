@@ -4,8 +4,8 @@ Starts Google Chrome as a real window that nobody sees, inside an off-screen Way
 debugging port that Playwright connects to (chromium.connect_over_cdp).
 
 A headless browser does not draw the way a window does. A view transition that ends in a headless browser never
-ended in a window of a Chrome started with --disable-frame-rate-limit, and the page stopped being drawn. What
-moves on the page is therefore also tried here, with the flags the owner's Chrome is started with.
+ends in a window of a Chrome started with --disable-frame-rate-limit, and the page is not drawn again. What
+moves on the page is therefore also tried here.
 
     claude/tools/offscreen_chrome.py DEBUGGING_PORT PROFILE_DIR [FLAGS OF CHROME...]
 

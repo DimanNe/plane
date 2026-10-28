@@ -336,8 +336,8 @@ def get_px_per_day(page: pw.Page) -> float:
 
 
 # The scale once the chart has stopped zooming, which it does over a moment after a notch of the wheel: the same for a
-# third of a second of frames. Frames are counted by the time they take, since a window that draws as fast as it can
-# draws many in a moment.
+# third of a second of frames. Frames are counted by the time they take, since how many frames a moment holds
+# depends on the browser and on the load of the machine.
 SCALE_AT_REST_JS: str = make_js(
     """
   return new Promise((done) => {

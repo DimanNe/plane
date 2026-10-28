@@ -2,7 +2,8 @@
 When the dialog of a new work item is saved, a box goes from the dialog's place to the new line: it starts
 exactly where the dialog was and comes to rest exactly on the line, also where the list had to scroll far to
 show the line. Then the box is gone, the line is shown and tinted, and nothing of the box stays on the page.
-No view transition of the browser is used: in the owner's Chrome such a transition never ends.
+No view transition of the browser is used: in a Chrome started with --disable-frame-rate-limit such a transition
+never ends.
 """
 
 import typing as t

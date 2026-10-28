@@ -57,9 +57,9 @@ holds the tasks. So a session:
   reading back through `/api/v1/` what should have been stored. What is judged by eye is looked
   at in enlarged screenshots, in the light and the dark theme. When an animation looks wrong,
   sample the geometry frame by frame before reading code.
-- What moves on the page is also tried in a real Chrome window started with the flags of the
-  owner's Chrome, which `tools/offscreen_chrome.py PORT PROFILE_DIR FLAGS...` runs unseen. A
-  headless browser draws differently: a transition that ended there never ended in his window.
+- What moves on the page is also tried in a real Chrome window, which
+  `tools/offscreen_chrome.py PORT PROFILE_DIR FLAGS...` runs unseen: a headless browser draws
+  differently.
 - Typing in the list, opening a pop-up and dragging on the timeline were made fast by measuring.
   A change near them is measured again, before and after, with `claude/checks/measure.py --run-dir RUN_DIR`.
 - A step that depends on time can fail only because another session has the processors. Run it
@@ -122,6 +122,6 @@ them, shows one, and sets states and comments, for a session without the tracker
   of the database.
 - The names and texts of the tasks in the owner's tracker stay in the tracker. Tests, comments
   and commit messages use invented names.
-- No View Transition of the browser (`document.startViewTransition`). The owner's Chrome runs
-  with `--disable-frame-rate-limit`, where such a transition never ends; CSS transitions and
-  Web Animations do.
+- No View Transition of the browser (`document.startViewTransition`). In a Chrome started
+  with `--disable-frame-rate-limit` such a transition never ends; CSS transitions and Web
+  Animations do. The windows of the checks run without that flag and would not show it.

@@ -1,8 +1,8 @@
 """
 The browser of a check, and what a person's hand does in any page.
 
-A check gets a browser of its own: a headless one, or a real Chrome window started unseen with the flag of the
-owner's Chrome (claude/tools/offscreen_chrome.py). A real window draws differently from a headless browser, so
+A check gets a browser of its own: a headless one, or a real Chrome window started unseen
+(claude/tools/offscreen_chrome.py). A real window draws differently from a headless browser, so
 every check passes in both. A window is started for one check and stopped after it: one that has served many
 checks stops giving pictures.
 """
@@ -70,7 +70,7 @@ def open_real_window(
     # in a session of its own, so that the compositor and Chrome are stopped together; on port 0, which Chrome
     # replaces with a free one
     window: subprocess.Popen[bytes] = subprocess.Popen(
-        [str(OFFSCREEN_CHROME), "0", str(profile), "--disable-frame-rate-limit"],
+        [str(OFFSCREEN_CHROME), "0", str(profile)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,

@@ -15,7 +15,7 @@ import page_changes
 import steps
 
 # The opacity and the scale of a dialog with the title of a work item, in every frame the page draws from now on,
-# until a frame shows it whole. A window without a frame rate limit draws many frames in one opening.
+# until a frame shows it whole.
 RECORD_OPENING_JS: str = """
 () => {
   window.__openingFrames = [];
