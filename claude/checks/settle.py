@@ -44,10 +44,16 @@ SETTLE_WATCH_JS: str = """
   const ownProjects = new Set(window.__settleOwnProjects || []);
   // when the first act since the page was last seen settled came; null when there was none
   let firstActAt = null;
+  // The timers and intervals made since that act that a wait counts, each as its delay and the start of its function,
+  // for a rule that an act starts none (read_timers_made).
+  const timersMade = [];
   for (const type of ["keydown", "keyup", "pointerdown", "pointerup", "pointermove", "mousedown", "mouseup",
                       "click", "dblclick", "contextmenu", "wheel", "beforeinput", "input", "dragstart", "drop"]) {
     window.addEventListener(type, (event) => {
-      if (event.isTrusted && firstActAt === null) firstActAt = performance.now();
+      if (event.isTrusted && firstActAt === null) {
+        firstActAt = performance.now();
+        timersMade.length = 0;
+      }
     }, { capture: true });
   }
   // Whether the function that calls a timer function is a check's own script (page.evaluate) rather than the page's:
@@ -128,7 +134,10 @@ SETTLE_WATCH_JS: str = """
         }
       : handler;
     id = originalSetTimeout(run, delay, ...rest);
-    if (isCounted) timers.set(id, String(handler).slice(0, 80));
+    if (isCounted) {
+      timers.set(id, String(handler).slice(0, 80));
+      timersMade.push(`${Number(delay) || 0} ms: ${String(handler).slice(0, 200)}`);
+    }
     return id;
   };
   window.clearTimeout = function (id) {
@@ -141,7 +150,10 @@ SETTLE_WATCH_JS: str = """
   window.setInterval = function (handler, period, ...rest) {
     const isCounted = isMadeByPageAfterAct() && (Number(period) || 0) <= LONGEST_REACTION_DELAY_MS;
     const id = originalSetInterval(handler, period, ...rest);
-    if (isCounted) intervals.set(id, String(handler).slice(0, 80));
+    if (isCounted) {
+      intervals.set(id, String(handler).slice(0, 80));
+      timersMade.push(`every ${Number(period) || 0} ms: ${String(handler).slice(0, 200)}`);
+    }
     return id;
   };
   window.clearInterval = function (id) {
@@ -206,6 +218,7 @@ SETTLE_WATCH_JS: str = """
     pending.requestsInFlight + pending.animations.length > 0;
   window.__settle = {
     ownProjects,
+    timersMade,
     // null until the wait that start() began has ended: then whether the page settled, and what was left if not
     result: null,
     capTimer: null,
@@ -290,3 +303,9 @@ def read_settle_results(
             return None
         results.append(result)
     return results
+
+
+def read_timers_made(page: pw.Page) -> t.List[str]:
+    """The timers and intervals that the page made since the first act after it was last seen settled, of those that
+    a wait counts: each as its delay and the start of its function."""
+    return page.evaluate("window.__settle.timersMade")
