@@ -12,7 +12,7 @@ user's systemd. Every subcommand has `--help`.
 ./scripts/plane_runtime.py export --run-dir RUN --output backup.zstd              # stop, then write the backup
 ./scripts/plane_runtime.py import --run-dir RUN --bind IP:PORT --input backup.zstd # replace everything, then start
 ./scripts/plane_runtime.py start --run-dir RUN --bind IP:PORT [--persist-auto systemd --export-basename NAME [--export-dir DIR]]
-./scripts/plane_runtime.py prepare-and-restart --run-dir RUN --bind IP:PORT      # build while it runs, then restart what changed
+./scripts/plane_runtime.py prepare-and-restart [--run-dir RUN --bind IP:PORT]    # build while it runs, then restart what changed
 ./scripts/plane_runtime.py stop|status --run-dir RUN
 ```
 
@@ -112,6 +112,12 @@ the unit. `systemctl --user start|stop|restart|status plane-persist-auto` work o
 `prepare-and-restart`, `stop`, `export` and `import` of that run directory go through it, so that
 systemd always knows whether the instance runs. `start --persist-auto none` removes the unit and then
 starts the instance once, as a plain `start` does.
+
+`prepare-and-restart` without `--run-dir` and `--bind` brings that instance up to date: it takes them,
+and `--image-tag` when it is not given, from the unit. Its `--plane-git-path`, by default the checkout
+of the script, must be the one the unit starts, as with `--run-dir` and `--bind`: a run from another
+checkout is refused before anything is built. With only one of the two, or without the unit, it says
+that both are needed.
 
 The unit's stop exports the instance when the user's systemd itself stops, which for a lingering user
 is when the VM powers off or reboots: `crosvm powerbtn`, or `poweroff` or `reboot` inside the VM. The

@@ -2714,6 +2714,42 @@ class PrepareAndRestartCommand(Command):
 
 
 @dc.dataclass(frozen=True)
+class PrepareAndRestartPersistedCommand(Command):
+    """prepare-and-restart without --run-dir and --bind. The owner's instance is the one the persist-auto unit starts,
+    and the unit records its --run-dir, --bind and --image-tag, so the owner brings it up to date with the command
+    alone. --plane-git-path, this checkout by default, and --image-tag, when given, must be the unit's, as when
+    --run-dir and --bind name the unit's instance."""
+
+    plane_git_path: pl.Path
+    image_tag: t.Optional[plane_config.ImageTag]
+
+    def run(self) -> None:
+        # FOR_REVIEWER: a run from another checkout than the unit's is refused before the build, by
+        # require_same_start_as_persisted() as with --run-dir and --bind: --plane-git-path keeps its default, the
+        # checkout of this script, rather than taking the unit's. Taking the unit's would build, for a command typed
+        # in one checkout, the sources of another, without the changes of the first. Building the unit's checkout
+        # instead is plane_git_path=persisted.plane_git_path below.
+        # --image-tag left out is the unit's; given, it must be the unit's, as --plane-git-path must.
+        unit: t.Optional[str] = read_persist_auto_unit()
+        if unit is None:
+            raise RuntimeError(
+                f"Pass --run-dir and --bind: there is no {get_persist_auto_unit_path()} (start --persist-auto "
+                "systemd) to take them from"
+            )
+        persisted: StartCommand = parse_persist_auto_unit(unit)
+        PrepareAndRestartCommand(
+            StartCommand(
+                run_dir=persisted.run_dir,
+                plane_git_path=self.plane_git_path,
+                bind=persisted.bind,
+                image_tag=persisted.image_tag
+                if self.image_tag is None
+                else self.image_tag,
+            )
+        ).run()
+
+
+@dc.dataclass(frozen=True)
 class StopCommand(Command):
     run_dir: pl.Path
     export_on_shutdown: t.Optional[ExportOnShutdown] = None
@@ -3050,32 +3086,30 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
     prepare_and_restart_parser: argparse.ArgumentParser = subparsers.add_parser(
         "prepare-and-restart",
         help="Run prepare while Plane keeps running, then restart what the new images change.",
-        description="Build the Plane images from this checkout as prepare does, while the instance in --run-dir keeps running on its previous images, then start it as start does: only the services whose images changed are stopped and started again, every service after a change of this script, and migrations run if the API image changed. A stopped instance is started. If the build fails, the instance keeps running as it was. The instance that start --persist-auto systemd starts is restarted through that unit.",
+        description="Build the Plane images from this checkout as prepare does, while the instance in --run-dir keeps running on its previous images, then start it as start does: only the services whose images changed are stopped and started again, every service after a change of this script, and migrations run if the API image changed. A stopped instance is started. If the build fails, the instance keeps running as it was. The instance that start --persist-auto systemd starts is restarted through that unit; without --run-dir and --bind, it is that instance, with the --run-dir, --bind and --image-tag of its unit.",
     )
     prepare_and_restart_parser.add_argument(
         "--plane-git-path",
         default=str(plane_git_path),
         metavar="PATH",
-        help="Plane checkout containing application sources, packages and Dockerfiles. Default: the checkout containing this script.",
+        help="Plane checkout containing application sources, packages and Dockerfiles. Default: the checkout containing this script. For the instance that start --persist-auto systemd starts, it must be the checkout of its unit.",
     )
     prepare_and_restart_parser.add_argument(
         "--run-dir",
-        required=True,
         metavar="PATH",
-        help="Directory containing the databases, uploads, and settings for this instance.",
+        help=f"Directory containing the databases, uploads, and settings for this instance. Pass it with --bind, or neither for the instance that {PERSIST_AUTO_UNIT_NAME} starts.",
     )
     prepare_and_restart_parser.add_argument(
         "--bind",
         type=BindAddress.parse,
-        required=True,
         metavar="IPV4:PORT",
-        help="Host address and port the browser reaches Plane on, as for start. Another address than the running instance's restarts every service there.",
+        help="Host address and port the browser reaches Plane on, as for start. Another address than the running instance's restarts every service there. Pass it with --run-dir, or neither.",
     )
     prepare_and_restart_parser.add_argument(
         "--image-tag",
         type=parse_image_tag,
         metavar="TAG",
-        help="Build and run the images plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs. An instance runs only the images of its first start: another tag is refused before anything is built.",
+        help="Build and run the images plane-local-*:TAG rather than plane-local-*:current, which every instance started without --image-tag runs. An instance runs only the images of its first start: another tag is refused before anything is built. Without --run-dir and --bind, the tag of the unit by default.",
     )
     stop_parser: argparse.ArgumentParser = subparsers.add_parser(
         "stop",
@@ -3233,6 +3267,18 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
             export_on_shutdown=export_on_shutdown,
         )
     elif args.subparser_name == "prepare-and-restart":
+        if args.run_dir is None and args.bind is None:
+            return PrepareAndRestartPersistedCommand(
+                plane_git_path=pl.Path(args.plane_git_path), image_tag=args.image_tag
+            )
+        if args.run_dir is None or args.bind is None:
+            # FOR_REVIEWER: refused rather than the other one taken from the unit. With the unit's address, another
+            # run directory would start a second instance on the port of the unit's; with the unit's run directory,
+            # another address is refused anyway (require_same_start_as_persisted()).
+            prepare_and_restart_parser.error(
+                f"--run-dir and --bind go together: pass both, or neither for the instance that "
+                f"{PERSIST_AUTO_UNIT_NAME} starts"
+            )
         return PrepareAndRestartCommand(
             StartCommand(
                 run_dir=pl.Path(args.run_dir),

@@ -2,6 +2,7 @@ import argparse
 import concurrent.futures
 import dataclasses as dc
 import errno
+import io
 import ipaddress
 import json
 import os
@@ -1224,6 +1225,215 @@ class PersistAutoTests(unittest.TestCase):
         self.assertEqual(actual, ([["stop", runtime.PERSIST_AUTO_UNIT_NAME]], 0))
 
 
+# What prepare-and-restart did: "build", "pull", then the start it ran, or nothing after its error.
+PrepareAndRestartSteps = t.List[t.Union[str, runtime.StartCommand]]
+
+
+class PrepareAndRestartArgumentsTests(unittest.TestCase):
+    def run_prepare_and_restart(
+        self, argv: t.List[str], persisted: t.Optional[runtime.StartCommand]
+    ) -> t.Tuple[PrepareAndRestartSteps, t.Optional[str]]:
+        """Runs prepare-and-restart from its command line by hand, with the persist-auto unit of persisted (None: no
+        unit), and records what it builds and the start it would run."""
+        steps: PrepareAndRestartSteps = []
+        error: t.Optional[str] = None
+        stderr: io.StringIO = io.StringIO()
+        with (
+            mock.patch.object(
+                runtime,
+                "read_persist_auto_unit",
+                return_value=None
+                if persisted is None
+                else make_persist_auto_unit(persisted),
+            ),
+            mock.patch.object(
+                runtime, "is_running_in_persist_auto_unit", return_value=False
+            ),
+            mock.patch.object(
+                runtime,
+                "build_our_images",
+                side_effect=lambda *_: steps.append("build"),
+            ),
+            mock.patch.object(
+                runtime,
+                "pull_and_resolve_external_images",
+                side_effect=lambda: steps.append("pull"),
+            ),
+            mock.patch.object(
+                runtime.StartCommand, "run", autospec=True, side_effect=steps.append
+            ),
+            mock.patch("sys.stderr", stderr),
+        ):
+            try:
+                runtime.parse_cli_command(["prepare-and-restart", *argv]).run()
+            except RuntimeError as raised:
+                error = str(raised)
+            except SystemExit:
+                error = stderr.getvalue().splitlines()[-1]
+        return steps, error
+
+    def test_takes_run_dir_bind_and_image_tag_from_the_persist_auto_unit_only_when_both_are_left_out(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            argv: t.List[str]
+            persisted: t.Optional[runtime.StartCommand]
+            expected: t.Tuple[PrepareAndRestartSteps, t.Optional[str]]
+
+        checkout: pl.Path = pl.Path(runtime.__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir: pl.Path = pl.Path(temporary).resolve() / "plane-dev"
+            other_run_dir: pl.Path = pl.Path(temporary).resolve() / "checks-1"
+            persisted: runtime.StartCommand = runtime.StartCommand(
+                run_dir, checkout, runtime.BindAddress.parse("0.0.0.0:12001"), None
+            )
+            persisted_with_tag: runtime.StartCommand = dc.replace(
+                persisted, image_tag=plane_config.ImageTag("plane-67")
+            )
+            given: t.List[str] = [
+                "--run-dir",
+                str(other_run_dir),
+                "--bind",
+                "127.0.0.1:12141",
+                "--image-tag",
+                "plane-47",
+            ]
+            start_of_given: runtime.StartCommand = runtime.StartCommand(
+                other_run_dir,
+                checkout,
+                runtime.BindAddress.parse("127.0.0.1:12141"),
+                plane_config.ImageTag("plane-47"),
+            )
+            together: str = (
+                "plane_runtime.py prepare-and-restart: error: --run-dir and --bind go together: pass both, or "
+                f"neither for the instance that {runtime.PERSIST_AUTO_UNIT_NAME} starts"
+            )
+            tcs: t.List[Tc] = [
+                Tc(
+                    "both given, no unit",
+                    given,
+                    None,
+                    (["build", "pull", start_of_given], None),
+                ),
+                Tc(
+                    "both given, of another instance than the unit's",
+                    given,
+                    persisted,
+                    (["build", "pull", start_of_given], None),
+                ),
+                Tc(
+                    "both left out, the unit's instance",
+                    [],
+                    persisted,
+                    (["build", "pull", persisted], None),
+                ),
+                Tc(
+                    "both left out, the unit's instance on images of its own tag",
+                    [],
+                    persisted_with_tag,
+                    (["build", "pull", persisted_with_tag], None),
+                ),
+                Tc(
+                    "both left out, no unit",
+                    [],
+                    None,
+                    (
+                        [],
+                        f"Pass --run-dir and --bind: there is no {runtime.get_persist_auto_unit_path()} "
+                        "(start --persist-auto systemd) to take them from",
+                    ),
+                ),
+                Tc(
+                    "only --run-dir, the unit's",
+                    ["--run-dir", str(run_dir)],
+                    persisted,
+                    ([], together),
+                ),
+                Tc(
+                    "only --bind, the unit's",
+                    ["--bind", "0.0.0.0:12001"],
+                    persisted,
+                    ([], together),
+                ),
+            ]
+            i: int
+            tc: Tc
+            for i, tc in enumerate(tcs):
+                actual: t.Tuple[PrepareAndRestartSteps, t.Optional[str]] = (
+                    self.run_prepare_and_restart(tc.argv, tc.persisted)
+                )
+                self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_without_run_dir_and_bind_refuses_another_checkout_or_image_tag_than_the_unit_s_before_building(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            argv: t.List[str]
+            persisted: runtime.StartCommand
+            expected: t.Tuple[PrepareAndRestartSteps, t.Optional[str]]
+
+        checkout: pl.Path = pl.Path(runtime.__file__).resolve().parents[1]
+        other_checkout: pl.Path = pl.Path("/opt/plane")
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir: pl.Path = pl.Path(temporary).resolve() / "plane-dev"
+            persisted_with_tag: runtime.StartCommand = runtime.StartCommand(
+                run_dir,
+                checkout,
+                runtime.BindAddress.parse("0.0.0.0:12001"),
+                plane_config.ImageTag("plane-67"),
+            )
+            persisted_of_other_checkout: runtime.StartCommand = dc.replace(
+                persisted_with_tag, plane_git_path=other_checkout
+            )
+            tcs: t.List[Tc] = [
+                Tc(
+                    "run from another checkout than the unit's",
+                    [],
+                    persisted_of_other_checkout,
+                    (
+                        [],
+                        f"{runtime.PERSIST_AUTO_UNIT_NAME} starts {run_dir} with --bind 0.0.0.0:12001 and "
+                        f"--image-tag plane-67, from the checkout {other_checkout}: pass the same, change what it "
+                        "starts with start --persist-auto systemd, or stop starting it at boot with start "
+                        "--persist-auto none",
+                    ),
+                ),
+                Tc(
+                    "run from another checkout, with the unit's as --plane-git-path",
+                    ["--plane-git-path", str(other_checkout)],
+                    persisted_of_other_checkout,
+                    (["build", "pull", persisted_of_other_checkout], None),
+                ),
+                Tc(
+                    "another --image-tag than the unit's",
+                    ["--image-tag", "plane-48"],
+                    persisted_with_tag,
+                    (
+                        [],
+                        f"{runtime.PERSIST_AUTO_UNIT_NAME} starts {run_dir} with --bind 0.0.0.0:12001 and "
+                        f"--image-tag plane-67, from the checkout {checkout}: pass the same, change what it "
+                        "starts with start --persist-auto systemd, or stop starting it at boot with start "
+                        "--persist-auto none",
+                    ),
+                ),
+                Tc(
+                    "the unit's --image-tag",
+                    ["--image-tag", "plane-67"],
+                    persisted_with_tag,
+                    (["build", "pull", persisted_with_tag], None),
+                ),
+            ]
+            i: int
+            tc: Tc
+            for i, tc in enumerate(tcs):
+                actual: t.Tuple[PrepareAndRestartSteps, t.Optional[str]] = (
+                    self.run_prepare_and_restart(tc.argv, tc.persisted)
+                )
+                self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+
 class ExportOnShutdownTests(unittest.TestCase):
     def test_output_is_named_by_the_local_time_of_the_export(self) -> None:
         class Tc(t.NamedTuple):
@@ -1591,6 +1801,10 @@ class CommandLineTests(unittest.TestCase):
                 ),
             ),
             Tc(
+                ["prepare-and-restart"],
+                runtime.PrepareAndRestartPersistedCommand(plane_git_path, None),
+            ),
+            Tc(
                 [
                     "bootstrap-user",
                     "--run-dir",
@@ -1611,11 +1825,10 @@ class CommandLineTests(unittest.TestCase):
             actual: runtime.Command = runtime.parse_cli_command(tc.argv)
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.argv}")
 
-    def test_start_prepare_and_restart_and_import_need_a_bind_address(self) -> None:
+    def test_start_and_import_need_a_bind_address(self) -> None:
         argv: t.List[str]
         for argv in (
             ["start", "--run-dir", "run"],
-            ["prepare-and-restart", "--run-dir", "run"],
             ["import", "--run-dir", "run", "--input", "/dev/null"],
         ):
             with (
