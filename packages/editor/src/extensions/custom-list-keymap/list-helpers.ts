@@ -221,6 +221,13 @@ export const handleDelete = (editor: Editor, name: string) => {
     return false;
   }
 
+  // A selection made backwards from the end of an item (Shift+Home, a drag to the left) is at that end for
+  // isAtEndOfNode, which looks only at where the selection began. Delete removes it as any other selection, as
+  // tiptap's own list keymap does since ueberdosis/tiptap#8543.
+  if (!editor.state.selection.empty) {
+    return false;
+  }
+
   // check if the next node is a list with a deeper depth
   if (nextListIsDeeper(name, editor.state)) {
     return editor

@@ -1,8 +1,26 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index d52a5260a7b9924b2865053ea1e8c6484225277b..a92a070e941213bb5fc182bf75d556648dc618e8 100644
+index d52a5260a7b9924b2865053ea1e8c6484225277b..b81ae402b21fc4664b524f532afa976fb7cf5ce1 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -3682,7 +3682,8 @@ handlers.focus = function (view) {
+@@ -3032,7 +3032,16 @@ editHandlers.keydown = function (view, _event) {
+   view.input.lastKeyCode = event.keyCode;
+   view.input.lastKeyCodeTime = Date.now();
+   if (android && chrome && event.keyCode == 13) return;
+-  if (event.keyCode != 229) view.domObserver.forceFlush();
++  if (event.keyCode != 229) {
++    view.domObserver.forceFlush();
++    // Plane: the browser tells of a selection that a key such as Shift+Home has made with a selectionchange
++    // event, which can come only after the next keys. The selection is read here too, so that a key pressed at
++    // once after it, such as Delete, acts on the selection the page shows and not on the one from before.
++    // FOR_REVIEWER: for every key, not only Delete and Backspace: Enter, Tab and the editor's shortcuts act on
++    // the selection too. It reads early what the selectionchange event reads a moment later, which then finds
++    // nothing new.
++    view.domObserver.flush();
++  }
+   if (ios && event.keyCode == 13 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+     var now = Date.now();
+     view.input.lastIOSEnter = now;
+@@ -3682,7 +3691,8 @@ handlers.focus = function (view) {
      view.domObserver.start();
      view.focused = true;
      setTimeout(function () {
@@ -12,7 +30,7 @@ index d52a5260a7b9924b2865053ea1e8c6484225277b..a92a070e941213bb5fc182bf75d55664
      }, 20);
    }
  };
-@@ -5306,7 +5307,9 @@ var EditorView = function () {
+@@ -5306,7 +5316,9 @@ var EditorView = function () {
      value: function focus() {
        this.domObserver.stop();
        if (this.editable) focusPreventScroll(this.dom);
@@ -24,10 +42,28 @@ index d52a5260a7b9924b2865053ea1e8c6484225277b..a92a070e941213bb5fc182bf75d55664
      }
    }, {
 diff --git a/dist/index.js b/dist/index.js
-index dc0d117b85e1da3eae915b4d8ff8e5e604683861..df8f40adddb4f115e594cd4451394451444fb870 100644
+index dc0d117b85e1da3eae915b4d8ff8e5e604683861..e51d932d5a7ca04a97f583407bb1f3809ecbcb21 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3928,7 +3928,9 @@ handlers.focus = view => {
+@@ -3218,8 +3218,16 @@ editHandlers.keydown = (view, _event) => {
+     // and handling them eagerly tends to corrupt the input.
+     if (android && chrome && event.keyCode == 13)
+         return;
+-    if (event.keyCode != 229)
++    if (event.keyCode != 229) {
+         view.domObserver.forceFlush();
++        // Plane: the browser tells of a selection that a key such as Shift+Home has made with a selectionchange
++        // event, which can come only after the next keys. The selection is read here too, so that a key pressed at
++        // once after it, such as Delete, acts on the selection the page shows and not on the one from before.
++        // FOR_REVIEWER: for every key, not only Delete and Backspace: Enter, Tab and the editor's shortcuts act on
++        // the selection too. It reads early what the selectionchange event reads a moment later, which then finds
++        // nothing new.
++        view.domObserver.flush();
++    }
+     // On iOS, if we preventDefault enter key presses, the virtual
+     // keyboard gets confused. So the hack here is to set a flag that
+     // makes the DOM change code recognize that what just happens should
+@@ -3928,7 +3936,9 @@ handlers.focus = view => {
          view.domObserver.start();
          view.focused = true;
          setTimeout(() => {
@@ -38,7 +74,7 @@ index dc0d117b85e1da3eae915b4d8ff8e5e604683861..df8f40adddb4f115e594cd4451394451
                  selectionToDOM(view);
          }, 20);
      }
-@@ -5755,7 +5757,10 @@ class EditorView {
+@@ -5755,7 +5765,10 @@ class EditorView {
          this.domObserver.stop();
          if (this.editable)
              focusPreventScroll(this.dom);
