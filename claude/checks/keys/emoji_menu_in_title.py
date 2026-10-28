@@ -14,11 +14,11 @@ import typing as t
 import playwright.sync_api as pw
 
 import instance as ins
+import keys_emoji_menu as em
 import list_layout as ll
 import page_changes
 import steps
 
-MENU_ITEM: str = '[id^="emoji-item-"]'
 LINE_TITLE: str = f"{ll.LINE} input"
 DIALOG_TITLE: str = f'{ll.CREATE_DIALOG} input[name="name"]'
 # Where the caret of the dialog of N I is: in its title, in its description, or the element it is in.
@@ -30,31 +30,6 @@ CARET_IN_DIALOG_JS: str = """
   return element.classList.contains('ProseMirror') ? 'in the description' : element.tagName;
 }
 """
-# Notes whether the emoji menu has been drawn at any moment since, so that a menu that comes and goes while keys
-# are typed is seen too.
-WATCH_MENU_JS: str = """
-() => {
-  window.emojiMenuWasDrawn = false;
-  window.emojiMenuWatch ??= new MutationObserver(() => {
-    if (document.querySelector('[id^="emoji-item-"]')) window.emojiMenuWasDrawn = true;
-  });
-  window.emojiMenuWatch.observe(document.body, { childList: true, subtree: true });
-}
-"""
-UMBRELLAS: t.List[str] = [
-    "☂ :open_umbrella:",
-    "☔ :umbrella:",
-    "⛱ :parasol_on_ground:",
-    "🏖 :beach_umbrella:",
-    "🌂 :closed_umbrella:",
-]
-
-
-def read_menu(page: pw.Page) -> t.List[str]:
-    """The emojis the menu offers, in its order, as drawn: each emoji and its shortcode."""
-    return [
-        " ".join(text.split()) for text in page.locator(MENU_ITEM).all_inner_texts()
-    ]
 
 
 def read_title(page: pw.Page, selector: str) -> t.Optional[str]:
@@ -82,13 +57,13 @@ def run(check: steps.Check) -> None:
     page.keyboard.type(" :umb")
     check.expect(
         "in a line's title edited in place :umb offers the umbrellas, those with a shortcode that begins so first",
-        lambda: read_menu(page),
-        UMBRELLAS,
+        lambda: em.read_menu(page),
+        em.UMBRELLAS,
     )
     page.keyboard.press("Enter")
     check.expect(
         "Enter puts the first, ☂, in place of :umb, and the line stays edited (menu, title)",
-        lambda: (read_menu(page), read_title(page, LINE_TITLE)),
+        lambda: (em.read_menu(page), read_title(page, LINE_TITLE)),
         ([], "rainy day ☂ "),
     )
     page.keyboard.press("Enter")
@@ -109,7 +84,7 @@ def run(check: steps.Check) -> None:
     page.keyboard.type(" :thumbs")
     check.expect(
         "in the title of the view beside the list :thumbs offers thumbs up and down, by shortcodes other than their names",
-        lambda: read_menu(page),
+        lambda: em.read_menu(page),
         ["👍 :+1:", "👎 :-1:"],
     )
     page.keyboard.press("ArrowDown")
@@ -117,20 +92,20 @@ def run(check: steps.Check) -> None:
     page.keyboard.type(":+1")
     check.expect(
         ":+1 offers thumbs up, after ↓ and Tab put the second, 👎, in the title (menu, title)",
-        lambda: (read_menu(page), read_title(page, ll.PANEL_TITLE)),
+        lambda: (em.read_menu(page), read_title(page, ll.PANEL_TITLE)),
         (["👍 :+1:"], "windy day 👎 :+1"),
     )
-    page.locator(MENU_ITEM).first.click()
+    page.locator(em.MENU_ITEM).first.click()
     page.keyboard.type("end :umb")
     check.expect(
         "a click puts the one clicked, 👍; the caret stays in the title, where :umb opens the menu again (menu, title)",
-        lambda: (read_menu(page), read_title(page, ll.PANEL_TITLE)),
-        (UMBRELLAS, "windy day 👎 👍 end :umb"),
+        lambda: (em.read_menu(page), read_title(page, ll.PANEL_TITLE)),
+        (em.UMBRELLAS, "windy day 👎 👍 end :umb"),
     )
     page.keyboard.press("Escape")
     check.expect(
         "Escape closes the menu, not the view, and leaves :umb (menu, view)",
-        lambda: (read_menu(page), read_title(page, ll.PANEL_TITLE)),
+        lambda: (em.read_menu(page), read_title(page, ll.PANEL_TITLE)),
         ([], "windy day 👎 👍 end :umb"),
     )
     page.keyboard.press("Escape")
@@ -147,17 +122,17 @@ def run(check: steps.Check) -> None:
     page.keyboard.type("fix :umb")
     check.expect(
         "in the title of the dialog of N I :umb offers the umbrellas",
-        lambda: read_menu(page),
-        UMBRELLAS,
+        lambda: em.read_menu(page),
+        em.UMBRELLAS,
     )
     page.keyboard.press("ArrowDown")
     page.keyboard.press("Enter")
     check.expect(
         "↓ chooses the second, ☔, and Enter puts it there; neither goes on in the description",
-        lambda: (read_menu(page), read_title(page, DIALOG_TITLE)),
+        lambda: (em.read_menu(page), read_title(page, DIALOG_TITLE)),
         ([], "fix ☔ "),
     )
-    page.evaluate(WATCH_MENU_JS)
+    page.evaluate(em.WATCH_MENU_JS)
     page.keyboard.type("at 10:30 see http://x a:b :)")
     page.keyboard.press("Control+Enter")
     check.expect(
@@ -178,13 +153,13 @@ def run(check: steps.Check) -> None:
 
     ll.open_create_dialog(page)
     page.keyboard.type("calm :umb")
-    check.expect("the menu opens again", lambda: read_menu(page), UMBRELLAS)
+    check.expect("the menu opens again", lambda: em.read_menu(page), em.UMBRELLAS)
     page.keyboard.press("Escape")
     page.keyboard.press("ArrowDown")
     check.expect(
         "after Escape, ↓ on the title's last line goes on in the description, and leaves :umb (menu, caret, title)",
         lambda: (
-            read_menu(page),
+            em.read_menu(page),
             page.evaluate(CARET_IN_DIALOG_JS),
             page.locator(DIALOG_TITLE).input_value(),
         ),
