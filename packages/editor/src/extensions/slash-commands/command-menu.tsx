@@ -132,7 +132,6 @@ export const SlashCommandsMenu = forwardRef(function SlashCommandsMenu(props: Sl
         style={{
           zIndex: 99,
         }}
-        lockScroll
       />
       <div
         id="slash-command"

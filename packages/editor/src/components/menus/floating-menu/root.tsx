@@ -48,7 +48,6 @@ export function FloatingMenuRoot(props: Props) {
             style={{
               zIndex: 99,
             }}
-            lockScroll
           />
           <div
             ref={refs.setFloating}

@@ -132,7 +132,6 @@ export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
         style={{
           zIndex: 99,
         }}
-        lockScroll
       />
       <div
         ref={dropdownContainerRef}

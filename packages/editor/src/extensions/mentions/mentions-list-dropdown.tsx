@@ -142,7 +142,6 @@ export const MentionsListDropdown = forwardRef(function MentionsListDropdown(pro
         style={{
           zIndex: 99,
         }}
-        lockScroll
       />
       <div
         ref={dropdownContainer}

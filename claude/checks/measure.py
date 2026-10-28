@@ -349,6 +349,15 @@ def measure_typing_and_popup(check: steps.Check, account: ins.Account) -> None:
             lambda: page.keyboard.type("a" * 40, delay=33),
             40,
         )
+    measure_counters(
+        page,
+        cdp,
+        "40 keys of shortcodes after ':' in the description beside the list",
+        lambda: page.keyboard.type(EMOJI_KEYS, delay=33),
+        40,
+    )
+    # the space closes the menu that the last shortcode opened
+    page.keyboard.press("Space")
     measure_typing_in_titles(page, cdp)
     page.context.close()
 
