@@ -24,6 +24,7 @@ import abc
 import argparse
 import atexit
 import concurrent.futures
+import contextlib
 import dataclasses as dc
 import gc
 import importlib.util
@@ -119,22 +120,37 @@ def describe_error(error: Exception) -> str:
 def run_steps_of_check(check: steps.Check, module: types.ModuleType) -> None:
     try:
         module.run(check)
+    except steps.CheckEndedAtFailedStep:
+        # so that the rules that the check has after the failed step are not taken for passed
+        # FOR_REVIEWER: the failed step itself says that the check ended there, under its pictures, where a reader of
+        # the failure looks anyway; a line of its own in print_outcome would need the outcome to know which step ended
+        # the check. A check that ended on an error of its own says so in its rule, "the check runs to its end".
+        failed: steps.Step = check.steps[-1]
+        check.steps[-1] = dc.replace(
+            failed,
+            failure=f"{failed.failure}\n        the check ends at its first failed step: "
+            "the steps it has after this one did not run",
+        )
     except Exception as error:
         # something a step needed was not there: a control to press, a line to point at
-        check.fail("the check runs to its end", describe_error(error))
-    check.expect(
-        "no page reported an error of its own",
-        lambda: [
-            error
-            for error in check.page_errors
-            if not error.startswith(KNOWN_PAGE_ERRORS)
-        ],
-        [],
-        timeout=0,
-    )
-    check.expect(
-        "the server failed no request", lambda: check.server_errors, [], timeout=0
-    )
+        with contextlib.suppress(steps.CheckEndedAtFailedStep):
+            check.fail("the check runs to its end", describe_error(error))
+    # what the pages reported by themselves can say why a step failed, so it is told after a failed step too
+    with contextlib.suppress(steps.CheckEndedAtFailedStep):
+        check.expect(
+            "no page reported an error of its own",
+            lambda: [
+                error
+                for error in check.page_errors
+                if not error.startswith(KNOWN_PAGE_ERRORS)
+            ],
+            [],
+            timeout=0,
+        )
+    with contextlib.suppress(steps.CheckEndedAtFailedStep):
+        check.expect(
+            "the server failed no request", lambda: check.server_errors, [], timeout=0
+        )
 
 
 def skip_garbage_collection_at_exit() -> None:

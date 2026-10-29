@@ -6,7 +6,8 @@ each time a page of the check has changed (page_changes.py) until the two are th
 page is given the time it needs, and no step waits by the clock. A step that says something does not happen reads
 until the pages can no longer make it happen (settle.py). A step that fails says what it got and what it expected
 and leaves a picture of every page of the check.
-A check goes on after a failed step, since the steps after it may be about other rules.
+A check ends at its first failed step: the steps after it mostly need what it expected, and would wait their full time
+for it, then fail again and say less. A later rule that does not need it goes unchecked until a run passes that step.
 """
 
 import dataclasses as dc
@@ -41,6 +42,11 @@ def read_or_say_why(read: t.Callable[[], t.Any]) -> t.Any:
         )
 
 
+class CheckEndedAtFailedStep(BaseException):
+    """Raised by a failed step, to end its check. Not an Exception, so that no `except Exception` takes it for an
+    error: a check's own would go on after the failed step, and run.py's would add a second failure for it."""
+
+
 @dc.dataclass(frozen=True)
 class Step:
     rule: str
@@ -73,9 +79,10 @@ class Check:
                 paths.append(str(path))
         return paths
 
-    def fail(self, rule: str, what: str) -> None:
+    def fail(self, rule: str, what: str) -> t.NoReturn:
         pictures: str = ", ".join(self.take_pictures())
         self.steps.append(Step(rule, f"{what}\n        pictures: {pictures}"))
+        raise CheckEndedAtFailedStep()
 
     def expect(
         self,
@@ -115,12 +122,10 @@ class Check:
             results = settle.read_settle_results(self.pages)
         if got != expected:
             self.fail(rule, f"got      {got!r}\n        expected {expected!r}")
-            return
         if results is None:
             results = settle.read_settle_results(self.pages)
         if results is None:
             self.fail(rule, f"a page did not end its wait after {STEP_TIMEOUT:.0f} s")
-            return
         unsettled: t.List[t.Any] = [
             result["pending"] for result in results if not result["settled"]
         ]
@@ -129,7 +134,6 @@ class Check:
                 rule,
                 f"a page was still busy after {STEP_TIMEOUT:.0f} s, with {unsettled!r}",
             )
-            return
         # read once more: the last read may have come before the pages settled
         got = read()
         if got == expected:
