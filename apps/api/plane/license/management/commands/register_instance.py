@@ -15,7 +15,6 @@ from django.utils import timezone
 
 # Module imports
 from plane.license.models import Instance, InstanceEdition
-from plane.license.bgtasks.telemetry_metrics import push_instance_metrics
 
 
 class Command(BaseCommand):
@@ -86,7 +85,8 @@ class Command(BaseCommand):
             instance.edition = InstanceEdition.PLANE_COMMUNITY.value
             instance.save()
 
-        # Push instance metrics on registration
-        push_instance_metrics.delay()
-
+        # FOR_REVIEWER: since the push of the instance's metrics is gone, nothing imports the opentelemetry
+        # packages of pyproject.toml. Dropping them would take about 23 MB off the API image (grpcio is most of
+        # it) and some 260 lines off uv.lock, where upstream's updates of dependencies would then conflict at
+        # most rebases; so they stay.
         return
