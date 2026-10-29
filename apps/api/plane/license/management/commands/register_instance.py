@@ -6,7 +6,6 @@
 import json
 import secrets
 import os
-import requests
 
 # Django imports
 from django.core.management.base import BaseCommand, CommandError
@@ -36,25 +35,14 @@ class Command(BaseCommand):
             self.stdout.write("Error checking for current version")
             return "v0.1.0"
 
-    def check_for_latest_version(self, fallback_version):
-        try:
-            response = requests.get(
-                "https://api.github.com/repos/makeplane/plane/releases/latest",
-                timeout=10,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data.get("tag_name", fallback_version)
-        except Exception:
-            self.stdout.write("Error checking for latest version")
-            return fallback_version
-
     def handle(self, *args, **options):
         # Check if the instance is registered
         instance = Instance.objects.first()
 
         current_version = self.check_for_current_version()
-        latest_version = self.check_for_latest_version(current_version)
+        # FOR_REVIEWER: no page shows Instance.latest_version; it stays empty now that the instance no longer asks
+        # GitHub for Plane's latest release.
+        latest_version = None
 
         # If instance is None then register this instance
         if instance is None:
