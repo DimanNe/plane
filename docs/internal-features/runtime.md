@@ -25,6 +25,11 @@ output in the message.
 `config`, `postgres`, `redis` and `uploads` hold all state and are what a backup contains. `logs`
 and `runtime` (generated service configuration) are recreated on every start.
 
+Nothing else is kept. Where an image declares a volume that the run directory is not mounted at, such
+as the home of PostgreSQL's user, the container gets an empty tmpfs there, so Docker makes no volume
+that would stay on the host after the container is removed. The script's own removals of containers
+also remove their anonymous volumes.
+
 `import` always begins by killing and removing the instance's containers and deleting the whole run
 directory, so repeating an import after any failure starts from nothing. `import --input /dev/null`
 is how an empty instance is created.

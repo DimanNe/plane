@@ -26,7 +26,7 @@ holds the tasks. So a session:
 - deletes its images when the round is over, after `stop`. The stopped containers of its
   instances still use them, and hold nothing that the run directory (absolute) does not:
 
-      docker rm $(docker ps -aq --filter label=org.plane.local.target=RUN_DIR)
+      docker rm --volumes $(docker ps -aq --filter label=org.plane.local.target=RUN_DIR)
       docker image rm plane-local-{api,live,space,proxy}:TAG
 
 ## Seeing a change

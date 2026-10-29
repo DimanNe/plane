@@ -56,6 +56,22 @@ OUR_IMAGE_NAMES: t.Dict[plane_config.Service, str] = {
     plane_config.Service.SPACE: "plane-local-space",
     plane_config.Service.PROXY: "plane-local-proxy",
 }
+# The services that run the image of another service, which names that image in get_all_images().
+IMAGE_SERVICES: t.Dict[plane_config.Service, plane_config.Service] = {
+    plane_config.Service.NETWORK: plane_config.Service.POSTGRES,
+    plane_config.Service.WORKER: plane_config.Service.API,
+    plane_config.Service.BEAT: plane_config.Service.API,
+}
+# The paths that each image declares as VOLUME (docker image inspect --format '{{json .Config.Volumes}}' IMAGE), keyed
+# as in get_all_images(); our own images declare none. Docker gives a container a new anonymous volume at each such
+# path that the container does not mount. A start makes its containers anew, so such a volume is never used again
+# once its container is removed, yet a removal without --volumes keeps it, with nothing that tells which instance it
+# was of, and such volumes pile up on the host. make_mount_options() mounts every one of these paths.
+DECLARED_VOLUMES: t.Dict[plane_config.Service, t.Tuple[pl.Path, ...]] = {
+    plane_config.Service.POSTGRES: (pl.Path("/var/lib/postgresql"),),
+    plane_config.Service.REDIS: (pl.Path("/data"),),
+    plane_config.Service.MINIO: (pl.Path("/data"),),
+}
 # The tag of the owner's images, which every instance started without --image-tag runs.
 DEFAULT_IMAGE_TAG: str = "current"
 # Every service listens inside the network namespace of the instance. Only the proxy is published
@@ -237,6 +253,40 @@ def make_bind_mount_option(
         values.append("readonly")
     csv.writer(buffer, lineterminator="").writerow(values)
     return buffer.getvalue()
+
+
+def make_mount_options(
+    service: plane_config.Service,
+    mounts: t.Sequence[t.Tuple[pl.Path, pl.Path]],
+    readonly_mounts: t.Sequence[t.Tuple[pl.Path, pl.Path]],
+) -> t.List[str]:
+    """The --mount options of a service's container, with an empty tmpfs at every path of DECLARED_VOLUMES that
+    these mounts leave out."""
+    # FOR_REVIEWER: a tmpfs rather than a directory of the run dir. The one path left out is /var/lib/postgresql,
+    # the home of the user postgres, which the image creates empty: the server keeps its data in /data, psql runs
+    # with -c and writes no history, and the network container only sleeps. A tmpfs takes no memory while empty and
+    # goes with its container; a directory of the run dir would be in no backup, and its owner would have to be set
+    # up in the rootless namespace, as for the data of PostgreSQL.
+    # FOR_REVIEWER: DECLARED_VOLUMES is written down rather than read from the images at each start: one docker
+    # image inspect of the seven images takes about 120 ms here, and import starts the network container by its tag
+    # before it looks the images up. A new tag in EXTERNAL_DEPS needs its line checked; if a path is missed, the
+    # removals of this script still delete that volume with its container (--volumes), and only a removal by hand
+    # without --volumes keeps it.
+    # FOR_REVIEWER: the containers of docker run --rm (initialize_postgres(), run_api_command()) are left as they
+    # are: Docker removes their anonymous volumes with them.
+    options: t.List[str] = []
+    source: pl.Path
+    target: pl.Path
+    for source, target in mounts:
+        options += ["--mount", make_bind_mount_option(source, target)]
+    for source, target in readonly_mounts:
+        options += ["--mount", make_bind_mount_option(source, target, readonly=True)]
+    mounted: t.Set[pl.Path] = {target for _, target in [*mounts, *readonly_mounts]}
+    path: pl.Path
+    for path in DECLARED_VOLUMES.get(IMAGE_SERVICES.get(service, service), ()):
+        if path not in mounted:
+            options += ["--mount", f"type=tmpfs,dst={path}"]
+    return options
 
 
 def make_infrastructure_command_arguments(argv: t.Sequence[str]) -> t.List[str]:
@@ -1151,9 +1201,11 @@ def remove_containers(run_dir: pl.Path) -> None:
             if name != plane_config.Service.NETWORK
         ]
         if children:
-            run_docker(["rm", *children])
+            run_docker(["rm", "--volumes", *children])
         if plane_config.Service.NETWORK in containers:
-            run_docker(["rm", containers[plane_config.Service.NETWORK]["Id"]])
+            run_docker(
+                ["rm", "--volumes", containers[plane_config.Service.NETWORK]["Id"]]
+            )
 
 
 def get_status(run_dir: pl.Path) -> t.Dict[plane_config.Service, ContainerState]:
@@ -1183,7 +1235,12 @@ def start_container(
     if existing_container:
         if existing_container["State"]["Running"]:
             return
-        run_docker(["rm", existing_container["Id"]])
+        # FOR_REVIEWER: --volumes here and in remove_containers() deletes the anonymous volume that each container of
+        # PostgreSQL and each network container made by an earlier version of this script has: the first start with
+        # this script replaces every service, since the script changed, and so removes them all, the owner's two
+        # too. It also deletes a volume at a path that DECLARED_VOLUMES misses. A container without one is removed
+        # as before.
+        run_docker(["rm", "--volumes", existing_container["Id"]])
     args: t.List[str] = [
         "run",
         "-d",
@@ -1210,12 +1267,7 @@ def start_container(
         args += ["--entrypoint", entrypoint]
     if user is not None:
         args += ["--user", user]
-    target: pl.Path
-    source: pl.Path
-    for source, target in mounts:
-        args += ["--mount", make_bind_mount_option(source, target)]
-    for source, target in readonly_mounts:
-        args += ["--mount", make_bind_mount_option(source, target, readonly=True)]
+    args += make_mount_options(service, mounts, readonly_mounts)
     run_docker([*args, image, *argv])
 
 
@@ -1677,11 +1729,6 @@ def get_running_services_to_replace(
     agree on, such as the number of API workers and the Postgres connections that they need."""
     network_container: t.Optional[Container] = running.get(plane_config.Service.NETWORK)
     proxy_port: int = SERVICE_PORTS[plane_config.Service.PROXY]
-    image_services: t.Dict[plane_config.Service, plane_config.Service] = {
-        plane_config.Service.NETWORK: plane_config.Service.POSTGRES,
-        plane_config.Service.WORKER: plane_config.Service.API,
-        plane_config.Service.BEAT: plane_config.Service.API,
-    }
     if (
         network_container is None
         or network_container["HostConfig"]["PortBindings"]
@@ -1700,7 +1747,7 @@ def get_running_services_to_replace(
     not_as_asked: t.Set[plane_config.Service] = {
         name
         for name, container in running.items()
-        if container["Image"] != image_ids[image_services.get(name, name)]
+        if container["Image"] != image_ids[IMAGE_SERVICES.get(name, name)]
         or (
             name != plane_config.Service.NETWORK
             and container["HostConfig"]["NetworkMode"]

@@ -680,6 +680,153 @@ class RunningInstanceTests(unittest.TestCase):
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
 
+class ContainerVolumeTests(unittest.TestCase):
+    def test_container_mounts_every_path_that_its_image_declares_as_volume(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            service: plane_config.Service
+            mounts: t.List[t.Tuple[pl.Path, pl.Path]]
+            readonly_mounts: t.List[t.Tuple[pl.Path, pl.Path]]
+            expected: t.List[str]
+
+        run_dir: pl.Path = pl.Path("/srv/instance")
+        tcs: t.List[Tc] = [
+            Tc(
+                "the database, with its data in the run dir, gets a tmpfs at the home that its image declares",
+                plane_config.Service.POSTGRES,
+                [(run_dir / "postgres", pl.Path("/data"))],
+                [
+                    (
+                        run_dir / "runtime/postgres-hba.conf",
+                        pl.Path("/run/plane-postgres-hba.conf"),
+                    )
+                ],
+                [
+                    "--mount",
+                    "type=bind,src=/srv/instance/postgres,dst=/data",
+                    "--mount",
+                    "type=bind,src=/srv/instance/runtime/postgres-hba.conf,dst=/run/plane-postgres-hba.conf,readonly",
+                    "--mount",
+                    "type=tmpfs,dst=/var/lib/postgresql",
+                ],
+            ),
+            Tc(
+                "the network container runs the image of the database and mounts nothing else",
+                plane_config.Service.NETWORK,
+                [],
+                [],
+                ["--mount", "type=tmpfs,dst=/var/lib/postgresql"],
+            ),
+            Tc(
+                "a store whose image declares the directory of its data, which is in the run dir",
+                plane_config.Service.REDIS,
+                [(run_dir / "redis", pl.Path("/data"))],
+                [],
+                ["--mount", "type=bind,src=/srv/instance/redis,dst=/data"],
+            ),
+            Tc(
+                "the object store, whose data is in the run dir too",
+                plane_config.Service.MINIO,
+                [(run_dir / "uploads", pl.Path("/data"))],
+                [(run_dir / "runtime/minio.json", pl.Path("/run/plane-minio.json"))],
+                [
+                    "--mount",
+                    "type=bind,src=/srv/instance/uploads,dst=/data",
+                    "--mount",
+                    "type=bind,src=/srv/instance/runtime/minio.json,dst=/run/plane-minio.json,readonly",
+                ],
+            ),
+            Tc(
+                "a service on our own image, which declares no volume",
+                plane_config.Service.WORKER,
+                [(run_dir / "logs", pl.Path("/code/plane/logs"))],
+                [],
+                ["--mount", "type=bind,src=/srv/instance/logs,dst=/code/plane/logs"],
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            actual: t.List[str] = runtime.make_mount_options(
+                tc.service, tc.mounts, tc.readonly_mounts
+            )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_removal_of_a_container_takes_its_anonymous_volumes(self) -> None:
+        run_dir: pl.Path = pl.Path("/srv/instance")
+
+        def make_container(
+            service: plane_config.Service, running: bool
+        ) -> runtime.Container:
+            return {
+                "Id": f"{service.value}-id",
+                "Name": f"/plane-x-{service.value}",
+                "Image": "sha256:built",
+                "State": {"Running": running},
+                "Config": {"Labels": {}, "Cmd": []},
+                "HostConfig": {"NetworkMode": "bridge", "PortBindings": {}},
+            }
+
+        def remove_containers_of_import() -> None:
+            containers: runtime.Containers = {
+                plane_config.Service.POSTGRES: make_container(
+                    plane_config.Service.POSTGRES, running=True
+                ),
+                plane_config.Service.API: make_container(
+                    plane_config.Service.API, running=False
+                ),
+                plane_config.Service.NETWORK: make_container(
+                    plane_config.Service.NETWORK, running=True
+                ),
+            }
+            with mock.patch.object(runtime, "get_containers", return_value=containers):
+                runtime.remove_containers(run_dir)
+
+        def replace_stopped_container_at_start() -> None:
+            runtime.start_container(
+                run_dir,
+                plane_config.Service.POSTGRES,
+                "sha256:built",
+                ["postgres"],
+                "container:network-id",
+                make_container(plane_config.Service.POSTGRES, running=False),
+            )
+
+        class Tc(t.NamedTuple):
+            name: str
+            remove: t.Callable[[], None]
+            expected: t.List[t.List[str]]
+
+        tcs: t.List[Tc] = [
+            Tc(
+                "import removes every container of the instance, the network container last",
+                remove_containers_of_import,
+                [
+                    ["rm", "--volumes", "postgres-id", "api-id"],
+                    ["rm", "--volumes", "network-id"],
+                ],
+            ),
+            Tc(
+                "start replaces a stopped container",
+                replace_stopped_container_at_start,
+                [["rm", "--volumes", "postgres-id"]],
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            with mock.patch.object(runtime, "run_docker") as run_docker:
+                tc.remove()
+            actual: t.List[t.List[str]] = [
+                list(call.args[0])
+                for call in run_docker.call_args_list
+                if call.args[0][0] == "rm"
+            ]
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+
 class BindAddressTests(unittest.TestCase):
     def test_parse_accepts_only_ipv4_and_port_in_range(self) -> None:
         class Tc(t.NamedTuple):
