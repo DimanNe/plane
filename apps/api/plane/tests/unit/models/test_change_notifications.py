@@ -132,21 +132,102 @@ def test_row_of_a_work_item_names_the_work_item_when_inserted_and_when_deleted(
     assert get_changes(listener) == [{**change, "op": "I"}, {**change, "op": "D"}]
 
 
-def test_table_added_later_reports_after_the_next_migrate(
-    workspace: db_models.Workspace, listener: psycopg.Connection
-) -> None:
+def emit_post_migrate() -> None:
+    management_sql.emit_post_migrate_signal(verbosity=0, interactive=False, db=django_db.DEFAULT_DB_ALIAS)
+
+
+def get_tables_with_trigger() -> t.List[str]:
     cursor: django_db.backends.utils.CursorWrapper
     with django_db.connection.cursor() as cursor:
-        cursor.execute("create table added_later (id integer, workspace_id uuid)")
-        try:
-            management_sql.emit_post_migrate_signal(verbosity=0, interactive=False, db=django_db.DEFAULT_DB_ALIAS)
-            cursor.execute("insert into added_later values (7, %s)", [workspace.id])
+        cursor.execute(change_notifications.TABLES_WITH_TRIGGER)
+        return sorted(table for (table,) in cursor.fetchall())
 
-            assert get_changes(listener) == [
-                {"t": "added_later", "op": "I", "id": "7", "w": str(workspace.id), "p": None, "i": None}
-            ]
+
+@pytest.mark.parametrize(
+    "columns, names_work_item, expected_trigger, expected_reported",
+    [
+        (["workspace_id", "issue_id"], True, True, True),
+        (["workspace_id", "issue_id"], False, True, False),
+        (["workspace_id"], False, False, False),
+        # A row of no workspace would reach no page.
+        (["issue_id"], True, False, False),
+    ],
+    ids=["row naming a work item", "row naming none", "table without an issue_id", "table without a workspace"],
+)
+def test_table_added_later_reports_its_rows_naming_a_work_item_after_the_next_migrate(
+    issue: db_models.Issue,
+    listener: psycopg.Connection,
+    columns: t.List[str],
+    names_work_item: bool,
+    expected_trigger: bool,
+    expected_reported: bool,
+) -> None:
+    row: t.Dict[str, t.Any] = {
+        "workspace_id": issue.workspace_id,
+        "issue_id": issue.id if names_work_item else None,
+    }
+    change: Change = {
+        "t": "added_later",
+        "op": "I",
+        "id": "7",
+        "w": str(issue.workspace_id) if "workspace_id" in columns else None,
+        "p": None,
+        "i": str(issue.id) if names_work_item else None,
+    }
+    cursor: django_db.backends.utils.CursorWrapper
+    with django_db.connection.cursor() as cursor:
+        cursor.execute(f"create table added_later (id integer, {', '.join(f'{column} uuid' for column in columns)})")
+        try:
+            emit_post_migrate()
+            cursor.execute(
+                f"insert into added_later (id, {', '.join(columns)}) values (7{', %s' * len(columns)})",
+                [row[column] for column in columns],
+            )
+
+            assert ("added_later" in get_tables_with_trigger(), get_changes(listener)) == (
+                expected_trigger,
+                [change] if expected_reported else [],
+            )
         finally:
             cursor.execute("drop table added_later")
+
+
+@pytest.mark.parametrize(
+    "table, expected",
+    [
+        ("issues", True),
+        ("issue_assignees", True),
+        ("issue_relations", True),
+        # each opening of a work item, and each load of a project's list
+        ("user_recent_visits", False),
+        # each change of a work item, for its subscribers
+        ("notifications", False),
+        # each request to /api/v1/
+        ("api_tokens", False),
+        # each change of the layout or the display of a list
+        ("project_user_properties", False),
+    ],
+)
+def test_trigger_is_only_on_the_tables_naming_a_work_item(table: str, expected: bool) -> None:
+    assert (table in get_tables_with_trigger()) == expected
+
+
+def test_table_naming_no_work_item_loses_the_trigger_of_an_earlier_version_at_the_next_migrate() -> None:
+    cursor: django_db.backends.utils.CursorWrapper
+    with django_db.connection.cursor() as cursor:
+        # as every table of workspace data had it before
+        cursor.execute(
+            f"create trigger {change_notifications.TRIGGER} after insert or update or delete on user_recent_visits "
+            f"for each row execute function {change_notifications.TRIGGER}()"
+        )
+        try:
+            tables_before: t.List[str] = get_tables_with_trigger()
+
+            emit_post_migrate()
+
+            assert get_tables_with_trigger() == [table for table in tables_before if table != "user_recent_visits"]
+        finally:
+            cursor.execute(f"drop trigger if exists {change_notifications.TRIGGER} on user_recent_visits")
 
 
 def test_relay_first_tells_the_pages_to_fetch_again(

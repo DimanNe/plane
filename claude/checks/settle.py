@@ -77,21 +77,27 @@ SETTLE_WATCH_JS: str = """
   const handlesOf = new WeakMap();
   const originalAddEventListener = WebSocket.prototype.addEventListener;
   const originalRemoveEventListener = WebSocket.prototype.removeEventListener;
-  // A live update names the project of the changed row (apps/web/store/live-updates.ts, TChange). Heartbeats,
-  // resyncs and what is not JSON, such as the editor's own updates, name none.
-  const isLiveUpdateAboutOwnProject = (event) => {
+  // A live update is a changed row: its table and the ids of the row, of its project and of its work item
+  // (apps/web/store/live-updates.ts, TChange). Heartbeats, resyncs and what is not JSON, such as the editor's own
+  // updates, are none.
+  const readLiveUpdate = (event) => {
     try {
       const message = JSON.parse(event.data);
-      return typeof message.p === "string" && ownProjects.has(message.p);
+      return typeof message.t === "string" ? message : null;
     } catch {
-      return false;
+      return null;
     }
   };
+  // every live update the page received, for a rule about what the server sends (read_live_updates)
+  const liveUpdates = [];
   const wrapForSocket = (listener) => {
     if (typeof listener !== "function") return listener;
     if (!handlesOf.has(listener)) {
       handlesOf.set(listener, function (event) {
-        return runWithOrigin(isLiveUpdateAboutOwnProject(event) ? origin : "socket", listener, this, arguments);
+        const liveUpdate = readLiveUpdate(event);
+        if (liveUpdate) liveUpdates.push(liveUpdate);
+        const isAboutOwnProject = typeof liveUpdate?.p === "string" && ownProjects.has(liveUpdate.p);
+        return runWithOrigin(isAboutOwnProject ? origin : "socket", listener, this, arguments);
       });
     }
     return handlesOf.get(listener);
@@ -219,6 +225,7 @@ SETTLE_WATCH_JS: str = """
   window.__settle = {
     ownProjects,
     timersMade,
+    liveUpdates,
     // null until the wait that start() began has ended: then whether the page settled, and what was left if not
     result: null,
     capTimer: null,
@@ -303,6 +310,11 @@ def read_settle_results(
             return None
         results.append(result)
     return results
+
+
+def read_live_updates(page: pw.Page) -> t.List[t.Dict[str, t.Optional[str]]]:
+    """The live updates that the page received since it was opened, each as the server sent it."""
+    return page.evaluate("window.__settle.liveUpdates")
 
 
 def read_timers_made(page: pw.Page) -> t.List[str]:

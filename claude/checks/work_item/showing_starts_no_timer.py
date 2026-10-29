@@ -3,7 +3,8 @@ Showing a work item starts no timer of the page: in the view beside the list, on
 board, each opened as a person opens it. Every step that says nothing happens waits for the timers that the page
 started since the last act (settle.py), so a timer that showing a work item starts for nothing, such as a save of a
 title that nobody changed, makes every such step after an opening wait for it. The timers that do start are those of
-KNOWN_TIMERS, each for the reason given there.
+KNOWN_TIMERS, each for the reason given there. Nor does the page receive the recent visit that the server records at
+each showing: the live updates that reach a page are rows that name a work item, the only ones its rules follow.
 """
 
 import typing as t
@@ -36,8 +37,9 @@ KNOWN_TIMERS: t.Tuple[str, ...] = (
     # the address names the work item open in the peek, written once the selection rests, as for the selected line
     # (apps/web/components/issues/work-items-address.tsx)
     "{address:",
-    # The server records each opening of a work item as a recent visit, a row of the project, and the page collects
-    # the live updates of a moment before it fetches what they changed (apps/web/store/live-updates.ts).
+    # The work items that the check makes are followed by what the server's worker writes for them, their activity and
+    # their subscriber, which under load reaches the page during these steps as live updates of its own project; the
+    # page collects these for a moment before it fetches what they changed (apps/web/store/live-updates.ts).
     "this.batchQuietTimer",
 )
 # Whether the page shows the work item of this title on a page of its own, with its description: the view beside a
@@ -54,6 +56,16 @@ def describe_with_block_id(text: str) -> str:
     return f'<p data-id="{uuid.uuid4()}">{text}</p>'
 
 
+def read_tables_of_live_updates_naming_no_work_item(page: pw.Page) -> t.List[str]:
+    return sorted(
+        {
+            update["t"]
+            for update in settle.read_live_updates(page)
+            if update["t"] != "issues" and update["i"] is None
+        }
+    )
+
+
 def read_timers_not_known(page: pw.Page) -> t.List[str]:
     return [
         timer
@@ -66,10 +78,12 @@ def run(check: steps.Check) -> None:
     # FOR_REVIEWER: /api/v1/ stores a description without the ids of its blocks, and the first editor that shows it
     # gives them and saves the description, with the timer of the autosave (PLANE-120). So the descriptions here
     # carry the ids as the editor writes them; without them the first showing of each would fail this check.
-    # FOR_REVIEWER: two of KNOWN_TIMERS are the app's own. The live updates of recent visits start their timers for
-    # rows that the page then ignores (PLANE-121). The address waits for the selection to rest also after a click
-    # that opens the peek, where nothing is held; written at once there, it would start no timer. The other four
-    # are the editor's libraries' and end within milliseconds.
+    # FOR_REVIEWER: two of KNOWN_TIMERS are the app's own. The batch of live updates no longer starts for the recent
+    # visit of a showing (PLANE-121), which the step on live updates holds; but in 2 of 2 headless suites it started for
+    # the worker's writes of the check's own work items, which came seconds late (PLANE-129), so it stays known for
+    # that reason. The address waits for the selection to rest also after a click that opens the peek, where nothing is
+    # held; written at once there, it would start no timer. The other four are the editor's libraries' and end within
+    # milliseconds.
     # FOR_REVIEWER: a timer is known by its text, so one that a change of the app or of a library adds fails this
     # check until it is named in KNOWN_TIMERS or removed. A limit on the delay instead would let every short timer
     # pass, a new one too, and would still have to name the two of the app.
@@ -124,6 +138,11 @@ def run(check: steps.Check) -> None:
     check.expect_stays(
         "showing a work item on its own page, by the link of the view, starts no timer but known ones",
         lambda: read_timers_not_known(page),
+        [],
+    )
+    check.expect_stays(
+        "the page received as live updates only rows that name a work item, no recent visit (tables of the others)",
+        lambda: read_tables_of_live_updates_naming_no_work_item(page),
         [],
     )
     page.context.close()

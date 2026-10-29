@@ -40,6 +40,13 @@ const TYPED_TEXT_SAVE_TIME = 2000;
 const issueService = new IssueService();
 
 /**
+ * The work item that a changed row names: the work item's own row, or a row with its `issue_id`, such as an assignee,
+ * a comment or a relation. Every rule of the page follows rows naming a work item, and the server sends no other rows
+ * (TABLES_NAMING_A_WORK_ITEM in apps/api/plane/db/change_notifications.py).
+ */
+const getNamedWorkItemId = (change: TChange) => (change.t === "issues" ? change.id : change.i);
+
+/**
  * The list of work items on screen. So far only the project's own list is followed, in every layout.
  */
 const getListOnScreen = () => {
@@ -105,8 +112,8 @@ const isTextFieldFocused = () => {
 
 /**
  * Keeps an open page in step with what others change: another person, an agent through the API, a background
- * task. The live server sends the ids of every changed row of the workspace. The page fetches what it shows of
- * them and merges it into its stores; a row it has no rule for is ignored.
+ * task. The live server sends the ids of every changed row of the workspace that names a work item. The page fetches
+ * what it shows of them and merges it into its stores.
  */
 export class LiveUpdates {
   private socket: WebSocket | undefined;
@@ -200,15 +207,9 @@ export class LiveUpdates {
   }
 
   private async applyChanges(changes: TChange[]) {
-    // the changed work items of a project: a row of a work item names it in `i`
+    // the changed work items of a project
     const getIssueIds = (projectId: string) =>
-      uniq(
-        compact(
-          changes
-            .filter((change) => change.p === projectId)
-            .map((change) => (change.t === "issues" ? change.id : change.i))
-        )
-      );
+      uniq(compact(changes.filter((change) => change.p === projectId).map(getNamedWorkItemId)));
     const list = getListOnScreen();
     const listIssueIds = list ? getIssueIds(list.projectId) : [];
     if (list && listIssueIds.length > 0) await this.applyToList(list, listIssueIds);
