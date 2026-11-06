@@ -91,7 +91,7 @@ RUNTIME_SCRIPT_DIGEST: str = hashlib.sha256(
 ).hexdigest()
 # The owner's level for the export on shutdown: there is one export per poweroff, kept as a backup, so its size
 # counts for more than the time it adds to the poweroff.
-EXPORT_ON_SHUTDOWN_ZSTD_LEVEL: int = 20
+EXPORT_ON_SHUTDOWN_ZSTD_LEVEL: int = 17
 
 
 class DockerMetrics(t.TypedDict):
