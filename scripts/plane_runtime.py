@@ -2761,7 +2761,7 @@ class StopCommand(Command):
             # the unit's ExecStop= runs this command again, from within the unit
             run_systemctl_for_user(["stop", PERSIST_AUTO_UNIT_NAME])
             return print_persist_auto_result(run_dir, "stop")
-        if self.export_on_shutdown is not None and is_user_systemd_stopping():
+        if self.export_on_shutdown is not None:
             # FOR_REVIEWER: the export is in the stop of the user's systemd, not behind the power key. Overriding
             # HandlePowerKey= would need a handler of ours that exports and then powers off itself, set up as root,
             # while this script runs as the user. This way the key keeps its poweroff, and poweroff or reboot inside
