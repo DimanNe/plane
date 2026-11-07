@@ -138,6 +138,13 @@ power button into a poweroff (logind cannot see the button without udev), and th
 take as long to stop as the export takes (Ubuntu gives it 5 s). A VM that is killed rather than shut
 down exports nothing; the earlier exports stay.
 
+Once the new archive is complete, the stop deletes the older archives `NAME---YYYY-mm-DD---HH-MM-SS.zstd`
+in `DIR`, by the time in their names, so that 2 remain, the new one among them
+(`EXPORT_ON_SHUTDOWN_ARCHIVES_KEPT`), and every partial `.NAME---...zstd.writing-*` that an export killed
+before its end left there. Nothing else in `DIR` is deleted: no other file, and no archive of another
+`NAME`, such as `plane-dev---...` for the `NAME` `plane`. A failed export deletes nothing. The JSON line
+of the stop lists what it deleted, under `deleted`.
+
 ## MCP
 
 Agents use the unmodified upstream [plane-mcp-server](https://github.com/makeplane/plane-mcp-server)

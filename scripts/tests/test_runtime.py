@@ -1,5 +1,6 @@
 import argparse
 import concurrent.futures
+import contextlib
 import dataclasses as dc
 import errno
 import io
@@ -1652,7 +1653,19 @@ class ExportOnShutdownTests(unittest.TestCase):
                 "a stop or restart of the unit",
                 EXPORT_ON_SHUTDOWN,
                 False,
-                ([], 1),
+                (
+                    [
+                        runtime.ExportCommand(
+                            pl.Path("/srv/a"),
+                            pl.Path(
+                                "/opt/plane-dev-export---2026-10-23---18-05-09.zstd"
+                            ),
+                            0,
+                            runtime.EXPORT_ON_SHUTDOWN_ZSTD_LEVEL,
+                        )
+                    ],
+                    0,
+                ),
             ),
             Tc(
                 "the shutdown of the user's systemd, without --export-basename",
@@ -1675,8 +1688,16 @@ class ExportOnShutdownTests(unittest.TestCase):
                 ),
                 mock.patch("time.localtime", return_value=now),
                 mock.patch.object(
-                    runtime.ExportCommand, "run", autospec=True
+                    runtime.ExportCommand,
+                    "stop_and_write_archive",
+                    autospec=True,
+                    return_value={},
                 ) as export,
+                mock.patch.object(
+                    runtime,
+                    "delete_export_on_shutdown_archives_except_newest",
+                    return_value=[],
+                ),
                 mock.patch.object(runtime, "stop_plane_containers") as stop,
                 mock.patch("sys.stdout"),
             ):
@@ -1685,6 +1706,269 @@ class ExportOnShutdownTests(unittest.TestCase):
                 [call.args[0] for call in export.call_args_list],
                 stop.call_count,
             )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_after_an_export_only_the_newest_archives_of_its_basename_remain(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            # in the order they were written; a name that ends with "/" is a directory
+            existing: t.List[str]
+            # the names deleted, then the names that remain
+            expected: t.Tuple[t.List[str], t.List[str]]
+
+        new: str = "plane---2026-11-07---10-00-00.zstd"
+        tcs: t.List[Tc] = [
+            Tc("the new archive alone", [new], ([], [new])),
+            Tc(
+                "one older archive",
+                ["plane---2026-11-06---10-00-00.zstd", new],
+                ([], ["plane---2026-11-06---10-00-00.zstd", new]),
+            ),
+            Tc(
+                "older archives beyond the count, written in another order than their names say",
+                [
+                    "plane---2026-11-06---09-00-00.zstd",
+                    "plane---2026-10-31---23-59-59.zstd",
+                    "plane---2026-11-01---00-00-00.zstd",
+                    new,
+                ],
+                (
+                    [
+                        "plane---2026-10-31---23-59-59.zstd",
+                        "plane---2026-11-01---00-00-00.zstd",
+                    ],
+                    ["plane---2026-11-06---09-00-00.zstd", new],
+                ),
+            ),
+            Tc(
+                "archives of other basenames",
+                [
+                    "other---2026-11-01---00-00-00.zstd",
+                    "other---2026-11-02---00-00-00.zstd",
+                    "plane---2026-11-06---00-00-00.zstd",
+                    new,
+                ],
+                (
+                    [],
+                    [
+                        "other---2026-11-01---00-00-00.zstd",
+                        "other---2026-11-02---00-00-00.zstd",
+                        "plane---2026-11-06---00-00-00.zstd",
+                        new,
+                    ],
+                ),
+            ),
+            Tc(
+                "archives of basenames that begin or end with the basename",
+                [
+                    "plane-dev---2026-11-01---00-00-00.zstd",
+                    "plane---dev---2026-11-01---00-00-00.zstd",
+                    "my-plane---2026-11-01---00-00-00.zstd",
+                    "plane---2026-11-06---00-00-00.zstd",
+                    new,
+                ],
+                (
+                    [],
+                    [
+                        "my-plane---2026-11-01---00-00-00.zstd",
+                        "plane---2026-11-06---00-00-00.zstd",
+                        new,
+                        "plane---dev---2026-11-01---00-00-00.zstd",
+                        "plane-dev---2026-11-01---00-00-00.zstd",
+                    ],
+                ),
+            ),
+            Tc(
+                "files and directories that are not archives of the export",
+                [
+                    "plane/",
+                    "plane-dev-export.zstd",
+                    "plane.zstd",
+                    "plane---latest.zstd",
+                    "plane---2026-11-1---0-0-0.zstd",
+                    "plane---2026-11-01---00-00-00.zstd.bak",
+                    "plane---2026-11-01---00-00-00.tar",
+                    "plane---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                    "notes.txt",
+                    "plane---2026-11-06---00-00-00.zstd",
+                    new,
+                ],
+                (
+                    [],
+                    [
+                        "notes.txt",
+                        "plane",
+                        "plane---2026-11-01---00-00-00.tar",
+                        "plane---2026-11-01---00-00-00.zstd.bak",
+                        "plane---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                        "plane---2026-11-06---00-00-00.zstd",
+                        new,
+                        "plane---2026-11-1---0-0-0.zstd",
+                        "plane---latest.zstd",
+                        "plane-dev-export.zstd",
+                        "plane.zstd",
+                    ],
+                ),
+            ),
+            Tc(
+                "partial archives of killed exports of the basename and of others",
+                [
+                    ".plane---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                    ".plane---2026-11-06---00-00-00.zstd.writing-fedcba9876543210",
+                    ".plane-dev---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                    ".other---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                    new,
+                ],
+                (
+                    [
+                        ".plane---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                        ".plane---2026-11-06---00-00-00.zstd.writing-fedcba9876543210",
+                    ],
+                    [
+                        ".other---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                        ".plane-dev---2026-11-01---00-00-00.zstd.writing-0123456789abcdef",
+                        new,
+                    ],
+                ),
+            ),
+            Tc(
+                "older archives named later than the new one, after the clock went back",
+                [
+                    "plane---2026-11-09---00-00-00.zstd",
+                    "plane---2026-11-08---00-00-00.zstd",
+                    new,
+                ],
+                (
+                    ["plane---2026-11-08---00-00-00.zstd"],
+                    [new, "plane---2026-11-09---00-00-00.zstd"],
+                ),
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+            with tempfile.TemporaryDirectory() as temporary:
+                exports: pl.Path = pl.Path(temporary)
+                written: int
+                name: str
+                for written, name in enumerate(tc.existing):
+                    path: pl.Path = exports / name.removesuffix("/")
+                    if name.endswith("/"):
+                        path.mkdir()
+                    else:
+                        path.write_bytes(b"archive")
+                    # in the order written, which is not always the order of the times in the names
+                    os.utime(path, (1_800_000_000 + written, 1_800_000_000 + written))
+                deleted: t.List[pl.Path] = (
+                    runtime.delete_export_on_shutdown_archives_except_newest(
+                        "plane", exports / new
+                    )
+                )
+                actual: t.Tuple[t.List[str], t.List[str]] = (
+                    [str(path.relative_to(exports)) for path in deleted],
+                    sorted(os.listdir(exports)),
+                )
+            self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
+
+    def test_stop_deletes_and_prints_older_archives_only_after_its_export_is_written(
+        self,
+    ) -> None:
+        class Tc(t.NamedTuple):
+            name: str
+            basename: t.Optional[str]
+            is_export_written: bool
+            # the names that the stop prints as deleted (None: it prints no "deleted"), then the names that remain
+            expected: t.Tuple[t.Optional[t.List[str]], t.List[str]]
+
+        now: time.struct_time = time.struct_time((2026, 11, 7, 10, 0, 0, 5, 311, 0))
+        new: str = "plane-dev---2026-11-07---10-00-00.zstd"
+        existing: t.List[str] = [
+            ".plane-dev---2026-11-03---00-00-00.zstd.writing-0123456789abcdef",
+            "plane-dev---2026-11-04---00-00-00.zstd",
+            "plane-dev---2026-11-05---00-00-00.zstd",
+            "plane-dev---2026-11-06---00-00-00.zstd",
+            "plane-dev-2---2026-11-01---00-00-00.zstd",
+            "plane-dev-export.zstd",
+        ]
+        tcs: t.List[Tc] = [
+            Tc(
+                "an export that is written",
+                "plane-dev",
+                True,
+                (
+                    [
+                        ".plane-dev---2026-11-03---00-00-00.zstd.writing-0123456789abcdef",
+                        "plane-dev---2026-11-04---00-00-00.zstd",
+                        "plane-dev---2026-11-05---00-00-00.zstd",
+                    ],
+                    [
+                        "plane-dev---2026-11-06---00-00-00.zstd",
+                        new,
+                        "plane-dev-2---2026-11-01---00-00-00.zstd",
+                        "plane-dev-export.zstd",
+                    ],
+                ),
+            ),
+            Tc("an export that fails", "plane-dev", False, (None, sorted(existing))),
+            Tc(
+                "a stop without --export-basename",
+                None,
+                False,
+                (None, sorted(existing)),
+            ),
+        ]
+        i: int
+        tc: Tc
+        for i, tc in enumerate(tcs):
+
+            def write_or_fail(
+                export: runtime.ExportCommand, start_time: float
+            ) -> runtime.Timings:
+                if not tc.is_export_written:
+                    raise RuntimeError("Archive pipeline failed")
+                export.output.write_bytes(b"archive")
+                return {}
+
+            with tempfile.TemporaryDirectory() as temporary:
+                exports: pl.Path = pl.Path(temporary).resolve()
+                name: str
+                for name in existing:
+                    (exports / name).write_bytes(b"archive")
+                stdout: io.StringIO
+                with (
+                    mock.patch.object(
+                        runtime, "get_persist_auto_start_of", return_value=None
+                    ),
+                    mock.patch("time.localtime", return_value=now),
+                    mock.patch.object(
+                        runtime.ExportCommand,
+                        "stop_and_write_archive",
+                        autospec=True,
+                        side_effect=write_or_fail,
+                    ),
+                    mock.patch.object(runtime, "stop_plane_containers"),
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+                ):
+                    with contextlib.suppress(RuntimeError):
+                        runtime.StopCommand(
+                            pl.Path("/srv/a"),
+                            None
+                            if tc.basename is None
+                            else runtime.ExportOnShutdown(tc.basename, exports),
+                        ).run()
+                printed: t.Optional[t.List[str]] = (
+                    json.loads(stdout.getvalue()).get("deleted")
+                    if stdout.getvalue()
+                    else None
+                )
+                actual: t.Tuple[t.Optional[t.List[str]], t.List[str]] = (
+                    None
+                    if printed is None
+                    else [str(pl.Path(path).relative_to(exports)) for path in printed],
+                    sorted(os.listdir(exports)),
+                )
             self.assertEqual(actual, tc.expected, f"Testcase #{i + 1} {tc.name}")
 
     def test_export_creates_missing_directories_and_replaces_a_backup_of_the_same_name(

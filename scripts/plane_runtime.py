@@ -108,6 +108,12 @@ RUNTIME_SCRIPT_DIGEST: str = hashlib.sha256(
 # The owner's level for the export on shutdown: there is one export per poweroff, kept as a backup, so its size
 # counts for more than the time it adds to the poweroff.
 EXPORT_ON_SHUTDOWN_ZSTD_LEVEL: int = 17
+# The owner's count of archives that the export on shutdown leaves in --export-dir, the new one among them. Every stop
+# of the persist-auto unit exports, so without a bound the archives would fill the disk of the export dir.
+EXPORT_ON_SHUTDOWN_ARCHIVES_KEPT: int = 2
+# Written into the name of each archive of the export on shutdown, and read back from the names to tell which of the
+# archives of one --export-basename are the newest.
+EXPORT_ON_SHUTDOWN_TIME_FORMAT: str = "---%Y-%m-%d---%H-%M-%S"
 
 
 class DockerMetrics(t.TypedDict):
@@ -2332,16 +2338,24 @@ def make_lifecycle_timings(start_time: float) -> Timings:
 
 
 def print_lifecycle_result(
-    run_dir: pl.Path, action: str, timings: Timings, start_time: float
+    run_dir: pl.Path,
+    action: str,
+    timings: Timings,
+    start_time: float,
+    deleted: t.Optional[t.Sequence[pl.Path]] = None,
 ) -> None:
     timings["total_ms"] = round((time.monotonic() - start_time) * 1000, 3)
     timings["controller_docker_calls"] = DOCKER_METRICS["calls"]
     timings["controller_docker_wall_ms"] = round(DOCKER_METRICS["wall_ms"], 3)
-    print(
-        json.dumps(
-            {"action": action, "ok": True, "timings": timings, "run_dir": str(run_dir)}
-        )
-    )
+    result: t.Dict[str, object] = {
+        "action": action,
+        "ok": True,
+        "timings": timings,
+        "run_dir": str(run_dir),
+    }
+    if deleted is not None:
+        result["deleted"] = [str(path) for path in deleted]
+    print(json.dumps(result))
 
 
 def get_persist_auto_unit_path() -> pl.Path:
@@ -2376,9 +2390,79 @@ def get_export_on_shutdown_output(
 ) -> pl.Path:
     return export_on_shutdown.dir / (
         export_on_shutdown.basename
-        + time.strftime("---%Y-%m-%d---%H-%M-%S", now)
+        + time.strftime(EXPORT_ON_SHUTDOWN_TIME_FORMAT, now)
         + ".zstd"
     )
+
+
+def parse_export_on_shutdown_time(
+    basename: str, name: str
+) -> t.Optional[time.struct_time]:
+    """The time in name if get_export_on_shutdown_output() makes exactly that name for basename, else None. The
+    export dir, by default beside the checkout, holds other files too, archives of other basenames among them:
+    plane-dev---...zstd is no archive of plane."""
+    if not (name.startswith(basename) and name.endswith(".zstd")):
+        return None
+    text: str = name[len(basename) : -len(".zstd")]
+    try:
+        parsed: time.struct_time = time.strptime(text, EXPORT_ON_SHUTDOWN_TIME_FORMAT)
+    except ValueError:
+        return None
+    # strptime also reads numbers without their leading zeros, which strftime always writes
+    return (
+        parsed
+        if time.strftime(EXPORT_ON_SHUTDOWN_TIME_FORMAT, parsed) == text
+        else None
+    )
+
+
+def is_partial_export_on_shutdown_archive(basename: str, name: str) -> bool:
+    # the temporary file of write_archive(), which an export killed before its end leaves under this name
+    archive: str
+    writing: str
+    token: str
+    archive, writing, token = name.removeprefix(".").rpartition(".writing-")
+    return (
+        name.startswith(".")
+        and writing != ""
+        and token != ""
+        and parse_export_on_shutdown_time(basename, archive) is not None
+    )
+
+
+def delete_export_on_shutdown_archives_except_newest(
+    basename: str, output: pl.Path
+) -> t.List[pl.Path]:
+    """Keeps output, the new archive, and the newest other archives of basename by the time in their names,
+    EXPORT_ON_SHUTDOWN_ARCHIVES_KEPT in all, and deletes the rest of them. Returns the paths it deleted, which the
+    stop prints, so that the journal says what went."""
+    # FOR_REVIEWER: the partial .NAME---...zstd.writing-* of an export that was killed (the VM killed during the
+    # export) is deleted too. It is no backup, as its tar stream and zstd frame are cut off, it can be as large as an
+    # archive, and nothing else removes it. None of NAME is being written meanwhile: systemd runs one job of the unit
+    # at a time, and this export's own temporary file is already output. To keep them, drop `partials` below.
+    # FOR_REVIEWER: output stays even when the clock went back and the names of older archives say later times; the
+    # others kept are then those with the latest names.
+    archives: t.List[t.Tuple[time.struct_time, pl.Path]] = []
+    partials: t.List[pl.Path] = []
+    path: pl.Path
+    for path in output.parent.iterdir():
+        if path.name == output.name:
+            continue
+        archive_time: t.Optional[time.struct_time] = parse_export_on_shutdown_time(
+            basename, path.name
+        )
+        if archive_time is not None:
+            archives.append((archive_time, path))
+        elif is_partial_export_on_shutdown_archive(basename, path.name):
+            partials.append(path)
+    archives.sort(reverse=True)
+    deleted: t.List[pl.Path] = sorted(
+        [path for _, path in archives[EXPORT_ON_SHUTDOWN_ARCHIVES_KEPT - 1 :]]
+        + partials
+    )
+    for path in deleted:
+        path.unlink()
+    return deleted
 
 
 def require_plain_systemd_argument(value: str) -> str:
@@ -2818,22 +2902,33 @@ class StopCommand(Command):
             # has acpid turn the key into a poweroff.
             # FOR_REVIEWER: what exports nothing. A VM killed rather than shut down (crosvm stop, a crash of the
             # host): the earlier exports stay, PostgreSQL and Redis recover the run directory at the next start, and
-            # a VM killed during the export leaves its partial .NAME---...zstd.writing-* beside them, which nothing
-            # removes. A poweroff while the instance is still starting at boot: the unit is not active yet, so its
-            # ExecStop= does not run, and the instance has served nothing since the previous shutdown. A failed
-            # export: its reason is only in the journal, which this VM keeps in memory, so it is gone after the
-            # poweroff.
+            # a VM killed during the export leaves its partial .NAME---...zstd.writing-* beside them, which the next
+            # export of NAME deletes. A poweroff while the instance is still starting at boot: the unit is not active
+            # yet, so its ExecStop= does not run, and the instance has served nothing since the previous shutdown. A
+            # failed export: its reason is only in the journal, which this VM keeps in memory, so it is gone after
+            # the poweroff.
             # FOR_REVIEWER: local time is the VM's /etc/localtime (no TZ in the unit), which is UTC on this VM.
-            return ExportCommand(
+            export: ExportCommand = ExportCommand(
                 run_dir,
-                get_export_on_shutdown_output(
-                    self.export_on_shutdown, time.localtime()
+                resolve_archive_path(
+                    get_export_on_shutdown_output(
+                        self.export_on_shutdown, time.localtime()
+                    ),
+                    run_dir,
                 ),
                 # FOR_REVIEWER: export's --zstd-threads default, which zstd takes as one thread per physical core
                 # (35 of the 70 vCPUs here), not one per vCPU.
                 zstd_threads=0,
                 zstd_level=EXPORT_ON_SHUTDOWN_ZSTD_LEVEL,
-            ).run()
+            )
+            export_timings: Timings = export.stop_and_write_archive(start_time)
+            # only now, so that an export that failed deletes nothing and the archives before it stay
+            deleted: t.List[pl.Path] = delete_export_on_shutdown_archives_except_newest(
+                self.export_on_shutdown.basename, export.output
+            )
+            return print_lifecycle_result(
+                run_dir, "export", export_timings, start_time, deleted
+            )
         timings: Timings = make_lifecycle_timings(start_time)
         stop_plane_containers(run_dir, timings).result()
         print_lifecycle_result(run_dir, "stop", timings, start_time)
@@ -2855,8 +2950,9 @@ class ExportCommand(Command):
     zstd_threads: int
     zstd_level: int
 
-    def run(self) -> None:
-        start_time: float = time.monotonic()
+    def stop_and_write_archive(self, start_time: float) -> Timings:
+        # apart from run(): a stop that exports prints one result for the export and for what it deleted after it
+        # (see StopCommand)
         run_dir: pl.Path = resolve_run_dir(self.run_dir)
         output: pl.Path = resolve_archive_path(self.output, run_dir)
         require_archive_output_file(output)
@@ -2879,7 +2975,14 @@ class ExportCommand(Command):
                 run_dir, output, docker_fs, timings, self.zstd_threads, self.zstd_level
             )
         network_container_stop.result()
-        print_lifecycle_result(run_dir, "export", timings, start_time)
+        return timings
+
+    def run(self) -> None:
+        start_time: float = time.monotonic()
+        timings: Timings = self.stop_and_write_archive(start_time)
+        print_lifecycle_result(
+            resolve_run_dir(self.run_dir), "export", timings, start_time
+        )
 
 
 @dc.dataclass(frozen=True)
@@ -3123,12 +3226,12 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         "--export-basename",
         type=parse_export_basename,
         metavar="NAME",
-        help=f"With --persist-auto systemd, which needs it: whenever the user's systemd stops, which happens when the host powers off or reboots (crosvm powerbtn, poweroff, reboot), the unit stops the instance and exports it to --export-dir/NAME---YYYY-mm-DD---HH-MM-SS.zstd, at that moment's local time and zstd level {EXPORT_ON_SHUTDOWN_ZSTD_LEVEL}, replacing a file of that name. A stop or restart of the unit only stops.",
+        help=f"With --persist-auto systemd, which needs it: whenever the user's systemd stops, which happens when the host powers off or reboots (crosvm powerbtn, poweroff, reboot), the unit stops the instance and exports it to --export-dir/NAME---YYYY-mm-DD---HH-MM-SS.zstd, at that moment's local time and zstd level {EXPORT_ON_SHUTDOWN_ZSTD_LEVEL}, replacing a file of that name. Then it deletes there the older archives NAME---YYYY-mm-DD---HH-MM-SS.zstd, by the time in their names, so that {EXPORT_ON_SHUTDOWN_ARCHIVES_KEPT} remain, the new one among them, and every partial .NAME---...zstd.writing-* of an export that was killed. A stop or restart of the unit only stops.",
     )
     start_parser.add_argument(
         "--export-dir",
         metavar="PATH",
-        help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: the directory that contains the checkout of this script, {plane_git_path.parent}.",
+        help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: the directory that contains the checkout of this script, {plane_git_path.parent}. Of what it holds, only the older and the partial archives of --export-basename are ever deleted.",
     )
     prepare_and_restart_parser: argparse.ArgumentParser = subparsers.add_parser(
         "prepare-and-restart",
@@ -3173,12 +3276,12 @@ def parse_cli_command(argv: t.Sequence[str]) -> Command:
         "--export-basename",
         type=parse_export_basename,
         metavar="NAME",
-        help=f"If the user's systemd is stopping, because the host powers off or reboots, export instead: stop the instance and write it to --export-dir/NAME---YYYY-mm-DD---HH-MM-SS.zstd, at local time and zstd level {EXPORT_ON_SHUTDOWN_ZSTD_LEVEL}, replacing a file of that name. Any other stop only stops. The unit of start --persist-auto systemd stops this way.",
+        help=f"If the user's systemd is stopping, because the host powers off or reboots, export instead: stop the instance and write it to --export-dir/NAME---YYYY-mm-DD---HH-MM-SS.zstd, at local time and zstd level {EXPORT_ON_SHUTDOWN_ZSTD_LEVEL}, replacing a file of that name. Then it deletes there the older archives NAME---YYYY-mm-DD---HH-MM-SS.zstd, by the time in their names, so that {EXPORT_ON_SHUTDOWN_ARCHIVES_KEPT} remain, the new one among them, and every partial .NAME---...zstd.writing-* of an export that was killed; the result lists what it deleted. Any other stop only stops. The unit of start --persist-auto systemd stops this way.",
     )
     stop_parser.add_argument(
         "--export-dir",
         metavar="PATH",
-        help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: {plane_git_path.parent}.",
+        help=f"With --export-basename: the directory of the export on shutdown, created when missing; default: {plane_git_path.parent}. Of what it holds, only the older and the partial archives of --export-basename are ever deleted.",
     )
     status_parser: argparse.ArgumentParser = subparsers.add_parser(
         "status",
